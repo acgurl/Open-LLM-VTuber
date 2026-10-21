@@ -19,6 +19,7 @@ class AudioPayload(TypedDict):
     display_text: Optional[DisplayText]
     actions: Optional[Actions]
     forwarded: Optional[bool]
+    streamed: Optional[bool]
 
 
 @dataclass

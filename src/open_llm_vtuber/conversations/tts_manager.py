@@ -35,6 +35,7 @@ class TTSTaskManager:
         live2d_model: Live2dModel,
         tts_engine: TTSInterface,
         websocket_send: WebSocketSend,
+        streamed: bool = False,
     ) -> None:
         """
         Queue a TTS task while maintaining order of delivery.
@@ -46,6 +47,7 @@ class TTSTaskManager:
             live2d_model: Live2D model instance
             tts_engine: TTS engine instance
             websocket_send: WebSocket send function
+            streamed: Whether the display text was already sent as text deltas
         """
         if len(re.sub(r'[\s.,!?，。！？\'"』」）】\s]+', "", tts_text)) == 0:
             logger.debug("Empty TTS text, sending silent display payload")
@@ -59,7 +61,9 @@ class TTSTaskManager:
                     self._process_payload_queue(websocket_send)
                 )
 
-            await self._send_silent_payload(display_text, actions, current_sequence)
+            await self._send_silent_payload(
+                display_text, actions, current_sequence, streamed
+            )
             return
 
         logger.debug(
@@ -85,6 +89,7 @@ class TTSTaskManager:
                 live2d_model=live2d_model,
                 tts_engine=tts_engine,
                 sequence_number=current_sequence,
+                streamed=streamed,
             )
         )
         self.task_list.append(task)
@@ -118,12 +123,14 @@ class TTSTaskManager:
         display_text: DisplayText,
         actions: Optional[Actions],
         sequence_number: int,
+        streamed: bool = False,
     ) -> None:
         """Queue a silent audio payload"""
         audio_payload = prepare_audio_payload(
             audio_path=None,
             display_text=display_text,
             actions=actions,
+            streamed=streamed,
         )
         await self._payload_queue.put((audio_payload, sequence_number))
 
@@ -135,6 +142,7 @@ class TTSTaskManager:
         live2d_model: Live2dModel,
         tts_engine: TTSInterface,
         sequence_number: int,
+        streamed: bool = False,
     ) -> None:
         """Process TTS generation and queue the result for ordered delivery"""
         audio_file_path = None
@@ -144,6 +152,7 @@ class TTSTaskManager:
                 audio_path=audio_file_path,
                 display_text=display_text,
                 actions=actions,
+                streamed=streamed,
             )
             # Queue the payload with its sequence number
             await self._payload_queue.put((payload, sequence_number))
@@ -155,6 +164,7 @@ class TTSTaskManager:
                 audio_path=None,
                 display_text=display_text,
                 actions=actions,
+                streamed=streamed,
             )
             await self._payload_queue.put((payload, sequence_number))
 

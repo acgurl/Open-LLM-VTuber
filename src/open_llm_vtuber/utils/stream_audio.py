@@ -30,6 +30,7 @@ def prepare_audio_payload(
     display_text: DisplayText = None,
     actions: Actions = None,
     forwarded: bool = False,
+    streamed: bool = False,
 ) -> dict[str, any]:
     """
     Prepares the audio payload for sending to a broadcast endpoint.
@@ -57,6 +58,7 @@ def prepare_audio_payload(
             "display_text": display_text,
             "actions": actions.to_dict() if actions else None,
             "forwarded": forwarded,
+            "streamed": streamed,
         }
 
     try:
@@ -77,6 +79,7 @@ def prepare_audio_payload(
         "display_text": display_text,
         "actions": actions.to_dict() if actions else None,
         "forwarded": forwarded,
+        "streamed": streamed,
     }
 
     return payload

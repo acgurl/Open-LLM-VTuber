@@ -134,13 +134,13 @@ def display_processor():
                 ):
                     sentence, actions = item
                     text = sentence.text
-                    # Handle think tag states
+                    # Keep think markers so the client can render a collapsible block
                     for tag in sentence.tags:
                         if tag.name == "think":
                             if tag.state == TagState.START:
-                                text = "("
+                                text = "<think>"
                             elif tag.state == TagState.END:
-                                text = ")"
+                                text = "</think>"
 
                     display = DisplayText(text=text)  # Simplified DisplayText creation
                     yield sentence, display, actions  # Yield the tuple

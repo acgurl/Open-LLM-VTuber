@@ -21,6 +21,7 @@ from ..transformers import (
     tts_filter,
     display_processor,
 )
+from ..streaming import make_text_delta
 from ...config_manager import TTSPreprocessorConfig
 from ..input_types import BatchInput, TextSource
 from prompts import prompt_loader
@@ -222,6 +223,20 @@ class BasicMemoryAgent(AgentInterface):
             else:
                 logger.warning(f"Skipping invalid message from history: {msg}")
         logger.info(f"Loaded {len(self._memory)} messages from history.")
+
+    async def _stream_with_text_deltas(
+        self,
+        stream: AsyncIterator[Union[str, Dict[str, Any]]],
+        enabled: Callable[[], bool] = lambda: True,
+    ) -> AsyncIterator[Union[str, Dict[str, Any]]]:
+        """Pass the raw agent stream through while emitting displayable text deltas."""
+        async for item in stream:
+            if isinstance(item, str):
+                if enabled() and item:
+                    yield make_text_delta(item)
+                yield item
+            else:
+                yield item
 
     def handle_interrupt(self, heard_response: str) -> None:
         """Handle user interruption."""
@@ -658,17 +673,22 @@ class BasicMemoryAgent(AgentInterface):
                 logger.debug(
                     f"Starting Claude tool interaction loop with {len(tools)} tools."
                 )
-                async for output in self._claude_tool_interaction_loop(
+                stream = self._claude_tool_interaction_loop(
                     messages, tools if tools else []
-                ):
+                )
+                async for output in self._stream_with_text_deltas(stream):
                     yield output
                 return
             elif self._use_mcpp and tool_mode == "OpenAI":
                 logger.debug(
                     f"Starting OpenAI tool interaction loop with {len(tools)} tools."
                 )
-                async for output in self._openai_tool_interaction_loop(
+                stream = self._openai_tool_interaction_loop(
                     messages, tools if tools else []
+                )
+                # Prompt-mode tool JSON is not display text; stream only native turns.
+                async for output in self._stream_with_text_deltas(
+                    stream, enabled=lambda: not self.prompt_mode_flag
                 ):
                     yield output
                 return
@@ -685,6 +705,7 @@ class BasicMemoryAgent(AgentInterface):
                     else:
                         continue
                     if text_chunk:
+                        yield make_text_delta(text_chunk)
                         yield text_chunk
                         complete_response += text_chunk
                 if complete_response:

@@ -1,6 +1,6 @@
 import asyncio
 import re
-from typing import Optional, Union, Any, List, Dict
+from typing import Awaitable, Callable, Optional, Union, Any, List, Dict
 import numpy as np
 import json
 from loguru import logger
@@ -14,6 +14,90 @@ from ..asr.asr_interface import ASRInterface
 from ..live2d_model import Live2dModel
 from ..tts.tts_interface import TTSInterface
 from ..utils.stream_audio import prepare_audio_payload
+
+
+class TextDeltaBuffer:
+    """Coalesces streamed text and pushes it to the client at a fixed cadence."""
+
+    def __init__(
+        self,
+        send: Callable[[Dict[str, Any]], Awaitable[None]],
+        character_name: str,
+        avatar: Optional[str] = None,
+        interval: float = 0.05,
+    ) -> None:
+        self._send = send
+        self._character_name = character_name
+        self._avatar = avatar
+        self._interval = interval
+        self._pending = ""
+        self._full_text = ""
+        self._last_sent = 0.0
+        self._timer: Optional[asyncio.Task] = None
+        self._lock = asyncio.Lock()
+        self._closed = False
+
+    async def push(self, text: str) -> None:
+        if not text or self._closed:
+            return
+
+        async with self._lock:
+            self._pending += text
+            self._full_text += text
+            now = asyncio.get_running_loop().time()
+            if now - self._last_sent >= self._interval:
+                await self._flush_locked()
+            elif self._timer is None or self._timer.done():
+                self._timer = asyncio.create_task(self._flush_after_interval())
+
+    async def flush(self) -> None:
+        async with self._lock:
+            await self._flush_locked()
+
+    async def close(self) -> None:
+        async with self._lock:
+            await self._flush_locked()
+            self._closed = True
+            if self._timer and not self._timer.done():
+                self._timer.cancel()
+            self._timer = None
+
+    def cancel(self) -> None:
+        self._closed = True
+        if self._timer and not self._timer.done():
+            self._timer.cancel()
+        self._timer = None
+
+    async def _flush_after_interval(self) -> None:
+        try:
+            await asyncio.sleep(self._interval)
+            await self.flush()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(f"Error sending text delta: {e}")
+
+    async def _flush_locked(self) -> None:
+        if self._timer and self._timer is not asyncio.current_task():
+            self._timer.cancel()
+        self._timer = None
+
+        if not self._pending:
+            return
+
+        delta = self._pending
+        self._pending = ""
+        self._last_sent = asyncio.get_running_loop().time()
+
+        await self._send(
+            {
+                "type": "text-delta",
+                "text": delta,
+                "full_text": self._full_text,
+                "name": self._character_name,
+                "avatar": self._avatar,
+            }
+        )
 
 
 # Convert class methods to standalone functions
@@ -50,6 +134,7 @@ async def process_agent_output(
     websocket_send: WebSocketSend,
     tts_manager: TTSTaskManager,
     translate_engine: Optional[Any] = None,
+    streamed: bool = False,
 ) -> str:
     """Process agent output with character information and optional translation"""
     output.display_text.name = character_config.character_name
@@ -65,6 +150,7 @@ async def process_agent_output(
                 websocket_send,
                 tts_manager,
                 translate_engine,
+                streamed,
             )
         elif isinstance(output, AudioOutput):
             full_response = await handle_audio_output(output, websocket_send)
@@ -88,6 +174,7 @@ async def handle_sentence_output(
     websocket_send: WebSocketSend,
     tts_manager: TTSTaskManager,
     translate_engine: Optional[Any] = None,
+    streamed: bool = False,
 ) -> str:
     """Handle sentence output type with optional translation support"""
     full_response = ""
@@ -109,6 +196,7 @@ async def handle_sentence_output(
             live2d_model=live2d_model,
             tts_engine=tts_engine,
             websocket_send=websocket_send,
+            streamed=streamed,
         )
     return full_response
 

@@ -5,6 +5,7 @@ from loguru import logger
 import numpy as np
 
 from .conversation_utils import (
+    TextDeltaBuffer,
     create_batch_input,
     process_agent_output,
     send_conversation_start_signals,
@@ -48,6 +49,12 @@ async def process_single_conversation(
     # Create TTSTaskManager for this conversation
     tts_manager = TTSTaskManager()
     full_response = ""  # Initialize full_response here
+    text_streamed = False
+    text_delta_buffer = TextDeltaBuffer(
+        send=lambda message: websocket_send(json.dumps(message)),
+        character_name=context.character_config.character_name,
+        avatar=context.character_config.avatar,
+    )
 
     try:
         # Send initial signals
@@ -92,16 +99,25 @@ async def process_single_conversation(
             async for output_item in agent_output_stream:
                 if (
                     isinstance(output_item, dict)
+                    and output_item.get("type") == "text_delta"
+                ):
+                    text_streamed = True
+                    await text_delta_buffer.push(output_item.get("text", ""))
+
+                elif (
+                    isinstance(output_item, dict)
                     and output_item.get("type") == "tool_call_status"
                 ):
-                    # Handle tool status event: send WebSocket message
+                    # Keep streamed text before the tool status in the chat.
+                    await text_delta_buffer.flush()
                     output_item["name"] = context.character_config.character_name
                     logger.debug(f"Sending tool status update: {output_item}")
 
                     await websocket_send(json.dumps(output_item))
 
                 elif isinstance(output_item, (SentenceOutput, AudioOutput)):
-                    # Handle SentenceOutput or AudioOutput
+                    # The display text is already on screen when token streaming ran.
+                    await text_delta_buffer.flush()
                     response_part = await process_agent_output(
                         output=output_item,
                         character_config=context.character_config,
@@ -110,6 +126,7 @@ async def process_single_conversation(
                         websocket_send=websocket_send,  # Pass websocket_send for audio/tts messages
                         tts_manager=tts_manager,
                         translate_engine=context.translate_engine,
+                        streamed=text_streamed,
                     )
                     # Ensure response_part is treated as a string before concatenation
                     response_part_str = (
@@ -136,6 +153,8 @@ async def process_single_conversation(
             )
             # full_response will contain partial response before error
         # --- End processing agent response ---
+
+        await text_delta_buffer.close()
 
         # Wait for any pending TTS tasks
         if tts_manager.task_list:
@@ -171,4 +190,5 @@ async def process_single_conversation(
         )
         raise
     finally:
+        text_delta_buffer.cancel()
         cleanup_conversation(tts_manager, session_emoji)
