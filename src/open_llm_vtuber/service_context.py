@@ -1,5 +1,5 @@
 import json
-from typing import Callable
+from typing import Any, Callable
 from loguru import logger
 from pydantic import ValidationError
 from fastapi import WebSocket
@@ -520,97 +520,116 @@ class ServiceContext:
         - config_file_name (str): The name of the configuration file.
         """
         try:
-            new_character_config_data = None
-
-            if config_file_name == "conf.yaml":
-                # Load base config
-                new_character_config_data = read_yaml("conf.yaml").get(
-                    "character_config"
-                )
-            else:
-                # Resolve inside the character presets directory; the raw client
-                # string must not be able to reach anywhere else (including
-                # sibling directories whose name shares the same prefix).
-                characters_dir = self.system_config.config_alts_dir
-                try:
-                    file_path = resolve_existing_file_within(
-                        characters_dir, config_file_name, allowed_suffixes={".yaml"}
-                    )
-                except ValueError as e:
-                    raise ValueError(f"Invalid configuration file: {e}") from e
-
-                alt_config_data = read_yaml(str(file_path)).get("character_config")
-                if not isinstance(alt_config_data, dict):
-                    raise ValueError("Character config must be a mapping")
-
-                # Merge against the base config every time. Using the current
-                # (already merged) config makes overrides leak across switches.
-                base_config_data = read_yaml("conf.yaml").get("character_config")
-                if not isinstance(base_config_data, dict):
-                    raise ValueError("Base character config must be a mapping")
-
-                new_character_config_data = deep_merge(
-                    base_config_data, alt_config_data
-                )
-
-            if new_character_config_data:
-                new_config = {
-                    "system_config": self.system_config.model_dump(),
-                    "character_config": new_character_config_data,
-                }
-                new_config = validate_config(new_config)
-                await self.load_from_config(new_config)  # Await the async load
-                logger.debug(f"New config: {self}")
-
-                # Send responses to client
-                await websocket.send_text(
-                    json.dumps(
-                        {
-                            "type": "set-model-and-conf",
-                            "model_info": self.live2d_model.model_info,
-                            "conf_name": self.character_config.conf_name,
-                            "conf_uid": self.character_config.conf_uid,
-                        }
-                    )
-                )
-
-                await websocket.send_text(
-                    json.dumps(
-                        {
-                            "type": "config-switched",
-                            "message": f"Switched to config: {config_file_name}",
-                        }
-                    )
-                )
-
-                logger.info(f"Configuration switched to {config_file_name}")
-            else:
-                raise ValueError(
-                    f"Failed to load configuration from {config_file_name}"
-                )
-
+            character_config_data = self._load_character_config_data(
+                config_file_name
+            )
+            await self._apply_character_config(character_config_data)
+            await self._notify_config_switched(websocket, config_file_name)
         except Exception as e:
-            # ValidationError messages can embed raw config values, so keep the
-            # client-visible text generic; safe details are logged by
-            # validate_config.
-            if isinstance(e, ValidationError):
-                logger.error("Error switching configuration: invalid configuration")
-            else:
-                logger.error(
-                    "Error switching configuration: "
-                    f"{type(e).__name__}: {redact_secrets(str(e))}"
-                )
+            self._log_config_switch_error(e)
+            await self._send_config_switch_error(websocket)
+
+    def _load_character_config_data(self, config_file_name: str) -> Any:
+        if config_file_name == "conf.yaml":
+            character_config_data = read_yaml("conf.yaml").get(
+                "character_config"
+            )
+        else:
+            # Resolve inside the character presets directory; the raw client
+            # string must not be able to reach anywhere else (including
+            # sibling directories whose name shares the same prefix).
+            characters_dir = self.system_config.config_alts_dir
             try:
-                await websocket.send_text(
-                    json.dumps(
-                        {
-                            "type": "error",
-                            "message": "Failed to switch configuration",
-                        }
-                    )
+                file_path = resolve_existing_file_within(
+                    characters_dir, config_file_name, allowed_suffixes={".yaml"}
                 )
-            except Exception:
-                logger.debug("Client disconnected before config-switch error was sent")
+            except ValueError as e:
+                raise ValueError(f"Invalid configuration file: {e}") from e
+
+            alt_config_data = read_yaml(str(file_path)).get("character_config")
+            if not isinstance(alt_config_data, dict):
+                raise ValueError("Character config must be a mapping")
+
+            # Merge against the base config every time. Using the current
+            # (already merged) config makes overrides leak across switches.
+            base_config_data = read_yaml("conf.yaml").get("character_config")
+            if not isinstance(base_config_data, dict):
+                raise ValueError("Base character config must be a mapping")
+
+            character_config_data = deep_merge(
+                base_config_data, alt_config_data
+            )
+
+        if not character_config_data:
+            raise ValueError(
+                f"Failed to load configuration from {config_file_name}"
+            )
+
+        return character_config_data
+
+    async def _apply_character_config(self, character_config_data: Any) -> None:
+        new_config = validate_config(
+            {
+                "system_config": self.system_config.model_dump(),
+                "character_config": character_config_data,
+            }
+        )
+        await self.load_from_config(new_config)
+        logger.debug(f"New config: {self}")
+
+    async def _notify_config_switched(
+        self, websocket: WebSocket, config_file_name: str
+    ) -> None:
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "set-model-and-conf",
+                    "model_info": self.live2d_model.model_info,
+                    "conf_name": self.character_config.conf_name,
+                    "conf_uid": self.character_config.conf_uid,
+                }
+            )
+        )
+
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "config-switched",
+                    "message": f"Switched to config: {config_file_name}",
+                }
+            )
+        )
+
+        logger.info(f"Configuration switched to {config_file_name}")
+
+    @staticmethod
+    def _log_config_switch_error(error: Exception) -> None:
+        # ValidationError messages can embed raw config values, so keep the
+        # client-visible text generic; safe details are logged by
+        # validate_config.
+        if isinstance(error, ValidationError):
+            logger.error("Error switching configuration: invalid configuration")
+        else:
+            logger.error(
+                "Error switching configuration: "
+                f"{type(error).__name__}: {redact_secrets(str(error))}"
+            )
+
+    @staticmethod
+    async def _send_config_switch_error(websocket: WebSocket) -> None:
+        try:
+            await websocket.send_text(
+                json.dumps(
+                    {
+                        "type": "error",
+                        "message": "Failed to switch configuration",
+                    }
+                )
+            )
+        except Exception:
+            logger.debug(
+                "Client disconnected before config-switch error was sent"
+            )
 
 
 def deep_merge(dict1, dict2):
