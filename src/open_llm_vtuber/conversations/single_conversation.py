@@ -156,11 +156,8 @@ async def process_single_conversation(
 
         await text_delta_buffer.close()
 
-        # Wait for any pending TTS tasks
-        if tts_manager.task_list:
-            await asyncio.gather(*tts_manager.task_list)
-            await websocket_send(json.dumps({"type": "backend-synth-complete"}))
-
+        # finalize_conversation_turn waits for TTS tasks and sends the single
+        # backend-synth-complete signal.
         await finalize_conversation_turn(
             tts_manager=tts_manager,
             websocket_send=websocket_send,

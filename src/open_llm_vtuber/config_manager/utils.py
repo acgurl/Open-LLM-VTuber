@@ -9,6 +9,7 @@ import chardet
 from loguru import logger
 
 from .main import Config
+from ..utils.security import redact_secrets
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -65,12 +66,20 @@ def validate_config(config_data: dict) -> Config:
     Raises:
         ValidationError: If the configuration fails validation.
     """
+    if not isinstance(config_data, dict):
+        raise ValueError("Configuration root must be a mapping")
+
     try:
         return Config(**config_data)
     except ValidationError as e:
-        logger.critical(f"Error validating configuration: {e}")
-        logger.error("Configuration data:")
-        logger.error(config_data)
+        # Pydantic includes the offending input in its error text; omit inputs so
+        # API keys cannot end up in logs.
+        logger.critical(
+            f"Error validating configuration: {e.errors(include_url=False, include_input=False)}"
+        )
+        logger.error(
+            f"Configuration data (secrets redacted): {redact_secrets(config_data)}"
+        )
         raise e
 
 
@@ -140,33 +149,47 @@ def scan_config_alts_directory(config_alts_dir: str) -> list[dict]:
     config_files = []
 
     # Add default config first
-    default_config = read_yaml("conf.yaml")
+    try:
+        default_config = read_yaml("conf.yaml") or {}
+    except Exception as e:
+        logger.error(f"Failed to read default config: {e}")
+        default_config = {}
+
     config_files.append(
         {
             "filename": "conf.yaml",
             "name": default_config.get("character_config", {}).get(
                 "conf_name", "conf.yaml"
             )
-            if default_config
+            if isinstance(default_config, dict)
             else "conf.yaml",
         }
     )
 
-    # Scan other configs
+    # Scan other configs. One malformed file must not hide every other preset.
     for root, _, files in os.walk(config_alts_dir):
         for file in files:
-            if file.endswith(".yaml"):
-                config: dict = read_yaml(os.path.join(root, file))
-                config_files.append(
-                    {
-                        "filename": file,
-                        "name": config.get("character_config", {}).get(
-                            "conf_name", file
-                        )
-                        if config
-                        else file,
-                    }
+            if not file.endswith(".yaml"):
+                continue
+
+            full_path = os.path.join(root, file)
+            relative_path = os.path.relpath(full_path, config_alts_dir).replace(
+                os.sep, "/"
+            )
+            try:
+                config = read_yaml(full_path) or {}
+                name = (
+                    config.get("character_config", {}).get("conf_name", relative_path)
+                    if isinstance(config, dict)
+                    else relative_path
                 )
+            except Exception as e:
+                logger.error(f"Failed to read character config {full_path}: {e}")
+                name = relative_path
+
+            config_files.append({"filename": relative_path, "name": name})
+
+    config_files[1:] = sorted(config_files[1:], key=lambda item: item["filename"])
     logger.debug(f"Found config files: {config_files}")
     return config_files
 

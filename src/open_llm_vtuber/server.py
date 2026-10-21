@@ -11,7 +11,7 @@ import shutil
 
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 from starlette.staticfiles import StaticFiles as StarletteStaticFiles
 
 from .routes import init_client_ws_route, init_webtool_routes, init_proxy_route
@@ -79,14 +79,23 @@ class WebSocketServer:
         )  # Use provided context or initialize a new empty one waiting to be loaded
         # It will be populated during the initialize method call
 
-        # Add global CORS middleware
+        # Wildcard origins with credentials are both invalid and unsafe; this
+        # server does not use cookies, so credentials are disabled.
         self.app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
-            allow_credentials=True,
+            allow_credentials=False,
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+        @self.app.get("/healthz", include_in_schema=False)
+        async def healthz():
+            ready = self.default_context_cache.character_config is not None
+            return JSONResponse(
+                {"status": "ok" if ready else "starting"},
+                status_code=200 if ready else 503,
+            )
 
         # Include routes, passing the context instance
         # The context will be populated during the initialize step

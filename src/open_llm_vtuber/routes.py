@@ -1,7 +1,8 @@
 import os
 import json
+import re
+import asyncio
 from uuid import uuid4
-import numpy as np
 from datetime import datetime
 from fastapi import APIRouter, WebSocket, UploadFile, File, Response
 from starlette.responses import JSONResponse
@@ -10,6 +11,17 @@ from loguru import logger
 from .service_context import ServiceContext
 from .websocket_handler import WebSocketHandler
 from .proxy_handler import ProxyHandler
+from .utils.audio import decode_pcm_wav
+
+
+MAX_ASR_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_ASR_SECONDS = 120
+ASR_SAMPLE_RATE = 16000
+MAX_TTS_TEXT_CHARS = 2000
+MAX_TTS_SENTENCES = 30
+MAX_TTS_CONNECTIONS = 16
+MAX_CONCURRENT_ASR = 2
+_TTS_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?。！？])\s*")
 
 
 def init_client_ws_route(default_context_cache: ServiceContext) -> APIRouter:
@@ -29,18 +41,29 @@ def init_client_ws_route(default_context_cache: ServiceContext) -> APIRouter:
     @router.websocket("/client-ws")
     async def websocket_endpoint(websocket: WebSocket):
         """WebSocket endpoint for client connections"""
-        await websocket.accept()
         client_uid = str(uuid4())
 
+        if not ws_handler.try_reserve_connection(client_uid):
+            await websocket.accept()
+            await websocket.close(code=1013, reason="Server is at capacity")
+            return
+
         try:
-            await ws_handler.handle_new_connection(websocket, client_uid)
-            await ws_handler.handle_websocket_communication(websocket, client_uid)
-        except WebSocketDisconnect:
-            await ws_handler.handle_disconnect(client_uid)
-        except Exception as e:
-            logger.error(f"Error in WebSocket connection: {e}")
-            await ws_handler.handle_disconnect(client_uid)
-            raise
+            await websocket.accept()
+
+            try:
+                await ws_handler.handle_new_connection(websocket, client_uid)
+                await ws_handler.handle_websocket_communication(websocket, client_uid)
+            except WebSocketDisconnect:
+                await ws_handler.handle_disconnect(client_uid)
+            except Exception:
+                logger.exception(
+                    f"Error in WebSocket connection for client {client_uid}"
+                )
+                await ws_handler.handle_disconnect(client_uid)
+                raise
+        finally:
+            ws_handler.release_connection_reservation(client_uid)
 
     return router
 
@@ -82,6 +105,8 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
     """
 
     router = APIRouter()
+    asr_semaphore = asyncio.Semaphore(MAX_CONCURRENT_ASR)
+    tts_slots = asyncio.Semaphore(MAX_TTS_CONNECTIONS)
 
     @router.get("/web-tool")
     async def web_tool_redirect():
@@ -143,41 +168,38 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
         """
         Endpoint for transcribing audio using the ASR engine
         """
-        logger.info(f"Received audio file for transcription: {file.filename}")
-
         try:
-            contents = await file.read()
+            contents = await file.read(MAX_ASR_UPLOAD_BYTES + 1)
+            logger.info(f"Received audio upload: {len(contents)} bytes")
 
-            # Validate minimum file size
-            if len(contents) < 44:  # Minimum WAV header size
-                raise ValueError("Invalid WAV file: File too small")
-
-            # Decode the WAV header and get actual audio data
-            wav_header_size = 44  # Standard WAV header size
-            audio_data = contents[wav_header_size:]
-
-            # Validate audio data size
-            if len(audio_data) % 2 != 0:
-                raise ValueError("Invalid audio data: Buffer size must be even")
-
-            # Convert to 16-bit PCM samples to float32
-            try:
-                audio_array = (
-                    np.frombuffer(audio_data, dtype=np.int16).astype(np.float32)
-                    / 32768.0
-                )
-            except ValueError as e:
-                raise ValueError(
-                    f"Audio format error: {str(e)}. Please ensure the file is 16-bit PCM WAV format."
+            if not contents:
+                raise ValueError("Empty audio file")
+            if len(contents) > MAX_ASR_UPLOAD_BYTES:
+                return Response(
+                    content=json.dumps({"error": "Audio file is too large"}),
+                    status_code=413,
+                    media_type="application/json",
                 )
 
-            # Validate audio data
-            if len(audio_array) == 0:
-                raise ValueError("Empty audio data")
-
-            text = await default_context_cache.asr_engine.async_transcribe_np(
-                audio_array
+            audio_array = decode_pcm_wav(
+                contents,
+                sample_rate=ASR_SAMPLE_RATE,
+                max_seconds=MAX_ASR_SECONDS,
             )
+
+            if asr_semaphore.locked():
+                return Response(
+                    content=json.dumps(
+                        {"error": "Too many concurrent transcription requests"}
+                    ),
+                    status_code=429,
+                    media_type="application/json",
+                )
+
+            async with asr_semaphore:
+                text = await default_context_cache.asr_engine.async_transcribe_np(
+                    audio_array
+                )
             logger.info(f"Transcription result: {text}")
             return {"text": text}
 
@@ -188,8 +210,8 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
                 status_code=400,
                 media_type="application/json",
             )
-        except Exception as e:
-            logger.error(f"Error during transcription: {e}")
+        except Exception:
+            logger.exception("Error during transcription")
             return Response(
                 content=json.dumps(
                     {"error": "Internal server error during transcription"}
@@ -201,54 +223,89 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
     @router.websocket("/tts-ws")
     async def tts_endpoint(websocket: WebSocket):
         """WebSocket endpoint for TTS generation"""
-        await websocket.accept()
-        logger.info("TTS WebSocket connection established")
+        if tts_slots.locked():
+            await websocket.accept()
+            await websocket.close(code=1013, reason="Server is at capacity")
+            return
 
+        await tts_slots.acquire()
         try:
-            while True:
-                data = await websocket.receive_json()
-                text = data.get("text")
-                if not text:
-                    continue
+            await websocket.accept()
+            logger.info("TTS WebSocket connection established")
 
-                logger.info(f"Received text for TTS: {text}")
+            try:
+                while True:
+                    data = await websocket.receive_json()
+                    text = data.get("text")
+                    if not isinstance(text, str) or not text.strip():
+                        continue
 
-                # Split text into sentences
-                sentences = [s.strip() for s in text.split(".") if s.strip()]
-
-                try:
-                    # Generate and send audio for each sentence
-                    for sentence in sentences:
-                        sentence = sentence + "."  # Add back the period
-                        file_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid4())[:8]}"
-                        audio_path = (
-                            await default_context_cache.tts_engine.async_generate_audio(
-                                text=sentence, file_name_no_ext=file_name
-                            )
-                        )
-                        logger.info(
-                            f"Generated audio for sentence: {sentence} at: {audio_path}"
-                        )
-
+                    if len(text) > MAX_TTS_TEXT_CHARS:
                         await websocket.send_json(
                             {
-                                "status": "partial",
-                                "audioPath": audio_path,
-                                "text": sentence,
+                                "status": "error",
+                                "message": (
+                                    f"Text exceeds the {MAX_TTS_TEXT_CHARS}-character limit"
+                                ),
                             }
                         )
+                        continue
 
-                    # Send completion signal
-                    await websocket.send_json({"status": "complete"})
+                    logger.info(f"Received text for TTS ({len(text)} characters)")
 
-                except Exception as e:
-                    logger.error(f"Error generating TTS: {e}")
-                    await websocket.send_json({"status": "error", "message": str(e)})
+                    # Split text into sentences without losing trailing punctuation.
+                    sentences = [
+                        s.strip()
+                        for s in _TTS_SENTENCE_BOUNDARY.split(text)
+                        if s.strip()
+                    ]
+                    if len(sentences) > MAX_TTS_SENTENCES:
+                        await websocket.send_json(
+                            {
+                                "status": "error",
+                                "message": (
+                                    f"Text exceeds the {MAX_TTS_SENTENCES}-sentence limit"
+                                ),
+                            }
+                        )
+                        continue
 
-        except WebSocketDisconnect:
-            logger.info("TTS WebSocket client disconnected")
-        except Exception as e:
-            logger.error(f"Error in TTS WebSocket connection: {e}")
-            await websocket.close()
+                    try:
+                        # Generate and send audio for each sentence
+                        for sentence in sentences:
+                            if sentence[-1] not in ".!?。！？":
+                                sentence = sentence + "."
+                            file_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid4())[:8]}"
+                            audio_path = await default_context_cache.tts_engine.async_generate_audio(
+                                text=sentence, file_name_no_ext=file_name
+                            )
+                            logger.info(
+                                f"Generated audio for sentence at: {audio_path}"
+                            )
+
+                            await websocket.send_json(
+                                {
+                                    "status": "partial",
+                                    "audioPath": audio_path,
+                                    "text": sentence,
+                                }
+                            )
+
+                        # Send completion signal
+                        await websocket.send_json({"status": "complete"})
+
+                    except Exception:
+                        logger.exception("Error generating TTS")
+                        await websocket.send_json(
+                            {"status": "error", "message": "Failed to generate audio"}
+                        )
+
+            except WebSocketDisconnect:
+                logger.info("TTS WebSocket client disconnected")
+            except Exception:
+                logger.exception("Error in TTS WebSocket connection")
+                await websocket.close()
+        finally:
+            tts_slots.release()
 
     return router

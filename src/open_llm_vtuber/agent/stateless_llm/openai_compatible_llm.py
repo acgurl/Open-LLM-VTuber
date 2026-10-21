@@ -93,7 +93,9 @@ class AsyncLLM(StatelessLLMInterface):
                     {"role": "system", "content": system},
                     *messages,
                 ]
-            logger.debug(f"Messages: {messages_with_system}")
+            logger.debug(
+                f"Sending {len(messages_with_system)} messages to {self.model}"
+            )
 
             available_tools = tools if self.support_tools else NOT_GIVEN
 
@@ -224,7 +226,7 @@ class AsyncLLM(StatelessLLMInterface):
             logger.error(f"LLM API: Error occurred: {e}")
             logger.info(f"Base URL: {self.base_url}")
             logger.info(f"Model: {self.model}")
-            logger.info(f"Messages: {messages}")
+            logger.info(f"Message count: {len(messages)}")
             logger.info(f"temperature: {self.temperature}")
             yield "Error calling the chat endpoint: Error occurred while generating response. See the logs for details."
 

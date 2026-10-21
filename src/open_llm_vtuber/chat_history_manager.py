@@ -18,7 +18,7 @@ class HistoryMessage(TypedDict):
 
 def _is_safe_filename(filename: str) -> bool:
     """Validate filename for safety and allowed characters"""
-    if not filename or len(filename) > 255:
+    if not filename or len(filename) > 255 or filename in {".", ".."}:
         return False
 
     # Allow alphanumeric, hyphen, underscore, and common unicode characters
@@ -55,7 +55,14 @@ def _get_safe_history_path(conf_uid: str, history_uid: str) -> str:
     safe_history_uid = _sanitize_path_component(history_uid)
     base_dir = os.path.join("chat_history", safe_conf_uid)
     full_path = os.path.normpath(os.path.join(base_dir, f"{safe_history_uid}.json"))
-    if not full_path.startswith(base_dir):
+
+    try:
+        common = os.path.commonpath(
+            [os.path.abspath(base_dir), os.path.abspath(full_path)]
+        )
+    except ValueError as exc:
+        raise ValueError("Invalid path: Path traversal detected") from exc
+    if os.path.normcase(common) != os.path.normcase(os.path.abspath(base_dir)):
         raise ValueError("Invalid path: Path traversal detected")
     return full_path
 

@@ -211,6 +211,8 @@ class BasicMemoryAgent(AgentInterface):
 
         self._memory = []
         for msg in messages:
+            if msg["role"] == "system":
+                continue
             role = "user" if msg["role"] == "human" else "assistant"
             content = msg["content"]
             if isinstance(content, str) and content:
@@ -246,18 +248,14 @@ class BasicMemoryAgent(AgentInterface):
         self._interrupt_handled = True
 
         if self._memory and self._memory[-1]["role"] == "assistant":
-            if not self._memory[-1]["content"].endswith("..."):
-                self._memory[-1]["content"] = heard_response + "..."
-            else:
-                self._memory[-1]["content"] = heard_response + "..."
-        else:
-            if heard_response:
-                self._memory.append(
-                    {
-                        "role": "assistant",
-                        "content": heard_response + "...",
-                    }
-                )
+            self._memory[-1]["content"] = heard_response + "..."
+        elif heard_response:
+            self._memory.append(
+                {
+                    "role": "assistant",
+                    "content": heard_response + "...",
+                }
+            )
 
         interrupt_role = "system" if self.interrupt_method == "system" else "user"
         self._memory.append(
@@ -545,18 +543,18 @@ class BasicMemoryAgent(AgentInterface):
                 logger.info("Processing tools detected via prompt mode JSON.")
                 self._add_message(current_turn_text, "assistant")
 
+                if not self._tool_executor:
+                    logger.error(
+                        "Prompt Tool interaction requested but ToolExecutor/MCPClient is not available."
+                    )
+                    yield "[Error: ToolExecutor/MCPClient not configured for prompt mode]"
+                    continue
+
                 parsed_tools = self._tool_executor.process_tool_from_prompt_json(
                     detected_prompt_json
                 )
                 if parsed_tools:
                     tool_results_for_llm = []
-                    if not self._tool_executor:
-                        logger.error(
-                            "Prompt Tool interaction requested but ToolExecutor/MCPClient is not available."
-                        )
-                        yield "[Error: ToolExecutor/MCPClient not configured for prompt mode]"
-                        continue
-
                     tool_executor_iterator = self._tool_executor.execute_tools(
                         tool_calls=parsed_tools,
                         caller_mode="Prompt",

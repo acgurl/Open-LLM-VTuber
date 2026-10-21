@@ -8,6 +8,7 @@ class ImageSource(Enum):
 
     CAMERA = "camera"
     SCREEN = "screen"
+    SHARED = "shared"
     CLIPBOARD = "clipboard"
     UPLOAD = "upload"
 

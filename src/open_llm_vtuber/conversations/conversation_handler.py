@@ -16,6 +16,47 @@ from .types import GroupConversationState
 from prompts import prompt_loader
 
 
+MAX_CONCURRENT_CONVERSATIONS = 16
+
+
+def _active_task_count(tasks: Dict[str, Optional[asyncio.Task]]) -> int:
+    return sum(1 for task in tasks.values() if task and not task.done())
+
+
+async def _cancel_previous_task(
+    tasks: Dict[str, Optional[asyncio.Task]], task_key: str
+) -> None:
+    previous = tasks.get(task_key)
+    if not previous or previous.done():
+        return
+
+    previous.cancel()
+    try:
+        await previous
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.error(f"Conversation task {task_key} failed: {type(e).__name__}")
+
+
+def _track_task(
+    tasks: Dict[str, Optional[asyncio.Task]], task_key: str, task: asyncio.Task
+) -> None:
+    tasks[task_key] = task
+
+    def _on_done(done_task: asyncio.Task) -> None:
+        if not done_task.cancelled():
+            error = done_task.exception()
+            if error is not None:
+                logger.error(
+                    f"Conversation task {task_key} raised {type(error).__name__}"
+                )
+        if tasks.get(task_key) is done_task:
+            tasks.pop(task_key, None)
+
+    task.add_done_callback(_on_done)
+
+
 async def handle_conversation_trigger(
     msg_type: str,
     data: dict,
@@ -79,9 +120,23 @@ async def handle_conversation_trigger(
             task_key not in current_conversation_tasks
             or current_conversation_tasks[task_key].done()
         ):
+            if (
+                _active_task_count(current_conversation_tasks)
+                >= MAX_CONCURRENT_CONVERSATIONS
+            ):
+                await websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "error",
+                            "message": "Server is busy, please try again shortly",
+                        }
+                    )
+                )
+                return
+
             logger.info(f"Starting new group conversation for {task_key}")
 
-            current_conversation_tasks[task_key] = asyncio.create_task(
+            task = asyncio.create_task(
                 process_group_conversation(
                     client_contexts=client_contexts,
                     client_connections=client_connections,
@@ -94,9 +149,27 @@ async def handle_conversation_trigger(
                     metadata=metadata,
                 )
             )
+            _track_task(current_conversation_tasks, task_key, task)
     else:
-        # Use client_uid as task key for individual conversations
-        current_conversation_tasks[client_uid] = asyncio.create_task(
+        # A client may submit another message before the previous stream ends.
+        # Cancel the old turn so two tasks cannot mutate the same agent/history.
+        await _cancel_previous_task(current_conversation_tasks, client_uid)
+
+        if (
+            _active_task_count(current_conversation_tasks)
+            >= MAX_CONCURRENT_CONVERSATIONS
+        ):
+            await websocket.send_text(
+                json.dumps(
+                    {
+                        "type": "error",
+                        "message": "Server is busy, please try again shortly",
+                    }
+                )
+            )
+            return
+
+        task = asyncio.create_task(
             process_single_conversation(
                 context=context,
                 websocket_send=websocket.send_text,
@@ -107,6 +180,7 @@ async def handle_conversation_trigger(
                 metadata=metadata,
             )
         )
+        _track_task(current_conversation_tasks, client_uid, task)
 
 
 async def handle_individual_interrupt(

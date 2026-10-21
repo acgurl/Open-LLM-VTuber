@@ -1,7 +1,7 @@
-import os
 import json
 from typing import Callable
 from loguru import logger
+from pydantic import ValidationError
 from fastapi import WebSocket
 
 from prompts import prompt_loader
@@ -18,6 +18,7 @@ from .mcpp.tool_manager import ToolManager
 from .mcpp.mcp_client import MCPClient
 from .mcpp.tool_executor import ToolExecutor
 from .mcpp.tool_adapter import ToolAdapter
+from .utils.security import redact_secrets, resolve_existing_file_within
 
 from .asr.asr_factory import ASRFactory
 from .tts.tts_factory import TTSFactory
@@ -74,20 +75,23 @@ class ServiceContext:
         self.client_uid: str = None
 
     def __str__(self):
+        if not self.character_config:
+            return "ServiceContext: not loaded"
+
+        model_name = (
+            self.live2d_model.model_info.get("name", "unknown")
+            if self.live2d_model
+            else "Not Loaded"
+        )
         return (
             f"ServiceContext:\n"
-            f"  System Config: {'Loaded' if self.system_config else 'Not Loaded'}\n"
-            f"    Details: {json.dumps(self.system_config.model_dump(), indent=6) if self.system_config else 'None'}\n"
-            f"  Live2D Model: {self.live2d_model.model_info if self.live2d_model else 'Not Loaded'}\n"
+            f"  Character: {self.character_config.character_name} "
+            f"({self.character_config.conf_name})\n"
+            f"  Live2D Model: {model_name}\n"
             f"  ASR Engine: {type(self.asr_engine).__name__ if self.asr_engine else 'Not Loaded'}\n"
-            f"    Config: {json.dumps(self.character_config.asr_config.model_dump(), indent=6) if self.character_config.asr_config else 'None'}\n"
             f"  TTS Engine: {type(self.tts_engine).__name__ if self.tts_engine else 'Not Loaded'}\n"
-            f"    Config: {json.dumps(self.character_config.tts_config.model_dump(), indent=6) if self.character_config.tts_config else 'None'}\n"
             f"  LLM Engine: {type(self.agent_engine).__name__ if self.agent_engine else 'Not Loaded'}\n"
-            f"    Agent Config: {json.dumps(self.character_config.agent_config.model_dump(), indent=6) if self.character_config.agent_config else 'None'}\n"
             f"  VAD Engine: {type(self.vad_engine).__name__ if self.vad_engine else 'Not Loaded'}\n"
-            f"    Agent Config: {json.dumps(self.character_config.vad_config.model_dump(), indent=6) if self.character_config.vad_config else 'None'}\n"
-            f"  System Prompt: {self.system_prompt or 'Not Set'}\n"
             f"  MCP Enabled: {'Yes' if self.mcp_client else 'No'}"
         )
 
@@ -104,7 +108,6 @@ class ServiceContext:
         self.tool_manager = None
         self.mcp_client = None
         self.tool_executor = None
-        self.json_detector = None
         self.mcp_prompt = ""
 
         if use_mcpp and enabled_servers:
@@ -193,10 +196,16 @@ class ServiceContext:
         logger.info("Closing ServiceContext resources...")
         if self.mcp_client:
             logger.info(f"Closing MCPClient for context instance {id(self)}...")
-            await self.mcp_client.aclose()
+            try:
+                await self.mcp_client.aclose()
+            except Exception:
+                logger.exception("Failed to close MCPClient")
             self.mcp_client = None
         if self.agent_engine and hasattr(self.agent_engine, "close"):
-            await self.agent_engine.close()  # Ensure agent resources are also closed
+            try:
+                await self.agent_engine.close()
+            except Exception:
+                logger.exception("Failed to close agent engine")
         logger.info("ServiceContext closed.")
 
     async def load_cache(
@@ -245,7 +254,9 @@ class ServiceContext:
             self.character_config.agent_config.agent_settings.basic_memory_agent.mcp_enabled_servers,
         )
 
-        logger.debug(f"Loaded service context with cache: {character_config}")
+        logger.debug(
+            f"Loaded service context for character {character_config.conf_uid}"
+        )
 
     async def init_session_agent(self, shared_agent: AgentInterface) -> None:
         """Give this session its own agent so concurrent clients keep separate memory."""
@@ -517,19 +528,29 @@ class ServiceContext:
                     "character_config"
                 )
             else:
-                # Load alternative config and merge with base config
+                # Resolve inside the character presets directory; the raw client
+                # string must not be able to reach anywhere else (including
+                # sibling directories whose name shares the same prefix).
                 characters_dir = self.system_config.config_alts_dir
-                file_path = os.path.normpath(
-                    os.path.join(characters_dir, config_file_name)
-                )
-                if not file_path.startswith(characters_dir):
-                    raise ValueError("Invalid configuration file path")
+                try:
+                    file_path = resolve_existing_file_within(
+                        characters_dir, config_file_name, allowed_suffixes={".yaml"}
+                    )
+                except ValueError as e:
+                    raise ValueError(f"Invalid configuration file: {e}") from e
 
-                alt_config_data = read_yaml(file_path).get("character_config")
+                alt_config_data = read_yaml(str(file_path)).get("character_config")
+                if not isinstance(alt_config_data, dict):
+                    raise ValueError("Character config must be a mapping")
 
-                # Start with original config data and perform a deep merge
+                # Merge against the base config every time. Using the current
+                # (already merged) config makes overrides leak across switches.
+                base_config_data = read_yaml("conf.yaml").get("character_config")
+                if not isinstance(base_config_data, dict):
+                    raise ValueError("Base character config must be a mapping")
+
                 new_character_config_data = deep_merge(
-                    self.config.character_config.model_dump(), alt_config_data
+                    base_config_data, alt_config_data
                 )
 
             if new_character_config_data:
@@ -540,9 +561,6 @@ class ServiceContext:
                 new_config = validate_config(new_config)
                 await self.load_from_config(new_config)  # Await the async load
                 logger.debug(f"New config: {self}")
-                logger.debug(
-                    f"New character config: {self.character_config.model_dump()}"
-                )
 
                 # Send responses to client
                 await websocket.send_text(
@@ -572,17 +590,27 @@ class ServiceContext:
                 )
 
         except Exception as e:
-            logger.error(f"Error switching configuration: {e}")
-            logger.debug(self)
-            await websocket.send_text(
-                json.dumps(
-                    {
-                        "type": "error",
-                        "message": f"Error switching configuration: {str(e)}",
-                    }
+            # ValidationError messages can embed raw config values, so keep the
+            # client-visible text generic; safe details are logged by
+            # validate_config.
+            if isinstance(e, ValidationError):
+                logger.error("Error switching configuration: invalid configuration")
+            else:
+                logger.error(
+                    "Error switching configuration: "
+                    f"{type(e).__name__}: {redact_secrets(str(e))}"
                 )
-            )
-            raise e
+            try:
+                await websocket.send_text(
+                    json.dumps(
+                        {
+                            "type": "error",
+                            "message": "Failed to switch configuration",
+                        }
+                    )
+                )
+            except Exception:
+                logger.debug("Client disconnected before config-switch error was sent")
 
 
 def deep_merge(dict1, dict2):

@@ -44,16 +44,19 @@ class AgentFactory:
             if not llm_provider:
                 raise ValueError("LLM provider not specified for basic memory agent")
 
-            # Get the LLM config for this provider
-            llm_config: dict = llm_configs.get(llm_provider)
-            interrupt_method: Literal["system", "user"] = llm_config.pop(
-                "interrupt_method", "user"
-            )
+            if not isinstance(llm_configs, dict):
+                raise ValueError("LLM configuration pool is missing")
 
+            # Get the LLM config for this provider
+            llm_config = llm_configs.get(llm_provider)
             if not llm_config:
                 raise ValueError(
                     f"Configuration not found for LLM provider: {llm_provider}"
                 )
+            llm_config = dict(llm_config)
+            interrupt_method: Literal["system", "user"] = llm_config.pop(
+                "interrupt_method", "user"
+            )
 
             # Create the stateless LLM
             llm = StatelessLLMFactory.create_llm(

@@ -29,6 +29,14 @@ from .conversations.conversation_handler import (
 )
 
 
+MAX_WS_CONNECTIONS = 64
+MAX_TEXT_INPUT_CHARS = 4000
+MAX_IMAGES_PER_MESSAGE = 4
+MAX_IMAGE_DATA_CHARS = 8 * 1024 * 1024
+MAX_AUDIO_SAMPLES = 16000 * 120  # 2 minutes at 16 kHz
+IMAGE_SOURCES = {"camera", "screen", "shared", "clipboard", "upload"}
+
+
 class MessageType(Enum):
     """Enum for WebSocket message types"""
 
@@ -65,6 +73,9 @@ class WebSocketHandler:
         """Initialize the WebSocket handler with default context"""
         self.client_connections: Dict[str, WebSocket] = {}
         self.client_contexts: Dict[str, ServiceContext] = {}
+        # Slots are reserved before the expensive per-session initialization so a
+        # burst of connections cannot spawn unbounded MCP processes.
+        self._pending_connections: set[str] = set()
         self.chat_group_manager = ChatGroupManager()
         self.current_conversation_tasks: Dict[str, Optional[asyncio.Task]] = {}
         self.default_context_cache = default_context_cache
@@ -96,6 +107,19 @@ class WebSocketHandler:
             "request-init-config": self._handle_init_config_request,
             "heartbeat": self._handle_heartbeat,
         }
+
+    def try_reserve_connection(self, client_uid: str) -> bool:
+        """Reserve a connection slot before session initialization starts."""
+        if (
+            len(self.client_connections) + len(self._pending_connections)
+            >= MAX_WS_CONNECTIONS
+        ):
+            return False
+        self._pending_connections.add(client_uid)
+        return True
+
+    def release_connection_reservation(self, client_uid: str) -> None:
+        self._pending_connections.discard(client_uid)
 
     async def handle_new_connection(
         self, websocket: WebSocket, client_uid: str
@@ -236,10 +260,10 @@ class WebSocketHandler:
                 except json.JSONDecodeError:
                     logger.error("Invalid JSON received")
                     continue
-                except Exception as e:
-                    logger.error(f"Error processing message: {e}")
+                except Exception:
+                    logger.exception("Error processing message")
                     await websocket.send_text(
-                        json.dumps({"type": "error", "message": str(e)})
+                        json.dumps({"type": "error", "message": "Invalid request"})
                     )
                     continue
 
@@ -316,10 +340,15 @@ class WebSocketHandler:
         context = self.client_contexts.pop(client_uid, None)
         self.received_data_buffers.pop(client_uid, None)
         if client_uid in self.current_conversation_tasks:
-            task = self.current_conversation_tasks[client_uid]
+            task = self.current_conversation_tasks.pop(client_uid)
             if task and not task.done():
                 task.cancel()
-            self.current_conversation_tasks.pop(client_uid, None)
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                except Exception:
+                    logger.exception("Conversation task failed during disconnect")
 
         # Call context close to clean up resources (e.g., MCPClient)
         if context:
@@ -336,10 +365,17 @@ class WebSocketHandler:
         self.chat_group_manager.client_group_map.pop(client_uid, None)
 
         if client_uid in self.current_conversation_tasks:
-            task = self.current_conversation_tasks[client_uid]
+            task = self.current_conversation_tasks.pop(client_uid)
             if task and not task.done():
                 task.cancel()
-            self.current_conversation_tasks.pop(client_uid, None)
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                except Exception:
+                    logger.exception(
+                        "Conversation task failed during connection cleanup"
+                    )
 
         if context:
             await context.close()
@@ -496,11 +532,38 @@ class WebSocketHandler:
     ) -> None:
         """Handle incoming audio data"""
         audio_data = data.get("audio", [])
-        if audio_data:
-            self.received_data_buffers[client_uid] = np.append(
-                self.received_data_buffers[client_uid],
-                np.array(audio_data, dtype=np.float32),
+        if not isinstance(audio_data, (list, tuple)) or not audio_data:
+            return
+
+        if len(audio_data) > MAX_AUDIO_SAMPLES:
+            await self._reject_oversized_audio(websocket, client_uid)
+            return
+
+        buffer = self.received_data_buffers.get(client_uid)
+        if buffer is None:
+            return
+        if len(buffer) + len(audio_data) > MAX_AUDIO_SAMPLES:
+            await self._reject_oversized_audio(websocket, client_uid)
+            return
+
+        self.received_data_buffers[client_uid] = np.append(
+            buffer,
+            np.array(audio_data, dtype=np.float32),
+        )
+
+    async def _reject_oversized_audio(
+        self, websocket: WebSocket, client_uid: str
+    ) -> None:
+        self.received_data_buffers[client_uid] = np.array([])
+        logger.warning(f"Audio input from {client_uid} exceeded the size limit")
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "error",
+                    "message": "Audio input is too long; the recording was discarded",
+                }
             )
+        )
 
     async def _handle_raw_audio_data(
         self, websocket: WebSocket, client_uid: str, data: WSMessage
@@ -518,18 +581,60 @@ class WebSocketHandler:
                     pass
                 elif len(audio_bytes) > 1024:
                     # Detected audio activity (voice)
+                    buffer = self.received_data_buffers.get(client_uid)
+                    if buffer is None:
+                        return
+                    if len(buffer) + len(audio_bytes) // 2 > MAX_AUDIO_SAMPLES:
+                        await self._reject_oversized_audio(websocket, client_uid)
+                        return
                     self.received_data_buffers[client_uid] = np.append(
-                        self.received_data_buffers[client_uid],
+                        buffer,
                         np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32),
                     )
                     await websocket.send_text(
                         json.dumps({"type": "control", "text": "mic-audio-end"})
                     )
 
+    def _validate_conversation_input(
+        self, msg_type: str, data: WSMessage
+    ) -> Optional[str]:
+        if msg_type == "text-input":
+            text = data.get("text")
+            if not isinstance(text, str) or not text.strip():
+                return "Text input must be a non-empty string"
+            if len(text) > MAX_TEXT_INPUT_CHARS:
+                return f"Text input exceeds {MAX_TEXT_INPUT_CHARS} characters"
+
+        images = data.get("images")
+        if images is not None:
+            if not isinstance(images, list) or len(images) > MAX_IMAGES_PER_MESSAGE:
+                return f"At most {MAX_IMAGES_PER_MESSAGE} images are allowed"
+            for image in images:
+                if not isinstance(image, dict):
+                    return "Invalid image payload"
+                source = image.get("source")
+                mime_type = image.get("mime_type")
+                image_data = image.get("data")
+                if source not in IMAGE_SOURCES:
+                    return "Invalid image source"
+                if not isinstance(mime_type, str) or not mime_type.startswith("image/"):
+                    return "Invalid image type"
+                if not isinstance(image_data, str):
+                    return "Invalid image data"
+                if len(image_data) > MAX_IMAGE_DATA_CHARS:
+                    return "Image is too large"
+
+        return None
+
     async def _handle_conversation_trigger(
         self, websocket: WebSocket, client_uid: str, data: WSMessage
     ) -> None:
         """Handle triggers that start a conversation"""
+        error = self._validate_conversation_input(data.get("type", ""), data)
+        if error:
+            await websocket.send_text(json.dumps({"type": "error", "message": error}))
+            return
+
         await handle_conversation_trigger(
             msg_type=data.get("type", ""),
             data=data,
@@ -623,6 +728,6 @@ class WebSocketHandler:
     ) -> None:
         """Handle heartbeat messages from clients"""
         try:
-            await websocket.send_json({"type": "heartbeat-ack"})
+            await websocket.send_text(json.dumps({"type": "heartbeat-ack"}))
         except Exception as e:
             logger.error(f"Error sending heartbeat acknowledgment: {e}")

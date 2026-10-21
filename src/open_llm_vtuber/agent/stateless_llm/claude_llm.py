@@ -116,7 +116,7 @@ class AsyncLLM(StatelessLLMInterface):
                 if msg["role"] != "system"
             ]
 
-            logger.debug(f"Sending messages to Claude API: {converted_messages}")
+            logger.debug(f"Sending {len(converted_messages)} messages to Claude API")
             logger.debug(f"Tools provided: {tools}")
 
             async with self.client.messages.stream(

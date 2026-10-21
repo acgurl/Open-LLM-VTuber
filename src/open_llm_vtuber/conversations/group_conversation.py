@@ -68,7 +68,7 @@ async def process_group_conversation(
         )
 
         # Initialize group conversation context for each AI
-        init_group_conversation_contexts(client_contexts)
+        init_group_conversation_contexts(client_contexts, group_members)
 
         # Get human name from initiator context
         initiator_context = client_contexts.get(initiator_client_uid)
@@ -106,7 +106,7 @@ async def process_group_conversation(
 
         state.conversation_history = [f"{human_name}: {input_text}"]
 
-        is_first_responder = False
+        is_first_responder = True
         # Main conversation loop
         while state.group_queue:
             try:
@@ -128,6 +128,7 @@ async def process_group_conversation(
                     images=images,
                     tts_manager=tts_managers[current_member_uid],
                     metadata=current_metadata,
+                    skip_history=bool(skip_history),
                 )
             except Exception as e:
                 logger.error(f"Error in group member turn: {e}")
@@ -168,11 +169,15 @@ def init_group_conversation_state(
 
 def init_group_conversation_contexts(
     client_contexts: Dict[str, ServiceContext],
+    group_members: List[str],
 ) -> None:
     """Initialize group conversation context for each AI participant"""
-    ai_names = [ctx.character_config.character_name for ctx in client_contexts.values()]
+    member_contexts = [
+        client_contexts[uid] for uid in group_members if uid in client_contexts
+    ]
+    ai_names = [ctx.character_config.character_name for ctx in member_contexts]
 
-    for context in client_contexts.values():
+    for context in member_contexts:
         agent = context.agent_engine
         if hasattr(agent, "start_group_conversation"):
             agent.start_group_conversation(
@@ -234,6 +239,7 @@ async def handle_group_member_turn(
     images: Optional[List[Dict[str, Any]]],
     tts_manager: TTSTaskManager,
     metadata: Optional[Dict[str, Any]] = None,
+    skip_history: bool = False,
 ) -> None:
     """Handle a single group member's conversation turn"""
     # Update current speaker before processing
@@ -269,9 +275,6 @@ async def handle_group_member_turn(
     )
 
     if tts_manager.task_list:
-        await asyncio.gather(*tts_manager.task_list)
-        await current_ws_send(json.dumps({"type": "backend-synth-complete"}))
-
         broadcast_ctx = BroadcastContext(
             broadcast_func=broadcast_func,
             group_members=group_members,
@@ -290,18 +293,20 @@ async def handle_group_member_turn(
         state.conversation_history.append(ai_message)
         logger.info(f"Appended complete response: {ai_message}")
 
-        for member_uid in group_members:
-            member_context = client_contexts[member_uid]
-            store_message(
-                conf_uid=member_context.character_config.conf_uid,
-                history_uid=member_context.history_uid,
-                role="ai",
-                content=full_response,
-                name=context.character_config.character_name,
-                avatar=context.character_config.avatar,
-            )
-        else:
-            logger.debug("Skipping storing AI response to history (proactive speak)")
+        skip_history = skip_history or bool(
+            metadata and metadata.get("skip_history", False)
+        )
+        if not skip_history:
+            for member_uid in group_members:
+                member_context = client_contexts[member_uid]
+                store_message(
+                    conf_uid=member_context.character_config.conf_uid,
+                    history_uid=member_context.history_uid,
+                    role="ai",
+                    content=full_response,
+                    name=context.character_config.character_name,
+                    avatar=context.character_config.avatar,
+                )
 
     state.memory_index[current_member_uid] = len(state.conversation_history)
     state.group_queue.append(current_member_uid)

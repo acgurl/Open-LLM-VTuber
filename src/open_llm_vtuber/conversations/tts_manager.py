@@ -148,7 +148,10 @@ class TTSTaskManager:
         audio_file_path = None
         try:
             audio_file_path = await self._generate_audio(tts_engine, tts_text)
-            payload = prepare_audio_payload(
+            # Decoding/converting audio with pydub is CPU-bound and would block
+            # every other connection if done on the event loop.
+            payload = await asyncio.to_thread(
+                prepare_audio_payload,
                 audio_path=audio_file_path,
                 display_text=display_text,
                 actions=actions,
@@ -183,6 +186,9 @@ class TTSTaskManager:
 
     def clear(self) -> None:
         """Clear all pending tasks and reset state"""
+        for task in self.task_list:
+            if not task.done():
+                task.cancel()
         self.task_list.clear()
         if self._sender_task:
             self._sender_task.cancel()

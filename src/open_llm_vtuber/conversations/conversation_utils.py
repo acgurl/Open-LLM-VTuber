@@ -16,6 +16,9 @@ from ..tts.tts_interface import TTSInterface
 from ..utils.stream_audio import prepare_audio_payload
 
 
+PLAYBACK_COMPLETE_TIMEOUT_SECONDS = 120.0
+
+
 class TextDeltaBuffer:
     """Coalesces streamed text and pushes it to the client at a fixed cadence."""
 
@@ -209,7 +212,8 @@ async def handle_audio_output(
     full_response = ""
     async for audio_path, display_text, transcript, actions in output:
         full_response += transcript
-        audio_payload = prepare_audio_payload(
+        audio_payload = await asyncio.to_thread(
+            prepare_audio_payload,
             audio_path=audio_path,
             display_text=display_text,
             actions=actions.to_dict() if actions else None,
@@ -259,12 +263,16 @@ async def finalize_conversation_turn(
         await websocket_send(json.dumps({"type": "backend-synth-complete"}))
 
         response = await message_handler.wait_for_response(
-            client_uid, "frontend-playback-complete"
+            client_uid,
+            "frontend-playback-complete",
+            timeout=PLAYBACK_COMPLETE_TIMEOUT_SECONDS,
         )
 
         if not response:
-            logger.warning(f"No playback completion response from {client_uid}")
-            return
+            logger.warning(
+                f"No playback completion response from {client_uid} "
+                f"within {PLAYBACK_COMPLETE_TIMEOUT_SECONDS:.0f}s"
+            )
 
     await websocket_send(json.dumps({"type": "force-new-message"}))
 
