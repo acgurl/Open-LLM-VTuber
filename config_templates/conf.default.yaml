@@ -472,7 +472,7 @@ character_config:
     remove_special_char: True # remove special characters like emoji from audio generation
     ignore_brackets: True # ignore everything inside brackets
     ignore_parentheses: True # ignore everything inside parentheses
-    ignore_asterisks: True # ignore everything wrapped inside asterisks
+    ignore_asterisks: True # ignore role-play actions wrapped in single asterisks; Markdown bold (**...**) is still spoken
     ignore_angle_brackets: True # ignore everything wrapped inside <text>
 
     translator_config:

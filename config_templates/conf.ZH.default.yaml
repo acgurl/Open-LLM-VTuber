@@ -467,7 +467,7 @@ character_config:
     remove_special_char: True # 从音频生成中删除表情符号等特殊字符
     ignore_brackets: True # 从音频生成中删除中括号包住的内容
     ignore_parentheses: True # 从音频生成中删除括号包住的内容
-    ignore_asterisks: True # 从音频生成中删除星号包住的内容(单双星号)
+    ignore_asterisks: True # 从音频生成中删除单星号包住的角色动作内容；Markdown 粗体(**...**)等内容仍会朗读
     ignore_angle_brackets: True # 从音频生成中删除尖括号包住的内容
 
     translator_config:

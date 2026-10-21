@@ -72,6 +72,50 @@ SUPPORTED_LANGUAGES = {
     "zh",
 }
 
+# Sentence punctuation inside URLs must not split a sentence (e.g. example.com).
+_URL_RE = re.compile(
+    r"(?:https?://|www\.)[^\s<>\"'）】)\]},;。！？，；：、]+", re.IGNORECASE
+)
+_URL_PUNCTUATION = {
+    ".": "\ue000",
+    "!": "\ue001",
+    "?": "\ue002",
+    "。": "\ue003",
+    "！": "\ue004",
+    "？": "\ue005",
+}
+_URL_TRAILING_PUNCTUATION = ".,!?;:。！？，；："
+_URL_PUNCTUATION_RE = re.compile("|".join(re.escape(char) for char in _URL_PUNCTUATION))
+_RESTORE_URL_PUNCTUATION = str.maketrans(
+    {masked: original for original, masked in _URL_PUNCTUATION.items()}
+)
+
+
+def _mask_url_punctuation(text: str) -> str:
+    def mask(match: re.Match) -> str:
+        url = match.group(0)
+        trailing = ""
+        while url and url[-1] in _URL_TRAILING_PUNCTUATION:
+            trailing = url[-1] + trailing
+            url = url[:-1]
+
+        masked_url = _URL_PUNCTUATION_RE.sub(
+            lambda m: _URL_PUNCTUATION[m.group(0)], url
+        )
+        if trailing and not text[match.end() :].strip():
+            # The buffer ends here, so a trailing dot may still be the start of a
+            # longer URL (e.g. "example." followed by "com" in the next token).
+            trailing = _URL_PUNCTUATION_RE.sub(
+                lambda m: _URL_PUNCTUATION[m.group(0)], trailing
+            )
+        return masked_url + trailing
+
+    return _URL_RE.sub(mask, text)
+
+
+def _restore_url_punctuation(text: str) -> str:
+    return text.translate(_RESTORE_URL_PUNCTUATION)
+
 
 def detect_language(text: str) -> str:
     """
@@ -121,7 +165,8 @@ def contains_comma(text: str) -> bool:
 
 def comma_splitter(text: str) -> Tuple[str, str]:
     """
-    Process text and split it at the first comma.
+    Process text and split it at the first comma outside brackets, parentheses
+    and inline code (e.g. inside a Markdown link).
     Returns the split text (including the comma) and the remaining text.
 
     Args:
@@ -133,11 +178,25 @@ def comma_splitter(text: str) -> Tuple[str, str]:
     if not text:
         return [], ""
 
-    for comma in COMMAS:
-        if comma in text:
-            split_text = text.split(comma, 1)
-            # Return first part with the comma
-            return split_text[0].strip() + comma, split_text[1].strip()
+    bracket_depth = 0
+    parenthesis_depth = 0
+    in_code = False
+
+    for index, char in enumerate(text):
+        if char == "`":
+            in_code = not in_code
+        elif not in_code:
+            if char in "[【":
+                bracket_depth += 1
+            elif char in "]】" and bracket_depth > 0:
+                bracket_depth -= 1
+            elif char in "(（":
+                parenthesis_depth += 1
+            elif char in ")）" and parenthesis_depth > 0:
+                parenthesis_depth -= 1
+            elif char in COMMAS and bracket_depth == 0 and parenthesis_depth == 0:
+                return text[: index + 1].strip(), text[index + 1 :].strip()
+
     return text, ""
 
 
@@ -185,7 +244,7 @@ def segment_text_by_regex(text: str) -> Tuple[List[str], str]:
         return [], ""
 
     complete_sentences = []
-    remaining_text = text.strip()
+    remaining_text = _mask_url_punctuation(text).strip()
 
     # Create pattern for matching sentences ending with any end punctuation
     escaped_punctuations = [re.escape(p) for p in END_PUNCTUATIONS]
@@ -204,10 +263,10 @@ def segment_text_by_regex(text: str) -> Tuple[List[str], str]:
             remaining_text = remaining_text[end_pos:].lstrip()
             continue
 
-        complete_sentences.append(potential_sentence)
+        complete_sentences.append(_restore_url_punctuation(potential_sentence))
         remaining_text = remaining_text[end_pos:].lstrip()
 
-    return complete_sentences, remaining_text
+    return complete_sentences, _restore_url_punctuation(remaining_text)
 
 
 def segment_text_by_pysbd(text: str) -> Tuple[List[str], str]:
@@ -231,7 +290,7 @@ def segment_text_by_pysbd(text: str) -> Tuple[List[str], str]:
         if lang is not None:
             # Use pysbd for supported languages
             segmenter = pysbd.Segmenter(language=lang, clean=False)
-            sentences = segmenter.segment(text)
+            sentences = segmenter.segment(_mask_url_punctuation(text))
 
             if not sentences:
                 return [], text
@@ -239,17 +298,17 @@ def segment_text_by_pysbd(text: str) -> Tuple[List[str], str]:
             # Process all but the last sentence
             complete_sentences = []
             for sent in sentences[:-1]:
-                sent = sent.strip()
+                sent = _restore_url_punctuation(sent.strip())
                 if sent:
                     complete_sentences.append(sent)
 
             # Handle the last sentence
             last_sent = sentences[-1].strip()
             if is_complete_sentence(last_sent):
-                complete_sentences.append(last_sent)
+                complete_sentences.append(_restore_url_punctuation(last_sent))
                 remaining = ""
             else:
-                remaining = last_sent
+                remaining = _restore_url_punctuation(last_sent)
 
         else:
             # Use regex for unsupported languages
@@ -496,7 +555,7 @@ class SentenceDivider:
                     and contains_comma(self._buffer)
                 ):
                     sentence, remaining = comma_splitter(self._buffer)
-                    if sentence.strip():
+                    if sentence.strip() and remaining.strip():
                         yield SentenceWithTags(
                             text=sentence.strip(),
                             tags=current_tags or [TagInfo("", TagState.NONE)],
