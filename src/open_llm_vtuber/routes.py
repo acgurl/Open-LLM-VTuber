@@ -20,6 +20,99 @@ MAX_TTS_SENTENCES = 30
 MAX_TTS_CONNECTIONS = 16
 MAX_CONCURRENT_ASR = 2
 _TTS_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?。！？])\s*")
+_TTS_TERMINAL_PUNCTUATION = ".!?。！？"
+
+
+def _json_error(status_code: int, message: str) -> Response:
+    return Response(
+        content=json.dumps({"error": message}),
+        status_code=status_code,
+        media_type="application/json",
+    )
+
+
+def _split_tts_sentences(text: str) -> list[str]:
+    return [
+        sentence.strip()
+        for sentence in _TTS_SENTENCE_BOUNDARY.split(text)
+        if sentence.strip()
+    ]
+
+
+def _with_terminal_punctuation(sentence: str) -> str:
+    if sentence[-1] not in _TTS_TERMINAL_PUNCTUATION:
+        return sentence + "."
+    return sentence
+
+
+async def _stream_tts_sentences(websocket: WebSocket, tts_engine, sentences) -> None:
+    for sentence in sentences:
+        sentence = _with_terminal_punctuation(sentence)
+        file_name = (
+            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid4())[:8]}"
+        )
+        audio_path = await tts_engine.async_generate_audio(
+            text=sentence, file_name_no_ext=file_name
+        )
+        logger.info(f"Generated audio for sentence at: {audio_path}")
+        await websocket.send_json(
+            {
+                "status": "partial",
+                "audioPath": audio_path,
+                "text": sentence,
+            }
+        )
+
+    await websocket.send_json({"status": "complete"})
+
+
+async def _process_tts_request(
+    websocket: WebSocket, tts_engine, text: str
+) -> None:
+    if len(text) > MAX_TTS_TEXT_CHARS:
+        await websocket.send_json(
+            {
+                "status": "error",
+                "message": f"Text exceeds the {MAX_TTS_TEXT_CHARS}-character limit",
+            }
+        )
+        return
+
+    logger.info(f"Received text for TTS ({len(text)} characters)")
+
+    sentences = _split_tts_sentences(text)
+    if len(sentences) > MAX_TTS_SENTENCES:
+        await websocket.send_json(
+            {
+                "status": "error",
+                "message": f"Text exceeds the {MAX_TTS_SENTENCES}-sentence limit",
+            }
+        )
+        return
+
+    try:
+        await _stream_tts_sentences(websocket, tts_engine, sentences)
+    except Exception:
+        logger.exception("Error generating TTS")
+        await websocket.send_json(
+            {"status": "error", "message": "Failed to generate audio"}
+        )
+
+
+async def _serve_tts_connection(websocket: WebSocket, tts_engine) -> None:
+    try:
+        while True:
+            data = await websocket.receive_json()
+            text = data.get("text")
+            if not isinstance(text, str) or not text.strip():
+                continue
+
+            await _process_tts_request(websocket, tts_engine, text)
+    except WebSocketDisconnect:
+        logger.info("TTS WebSocket client disconnected")
+    except Exception:
+        logger.exception("Error in TTS WebSocket connection")
+        await websocket.close()
 
 
 def init_client_ws_route(default_context_cache: ServiceContext) -> APIRouter:
@@ -173,11 +266,7 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
             if not contents:
                 raise ValueError("Empty audio file")
             if len(contents) > MAX_ASR_UPLOAD_BYTES:
-                return Response(
-                    content=json.dumps({"error": "Audio file is too large"}),
-                    status_code=413,
-                    media_type="application/json",
-                )
+                return _json_error(413, "Audio file is too large")
 
             audio_array = decode_pcm_wav(
                 contents,
@@ -186,12 +275,8 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
             )
 
             if asr_semaphore.locked():
-                return Response(
-                    content=json.dumps(
-                        {"error": "Too many concurrent transcription requests"}
-                    ),
-                    status_code=429,
-                    media_type="application/json",
+                return _json_error(
+                    429, "Too many concurrent transcription requests"
                 )
 
             async with asr_semaphore:
@@ -203,19 +288,11 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
 
         except ValueError as e:
             logger.error(f"Audio format error: {e}")
-            return Response(
-                content=json.dumps({"error": str(e)}),
-                status_code=400,
-                media_type="application/json",
-            )
+            return _json_error(400, str(e))
         except Exception:
             logger.exception("Error during transcription")
-            return Response(
-                content=json.dumps(
-                    {"error": "Internal server error during transcription"}
-                ),
-                status_code=500,
-                media_type="application/json",
+            return _json_error(
+                500, "Internal server error during transcription"
             )
 
     @router.websocket("/tts-ws")
@@ -230,79 +307,9 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
         try:
             await websocket.accept()
             logger.info("TTS WebSocket connection established")
-
-            try:
-                while True:
-                    data = await websocket.receive_json()
-                    text = data.get("text")
-                    if not isinstance(text, str) or not text.strip():
-                        continue
-
-                    if len(text) > MAX_TTS_TEXT_CHARS:
-                        await websocket.send_json(
-                            {
-                                "status": "error",
-                                "message": (
-                                    f"Text exceeds the {MAX_TTS_TEXT_CHARS}-character limit"
-                                ),
-                            }
-                        )
-                        continue
-
-                    logger.info(f"Received text for TTS ({len(text)} characters)")
-
-                    # Split text into sentences without losing trailing punctuation.
-                    sentences = [
-                        s.strip()
-                        for s in _TTS_SENTENCE_BOUNDARY.split(text)
-                        if s.strip()
-                    ]
-                    if len(sentences) > MAX_TTS_SENTENCES:
-                        await websocket.send_json(
-                            {
-                                "status": "error",
-                                "message": (
-                                    f"Text exceeds the {MAX_TTS_SENTENCES}-sentence limit"
-                                ),
-                            }
-                        )
-                        continue
-
-                    try:
-                        # Generate and send audio for each sentence
-                        for sentence in sentences:
-                            if sentence[-1] not in ".!?。！？":
-                                sentence = sentence + "."
-                            file_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid4())[:8]}"
-                            audio_path = await default_context_cache.tts_engine.async_generate_audio(
-                                text=sentence, file_name_no_ext=file_name
-                            )
-                            logger.info(
-                                f"Generated audio for sentence at: {audio_path}"
-                            )
-
-                            await websocket.send_json(
-                                {
-                                    "status": "partial",
-                                    "audioPath": audio_path,
-                                    "text": sentence,
-                                }
-                            )
-
-                        # Send completion signal
-                        await websocket.send_json({"status": "complete"})
-
-                    except Exception:
-                        logger.exception("Error generating TTS")
-                        await websocket.send_json(
-                            {"status": "error", "message": "Failed to generate audio"}
-                        )
-
-            except WebSocketDisconnect:
-                logger.info("TTS WebSocket client disconnected")
-            except Exception:
-                logger.exception("Error in TTS WebSocket connection")
-                await websocket.close()
+            await _serve_tts_connection(
+                websocket, default_context_cache.tts_engine
+            )
         finally:
             tts_slots.release()
 
