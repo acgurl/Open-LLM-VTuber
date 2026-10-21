@@ -26,5 +26,21 @@
                 "": 1
             }
         }
+    },
+    {
+        "name": "hiyori_pro",
+        "description": "",
+        "url": "/live2d-models/hiyori_pro/runtime/hiyori_pro_t11.model3.json",
+        "kScale": 0.65,
+        "initialXshift": 0,
+        "initialYshift": 0,
+        "kXOffset": 0,
+        "idleMotionGroupName": "Idle",
+        "emotionMap": {},
+        "tapMotions": {
+            "HitAreaBody": {
+                "Tap@Body": 1
+            }
+        }
     }
 ]

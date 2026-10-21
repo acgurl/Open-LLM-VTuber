@@ -77,3 +77,7 @@ openapi_*.json
 build/
 dist/
 .cache/
+
+# Deployment secrets
+/conf/
+/data/
