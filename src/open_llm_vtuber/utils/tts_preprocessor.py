@@ -38,6 +38,9 @@ _EMPHASIS_UNDERSCORE_RE = re.compile(
 _LEFTOVER_MARKER_RE = re.compile(
     r"\*{1,3}|`+|~{2,}|(?<![A-Za-z0-9_])_{1,2}(?![A-Za-z0-9_])"
 )
+_LEFTOVER_MARKER_KEEP_SINGLE_STAR_RE = re.compile(
+    r"\*{2,}|`+|~{2,}|(?<![A-Za-z0-9_])_{1,2}(?![A-Za-z0-9_])"
+)
 
 
 def markdown_to_plain_text(text: str, keep_single_asterisk_content: bool = True) -> str:
@@ -88,9 +91,7 @@ def markdown_to_plain_text(text: str, keep_single_asterisk_content: bool = True)
     if keep_single_asterisk_content:
         text = _LEFTOVER_MARKER_RE.sub("", text)
     else:
-        text = re.sub(
-            r"\*{2,}|`+|~{2,}|(?<![A-Za-z0-9_])_{1,2}(?![A-Za-z0-9_])", "", text
-        )
+        text = _LEFTOVER_MARKER_KEEP_SINGLE_STAR_RE.sub("", text)
 
     text = html.unescape(text)
     return re.sub(r"[ \t]{2,}", " ", text).strip()
