@@ -3778,7 +3778,7 @@ index 890806d..e491894 100644
    /**
     * Append or update a Tool Call message using its tool_id
 diff --git a/src/renderer/src/context/live2d-config-context.tsx b/src/renderer/src/context/live2d-config-context.tsx
-index c5497ac..536e7c2 100644
+index c5497ac..6f42d83 100644
 --- a/src/renderer/src/context/live2d-config-context.tsx
 +++ b/src/renderer/src/context/live2d-config-context.tsx
 @@ -2,7 +2,6 @@ import {
@@ -3799,7 +3799,17 @@ index c5497ac..536e7c2 100644
    /** Enable pointer interactivity */
    pointerInteractive?: boolean;
  
-@@ -105,8 +107,6 @@ export const Live2DConfigContext = createContext<Live2DConfigState | null>(null)
+@@ -71,6 +73,9 @@ export interface ModelInfo {
+ 
+   /** Initial scale */
+   initialScale?: number;
++
++  /** Gain applied to the TTS volume envelope for lip sync (default 0.2) */
++  lipSyncGain?: number;
+ }
+ 
+ /**
+@@ -105,8 +110,6 @@ export const Live2DConfigContext = createContext<Live2DConfigState | null>(null)
   * @param {React.ReactNode} props.children - Child components
   */
  export function Live2DConfigProvider({ children }: { children: React.ReactNode }) {
@@ -3829,10 +3839,10 @@ index 4c6a59c..7017a47 100644
  export interface HistoryInfo {
    uid: string;
 diff --git a/src/renderer/src/hooks/utils/use-audio-task.ts b/src/renderer/src/hooks/utils/use-audio-task.ts
-index 27cba68..13f66ee 100644
+index 27cba68..efe93ce 100644
 --- a/src/renderer/src/hooks/utils/use-audio-task.ts
 +++ b/src/renderer/src/hooks/utils/use-audio-task.ts
-@@ -10,21 +10,22 @@ import { audioTaskQueue } from '@/utils/task-queue';
+@@ -10,23 +10,26 @@ import { audioTaskQueue } from '@/utils/task-queue';
  import { audioManager } from '@/utils/audio-manager';
  import { toaster } from '@/components/ui/toaster';
  import { useWebSocket } from '@/context/websocket-context';
@@ -3857,8 +3867,12 @@ index 27cba68..13f66ee 100644
 +  streamed?: boolean
  }
  
++const DEFAULT_LIP_SYNC_GAIN = 0.2;
++
  /**
-@@ -37,6 +38,7 @@ export const useAudioTask = () => {
+  * Custom hook for handling audio playback tasks with Live2D lip sync
+  */
+@@ -37,6 +40,7 @@ export const useAudioTask = () => {
    const { appendResponse, appendAIMessage } = useChatHistory();
    const { sendMessage } = useWebSocket();
    const { setExpression } = useLive2DExpression();
@@ -3866,7 +3880,7 @@ index 27cba68..13f66ee 100644
  
    // State refs to avoid stale closures
    const stateRef = useRef({
-@@ -80,21 +82,41 @@ export const useAudioTask = () => {
+@@ -80,21 +84,41 @@ export const useAudioTask = () => {
        return;
      }
  
@@ -3919,7 +3933,7 @@ index 27cba68..13f66ee 100644
        }
      }
  
-@@ -107,6 +129,7 @@ export const useAudioTask = () => {
+@@ -107,6 +131,7 @@ export const useAudioTask = () => {
          const live2dManager = (window as any).getLive2DManager?.();
          if (!live2dManager) {
            console.error('Live2D manager not found');
@@ -3927,7 +3941,7 @@ index 27cba68..13f66ee 100644
            resolve();
            return;
          }
-@@ -114,6 +137,7 @@ export const useAudioTask = () => {
+@@ -114,6 +139,7 @@ export const useAudioTask = () => {
          const model = live2dManager.getModel(0);
          if (!model) {
            console.error('Live2D model not found at index 0');
@@ -3935,7 +3949,7 @@ index 27cba68..13f66ee 100644
            resolve();
            return;
          }
-@@ -135,8 +159,22 @@ export const useAudioTask = () => {
+@@ -135,8 +161,22 @@ export const useAudioTask = () => {
            );
          }
  
@@ -3960,7 +3974,7 @@ index 27cba68..13f66ee 100644
            console.log("Starting random 'Talk' motion");
            model.startRandomMotion(
              "Talk",
-@@ -152,8 +190,110 @@ export const useAudioTask = () => {
+@@ -152,8 +192,117 @@ export const useAudioTask = () => {
          // Register with global audio manager IMMEDIATELY after creating audio
          audioManager.setCurrentAudio(audio, model);
          let isFinished = false;
@@ -3973,12 +3987,19 @@ index 27cba68..13f66ee 100644
 +        const hasVolumeSchedule = Array.isArray(volumes)
 +          && volumes.length > 0
 +          && sliceLength > 0;
++        const configuredGain = modelInfo?.lipSyncGain;
++        const lipSyncGain = typeof configuredGain === 'number'
++          && Number.isFinite(configuredGain)
++          && configuredGain >= 0
++          ? configuredGain
++          : DEFAULT_LIP_SYNC_GAIN;
 +        const wavHandler = model._wavFileHandler;
 +        if (wavHandler) {
 +          wavHandler._ownerModel = model;
 +          wavHandler._syncAudio = audio;
 +          wavHandler._volumes = hasVolumeSchedule ? volumes : null;
 +          wavHandler._sliceLength = sliceLength;
++          wavHandler._lipSyncGain = lipSyncGain;
 +
 +          if (!wavHandler._initialized) {
 +            console.log('Applying audio-driven lip sync');
@@ -4019,7 +4040,7 @@ index 27cba68..13f66ee 100644
 +                const v0 = this._volumes[lower] ?? 0;
 +                const v1 = this._volumes[Math.min(lower + 1, this._volumes.length - 1)] ?? v0;
 +                const volume = v0 + (v1 - v0) * fraction;
-+                this._lastRms = volume * 0.2;
++                this._lastRms = volume * (this._lipSyncGain ?? DEFAULT_LIP_SYNC_GAIN);
 +                return true;
 +              }
 +
@@ -4071,7 +4092,7 @@ index 27cba68..13f66ee 100644
            audioManager.clearCurrentAudio(audio);
            if (!isFinished) {
              isFinished = true;
-@@ -161,10 +301,12 @@ export const useAudioTask = () => {
+@@ -161,10 +310,12 @@ export const useAudioTask = () => {
            }
          };
  
@@ -4087,7 +4108,7 @@ index 27cba68..13f66ee 100644
            // Check for interruption before playback
            if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
              console.warn('Audio playback cancelled due to interruption or audio was stopped');
-@@ -172,37 +314,31 @@ export const useAudioTask = () => {
+@@ -172,37 +323,31 @@ export const useAudioTask = () => {
              return;
            }
  
@@ -4141,7 +4162,7 @@ index 27cba68..13f66ee 100644
            cleanup();
          });
  
-@@ -213,10 +349,12 @@ export const useAudioTask = () => {
+@@ -213,10 +358,12 @@ export const useAudioTask = () => {
  
          audio.load();
        } else {
