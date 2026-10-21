@@ -133,6 +133,12 @@ def save_config(config: BaseModel, config_path: Union[str, Path]):
         raise yaml.YAMLError(f"Error writing YAML file: {e}")
 
 
+def _config_display_name(config: Any, fallback: str) -> str:
+    if not isinstance(config, dict):
+        return fallback
+    return config.get("character_config", {}).get("conf_name", fallback)
+
+
 def scan_config_alts_directory(config_alts_dir: str) -> list[dict]:
     """
     Scan the config_alts directory and return a list of config information.
@@ -158,11 +164,7 @@ def scan_config_alts_directory(config_alts_dir: str) -> list[dict]:
     config_files.append(
         {
             "filename": "conf.yaml",
-            "name": default_config.get("character_config", {}).get(
-                "conf_name", "conf.yaml"
-            )
-            if isinstance(default_config, dict)
-            else "conf.yaml",
+            "name": _config_display_name(default_config, "conf.yaml"),
         }
     )
 
@@ -178,11 +180,7 @@ def scan_config_alts_directory(config_alts_dir: str) -> list[dict]:
             )
             try:
                 config = read_yaml(full_path) or {}
-                name = (
-                    config.get("character_config", {}).get("conf_name", relative_path)
-                    if isinstance(config, dict)
-                    else relative_path
-                )
+                name = _config_display_name(config, relative_path)
             except Exception as e:
                 logger.error(f"Failed to read character config {full_path}: {e}")
                 name = relative_path
