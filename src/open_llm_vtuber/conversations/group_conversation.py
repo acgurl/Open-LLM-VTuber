@@ -293,10 +293,10 @@ async def handle_group_member_turn(
         state.conversation_history.append(ai_message)
         logger.info(f"Appended complete response: {ai_message}")
 
-        skip_history = skip_history or bool(
+        should_skip_history = skip_history or bool(
             metadata and metadata.get("skip_history", False)
         )
-        if not skip_history:
+        if not should_skip_history:
             for member_uid in group_members:
                 member_context = client_contexts[member_uid]
                 store_message(
