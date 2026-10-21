@@ -86,6 +86,9 @@ def actions_extractor(live2d_model: Live2dModel):
                         expressions = live2d_model.extract_emotion(sentence.text)
                         if expressions:
                             actions.expressions = expressions
+                        motions = live2d_model.extract_motion(sentence.text)
+                        if motions:
+                            actions.motions = motions
                     yield sentence, actions  # Yield the tuple
                 elif isinstance(item, dict):
                     # Pass through dictionaries

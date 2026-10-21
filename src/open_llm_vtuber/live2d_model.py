@@ -24,6 +24,8 @@ class Live2dModel:
     model_info: dict
     emo_map: dict
     emo_str: str
+    motion_map: dict
+    motion_str: str
 
     def __init__(
         self, live2d_model_name: str, model_dict_path: str = "model_dict.json"
@@ -51,6 +53,10 @@ class Live2dModel:
         self.emo_str: str = " ".join([f"[{key}]," for key in self.emo_map.keys()])
         # emo_str is a string of the keys in the emoMap dictionary. The keys are enclosed in square brackets.
         # example: `"[fear], [anger], [disgust], [sadness], [joy], [neutral], [surprise]"`
+        self.motion_map: dict = {
+            k.lower(): v for k, v in self.model_info.get("motionMap", {}).items()
+        }
+        self.motion_str: str = " ".join([f"[{key}]," for key in self.motion_map.keys()])
 
     def _load_file_content(self, file_path: str) -> str:
         """Load the content of a file with robust encoding handling."""
@@ -170,6 +176,34 @@ class Live2dModel:
                     break
             i += 1
         return expression_list
+
+    def extract_motion(self, str_to_check: str) -> list:
+        """
+        Check the input string for motion keywords and return a list of motion configs.
+
+        Parameters:
+            str_to_check (str): The string to check for motions.
+
+        Returns:
+            list: A list of motion configs found in the string. An empty list is returned if no motions are found.
+        """
+
+        motion_list = []
+        str_to_check = str_to_check.lower()
+
+        i = 0
+        while i < len(str_to_check):
+            if str_to_check[i] != "[":
+                i += 1
+                continue
+            for key in self.motion_map.keys():
+                motion_tag = f"[{key}]"
+                if str_to_check[i : i + len(motion_tag)] == motion_tag:
+                    motion_list.append(self.motion_map[key])
+                    i += len(motion_tag) - 1
+                    break
+            i += 1
+        return motion_list
 
     def remove_emotion_keywords(self, target_str: str) -> str:
         """

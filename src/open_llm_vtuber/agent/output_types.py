@@ -1,5 +1,5 @@
 from dataclasses import dataclass, asdict
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from abc import ABC, abstractmethod
 
 
@@ -8,6 +8,7 @@ class Actions:
     """Represents actions that can be performed alongside text output"""
 
     expressions: Optional[List[str] | List[int]] = None
+    motions: Optional[List[Dict[str, Any]]] = None
     pictures: Optional[List[str]] = None
     sounds: Optional[List[str]] = None
 

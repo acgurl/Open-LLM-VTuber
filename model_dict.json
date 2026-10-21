@@ -18,6 +18,20 @@
             "sadness": 1,
             "surprise": 3
         },
+        "motionMap": {
+            "special1": {
+                "group": "",
+                "index": 3
+            },
+            "special2": {
+                "group": "",
+                "index": 4
+            },
+            "special3": {
+                "group": "",
+                "index": 5
+            }
+        },
         "tapMotions": {
             "HitAreaHead": {
                 "": 1
@@ -37,6 +51,26 @@
         "kXOffset": 0,
         "idleMotionGroupName": "Idle",
         "emotionMap": {},
+        "motionMap": {
+            "flick": {
+                "group": "Flick"
+            },
+            "flick_up": {
+                "group": "FlickUp"
+            },
+            "flick_down": {
+                "group": "FlickDown"
+            },
+            "tap": {
+                "group": "Tap"
+            },
+            "tap_body": {
+                "group": "Tap@Body"
+            },
+            "flick_body": {
+                "group": "Flick@Body"
+            }
+        },
         "tapMotions": {
             "HitAreaBody": {
                 "Tap@Body": 1
