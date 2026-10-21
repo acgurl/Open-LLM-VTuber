@@ -3829,7 +3829,7 @@ index 4c6a59c..7017a47 100644
  export interface HistoryInfo {
    uid: string;
 diff --git a/src/renderer/src/hooks/utils/use-audio-task.ts b/src/renderer/src/hooks/utils/use-audio-task.ts
-index 27cba68..2460935 100644
+index 27cba68..13f66ee 100644
 --- a/src/renderer/src/hooks/utils/use-audio-task.ts
 +++ b/src/renderer/src/hooks/utils/use-audio-task.ts
 @@ -10,21 +10,22 @@ import { audioTaskQueue } from '@/utils/task-queue';
@@ -3866,13 +3866,15 @@ index 27cba68..2460935 100644
  
    // State refs to avoid stale closures
    const stateRef = useRef({
-@@ -80,21 +82,39 @@ export const useAudioTask = () => {
+@@ -80,21 +82,41 @@ export const useAudioTask = () => {
        return;
      }
  
 -    const { audioBase64, displayText, expressions, forwarded } = options;
 +    const {
 +      audioBase64,
++      volumes,
++      sliceLength,
 +      displayText,
 +      expressions,
 +      motions,
@@ -3917,7 +3919,7 @@ index 27cba68..2460935 100644
        }
      }
  
-@@ -107,6 +127,7 @@ export const useAudioTask = () => {
+@@ -107,6 +129,7 @@ export const useAudioTask = () => {
          const live2dManager = (window as any).getLive2DManager?.();
          if (!live2dManager) {
            console.error('Live2D manager not found');
@@ -3925,7 +3927,7 @@ index 27cba68..2460935 100644
            resolve();
            return;
          }
-@@ -114,6 +135,7 @@ export const useAudioTask = () => {
+@@ -114,6 +137,7 @@ export const useAudioTask = () => {
          const model = live2dManager.getModel(0);
          if (!model) {
            console.error('Live2D model not found at index 0');
@@ -3933,7 +3935,7 @@ index 27cba68..2460935 100644
            resolve();
            return;
          }
-@@ -135,8 +157,22 @@ export const useAudioTask = () => {
+@@ -135,8 +159,22 @@ export const useAudioTask = () => {
            );
          }
  
@@ -3958,11 +3960,83 @@ index 27cba68..2460935 100644
            console.log("Starting random 'Talk' motion");
            model.startRandomMotion(
              "Talk",
-@@ -152,8 +188,38 @@ export const useAudioTask = () => {
+@@ -152,8 +190,110 @@ export const useAudioTask = () => {
          // Register with global audio manager IMMEDIATELY after creating audio
          audioManager.setCurrentAudio(audio, model);
          let isFinished = false;
++        let playbackStarted = false;
 +        let subtitleTimer: number | undefined;
++
++        // The backend ships a per-slice RMS envelope with every audio payload.
++        // Driving the mouth from it keeps lip sync independent of the async WAV
++        // decode, which can otherwise leave a later sentence without a waveform.
++        const hasVolumeSchedule = Array.isArray(volumes)
++          && volumes.length > 0
++          && sliceLength > 0;
++        const wavHandler = model._wavFileHandler;
++        if (wavHandler) {
++          wavHandler._ownerModel = model;
++          wavHandler._syncAudio = audio;
++          wavHandler._volumes = hasVolumeSchedule ? volumes : null;
++          wavHandler._sliceLength = sliceLength;
++
++          if (!wavHandler._initialized) {
++            console.log('Applying audio-driven lip sync');
++            wavHandler._initialized = true;
++
++            const originalUpdate = wavHandler.update.bind(wavHandler);
++            wavHandler.update = function (deltaTimeSeconds: number) {
++              const activeAudio = audioManager.getCurrentAudio();
++              const isActive = !!activeAudio
++                && activeAudio === this._syncAudio
++                && !activeAudio.paused
++                && !activeAudio.ended
++                && activeAudio.currentTime > 0;
++
++              if (!isActive) {
++                this._lastRms = 0;
++                return false;
++              }
++
++              // Idle/Talk motions also animate the mouth parameter. Clear their
++              // value while speaking so only the audio amplitude drives the mouth.
++              const ownerModel = this._ownerModel;
++              const lipSyncIds = ownerModel?._lipSyncIds;
++              if (lipSyncIds && ownerModel?._model) {
++                for (let i = 0; i < lipSyncIds.getSize(); i++) {
++                  ownerModel._model.setParameterValueById(lipSyncIds.at(i), 0);
++                }
++              }
++
++              if (this._volumes && this._sliceLength > 0) {
++                const position = (activeAudio.currentTime * 1000) / this._sliceLength;
++                const lower = Math.floor(position);
++                if (lower >= this._volumes.length) {
++                  this._lastRms = 0;
++                  return true;
++                }
++                const fraction = position - lower;
++                const v0 = this._volumes[lower] ?? 0;
++                const v1 = this._volumes[Math.min(lower + 1, this._volumes.length - 1)] ?? v0;
++                const volume = v0 + (v1 - v0) * fraction;
++                this._lastRms = volume * 0.2;
++                return true;
++              }
++
++              // Fallback for payloads without a volume schedule. Anchor the PCM
++              // cursor to the audio clock rather than the handler's own timer.
++              this._userTimeSeconds = Math.max(0, activeAudio.currentTime - deltaTimeSeconds);
++              const samplingRate = this._wavFileInfo?._samplingRate ?? 0;
++              if (samplingRate > 0) {
++                const goalOffset = Math.floor(this._userTimeSeconds * samplingRate);
++                if (goalOffset <= this._sampleOffset) {
++                  return false;
++                }
++              }
++              return originalUpdate(deltaTimeSeconds);
++            };
++          }
++        }
 +
 +        // Reveal the subtitle at the speech pace of the audio segment.
 +        const showSubtitleProgress = (ratio: number) => {
@@ -3997,98 +4071,68 @@ index 27cba68..2460935 100644
            audioManager.clearCurrentAudio(audio);
            if (!isFinished) {
              isFinished = true;
-@@ -164,7 +230,9 @@ export const useAudioTask = () => {
-         // Enhance lip sync sensitivity
-         const lipSyncScale = 2.0;
+@@ -161,10 +301,12 @@ export const useAudioTask = () => {
+           }
+         };
  
--        audio.addEventListener('canplaythrough', () => {
+-        // Enhance lip sync sensitivity
+-        const lipSyncScale = 2.0;
 +        audio.addEventListener('playing', startSubtitleTicker);
 +
 +        audio.addEventListener('canplaythrough', async () => {
++          if (playbackStarted) return;
++          playbackStarted = true;
+ 
+-        audio.addEventListener('canplaythrough', () => {
            // Check for interruption before playback
            if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
              console.warn('Audio playback cancelled due to interruption or audio was stopped');
-@@ -172,37 +240,72 @@ export const useAudioTask = () => {
+@@ -172,37 +314,31 @@ export const useAudioTask = () => {
              return;
            }
  
--          console.log('Starting audio playback with lip sync');
--          audio.play().catch((err) => {
--            console.error("Audio play error:", err);
--            cleanup();
--          });
--
--          // Setup lip sync
--          if (model._wavFileHandler) {
--            if (!model._wavFileHandler._initialized) {
-+          // Setup lip sync. The PCM cursor must follow the audio element's clock:
-+          // the handler otherwise starts at 0 when its data finishes loading, while
-+          // the audio element has already been playing for an unknown offset.
-+          const wavHandler = model._wavFileHandler;
-+          if (wavHandler) {
-+            if (!wavHandler._initialized) {
-               console.log('Applying enhanced lip sync');
--              model._wavFileHandler._initialized = true;
-+              wavHandler._initialized = true;
-+
-+              const originalUpdate = wavHandler.update.bind(wavHandler);
-+              wavHandler.update = function (deltaTimeSeconds: number) {
-+                const activeAudio = audioManager.getCurrentAudio();
-+                if (!activeAudio || activeAudio !== this._syncAudio) {
-+                  this._lastRms = 0;
-+                  return false;
-+                }
-+
-+                const currentTime = activeAudio.currentTime;
-+                if (currentTime <= 0) {
-+                  this._userTimeSeconds = 0;
-+                  this._sampleOffset = 0;
-+                  this._lastRms = 0;
-+                  return false;
-+                }
-+
-+                // Anchor the waveform cursor to the audio clock before the SDK
-+                // advances it by deltaTimeSeconds.
-+                this._userTimeSeconds = Math.max(0, currentTime - deltaTimeSeconds);
-+                const samplingRate = this._wavFileInfo?._samplingRate ?? 0;
-+                if (samplingRate > 0) {
-+                  const goalOffset = Math.floor(this._userTimeSeconds * samplingRate);
-+                  if (goalOffset <= this._sampleOffset) {
-+                    return false;
-+                  }
-+                }
- 
--              const originalUpdate = model._wavFileHandler.update.bind(model._wavFileHandler);
--              model._wavFileHandler.update = function (deltaTimeSeconds: number) {
-                 const result = originalUpdate(deltaTimeSeconds);
--                // @ts-ignore
-                 this._lastRms = Math.min(2.0, this._lastRms * lipSyncScale);
-                 return result;
-               };
-             }
- 
--            if (audioManager.hasCurrentAudio()) {
--              model._wavFileHandler.start(audioDataUrl);
-+            // Load PCM before playback so the mouth never starts mid-sentence.
++          // Without a volume envelope, fall back to decoding the WAV and driving
++          // the cursor from the audio clock.
++          if (wavHandler && !hasVolumeSchedule) {
 +            const loaded = await wavHandler.start(audioDataUrl);
 +            if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
 +              console.warn('Audio playback cancelled while loading lip sync data');
 +              cleanup();
 +              return;
 +            }
-+            if (loaded) {
-+              wavHandler._syncAudio = audio;
-             } else {
--              console.warn('WavFileHandler start skipped - audio was stopped');
++            if (!loaded) {
 +              console.warn('Lip sync WAV failed to load; playing audio without lip sync');
-             }
-           }
++              wavHandler._syncAudio = null;
++            }
++          }
 +
-+          console.log('Starting audio playback with lip sync');
-+          audio.play().catch((err) => {
-+            console.error("Audio play error:", err);
-+            cleanup();
-+          });
+           console.log('Starting audio playback with lip sync');
+           audio.play().catch((err) => {
+             console.error("Audio play error:", err);
+             cleanup();
+           });
+-
+-          // Setup lip sync
+-          if (model._wavFileHandler) {
+-            if (!model._wavFileHandler._initialized) {
+-              console.log('Applying enhanced lip sync');
+-              model._wavFileHandler._initialized = true;
+-
+-              const originalUpdate = model._wavFileHandler.update.bind(model._wavFileHandler);
+-              model._wavFileHandler.update = function (deltaTimeSeconds: number) {
+-                const result = originalUpdate(deltaTimeSeconds);
+-                // @ts-ignore
+-                this._lastRms = Math.min(2.0, this._lastRms * lipSyncScale);
+-                return result;
+-              };
+-            }
+-
+-            if (audioManager.hasCurrentAudio()) {
+-              model._wavFileHandler.start(audioDataUrl);
+-            } else {
+-              console.warn('WavFileHandler start skipped - audio was stopped');
+-            }
+-          }
          });
  
          audio.addEventListener('ended', () => {
@@ -4097,7 +4141,7 @@ index 27cba68..2460935 100644
            cleanup();
          });
  
-@@ -213,10 +316,12 @@ export const useAudioTask = () => {
+@@ -213,10 +349,12 @@ export const useAudioTask = () => {
  
          audio.load();
        } else {
