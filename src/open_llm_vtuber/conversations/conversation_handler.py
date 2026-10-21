@@ -23,6 +23,24 @@ def _active_task_count(tasks: Dict[str, Optional[asyncio.Task]]) -> int:
     return sum(1 for task in tasks.values() if task and not task.done())
 
 
+async def _reject_if_at_capacity(
+    websocket: WebSocket,
+    tasks: Dict[str, Optional[asyncio.Task]],
+) -> bool:
+    if _active_task_count(tasks) < MAX_CONCURRENT_CONVERSATIONS:
+        return False
+
+    await websocket.send_text(
+        json.dumps(
+            {
+                "type": "error",
+                "message": "Server is busy, please try again shortly",
+            }
+        )
+    )
+    return True
+
+
 async def _cancel_previous_task(
     tasks: Dict[str, Optional[asyncio.Task]], task_key: str
 ) -> None:
@@ -57,6 +75,32 @@ def _track_task(
     task.add_done_callback(_on_done)
 
 
+def _load_proactive_prompt(context: ServiceContext) -> str:
+    try:
+        prompt_file = context.system_config.tool_prompts.get("proactive_speak_prompt")
+        if prompt_file:
+            return prompt_loader.load_util(prompt_file)
+        logger.warning("Proactive speak prompt not configured, using default")
+    except Exception as e:
+        logger.error(f"Error loading proactive speak prompt: {e}")
+    return "Please say something."
+
+
+async def _prepare_proactive_speak(
+    context: ServiceContext, websocket: WebSocket
+) -> tuple[str, dict]:
+    user_input = _load_proactive_prompt(context)
+    await websocket.send_text(
+        json.dumps({"type": "full-text", "text": "AI wants to speak something..."})
+    )
+    metadata = {
+        "proactive_speak": True,
+        "skip_memory": True,
+        "skip_history": True,
+    }
+    return user_input, metadata
+
+
 async def handle_conversation_trigger(
     msg_type: str,
     data: dict,
@@ -74,35 +118,7 @@ async def handle_conversation_trigger(
     metadata = None
 
     if msg_type == "ai-speak-signal":
-        try:
-            # Get proactive speak prompt from config
-            prompt_name = "proactive_speak_prompt"
-            prompt_file = context.system_config.tool_prompts.get(prompt_name)
-            if prompt_file:
-                user_input = prompt_loader.load_util(prompt_file)
-            else:
-                logger.warning("Proactive speak prompt not configured, using default")
-                user_input = "Please say something."
-        except Exception as e:
-            logger.error(f"Error loading proactive speak prompt: {e}")
-            user_input = "Please say something."
-
-        # Add metadata to indicate this is a proactive speak request
-        # that should be skipped in both memory and history
-        metadata = {
-            "proactive_speak": True,
-            "skip_memory": True,  # Skip storing in AI's internal memory
-            "skip_history": True,  # Skip storing in local conversation history
-        }
-
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "full-text",
-                    "text": "AI wants to speak something...",
-                }
-            )
-        )
+        user_input, metadata = await _prepare_proactive_speak(context, websocket)
     elif msg_type == "text-input":
         user_input = data.get("text", "")
     else:  # mic-audio-end
@@ -120,18 +136,9 @@ async def handle_conversation_trigger(
             task_key not in current_conversation_tasks
             or current_conversation_tasks[task_key].done()
         ):
-            if (
-                _active_task_count(current_conversation_tasks)
-                >= MAX_CONCURRENT_CONVERSATIONS
+            if await _reject_if_at_capacity(
+                websocket, current_conversation_tasks
             ):
-                await websocket.send_text(
-                    json.dumps(
-                        {
-                            "type": "error",
-                            "message": "Server is busy, please try again shortly",
-                        }
-                    )
-                )
                 return
 
             logger.info(f"Starting new group conversation for {task_key}")
@@ -155,18 +162,7 @@ async def handle_conversation_trigger(
         # Cancel the old turn so two tasks cannot mutate the same agent/history.
         await _cancel_previous_task(current_conversation_tasks, client_uid)
 
-        if (
-            _active_task_count(current_conversation_tasks)
-            >= MAX_CONCURRENT_CONVERSATIONS
-        ):
-            await websocket.send_text(
-                json.dumps(
-                    {
-                        "type": "error",
-                        "message": "Server is busy, please try again shortly",
-                    }
-                )
-            )
+        if await _reject_if_at_capacity(websocket, current_conversation_tasks):
             return
 
         task = asyncio.create_task(
