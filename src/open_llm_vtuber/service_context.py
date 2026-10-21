@@ -10,6 +10,7 @@ from .asr.asr_interface import ASRInterface
 from .tts.tts_interface import TTSInterface
 from .vad.vad_interface import VADInterface
 from .agent.agents.agent_interface import AgentInterface
+from .agent.agents.basic_memory_agent import BasicMemoryAgent
 from .translate.translate_interface import TranslateInterface
 
 from .mcpp.server_registry import ServerRegistry
@@ -245,6 +246,28 @@ class ServiceContext:
         )
 
         logger.debug(f"Loaded service context with cache: {character_config}")
+
+    async def init_session_agent(self, shared_agent: AgentInterface) -> None:
+        """Give this session its own agent so concurrent clients keep separate memory."""
+        if isinstance(shared_agent, BasicMemoryAgent):
+            system_prompt = await self.construct_system_prompt(
+                self.character_config.persona_prompt
+            )
+            self.agent_engine = shared_agent.clone_for_session(
+                system=system_prompt,
+                live2d_model=self.live2d_model,
+                tts_preprocessor_config=self.character_config.tts_preprocessor_config,
+                tool_manager=self.tool_manager,
+                tool_executor=self.tool_executor,
+                mcp_prompt_string=self.mcp_prompt,
+            )
+            self.system_prompt = system_prompt
+        else:
+            self.agent_engine = None
+            await self.init_agent(
+                self.character_config.agent_config,
+                self.character_config.persona_prompt,
+            )
 
     async def load_from_config(self, config: Config) -> None:
         """

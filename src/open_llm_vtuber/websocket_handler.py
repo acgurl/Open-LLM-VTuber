@@ -111,6 +111,16 @@ class WebSocketHandler:
             Exception: If initialization fails
         """
         try:
+            # TTS tasks and the conversation loop send concurrently; serialize frames.
+            send_lock = asyncio.Lock()
+            raw_send_text = websocket.send_text
+
+            async def serialized_send_text(data: str) -> None:
+                async with send_lock:
+                    await raw_send_text(data)
+
+            websocket.send_text = serialized_send_text
+
             session_service_context = await self._init_service_context(
                 websocket.send_text, client_uid
             )
@@ -198,6 +208,10 @@ class WebSocketHandler:
             tool_adapter=self.default_context_cache.tool_adapter,
             send_text=send_text,
             client_uid=client_uid,
+        )
+        # Each connection needs its own agent state; the LLM client stays shared.
+        await session_service_context.init_session_agent(
+            self.default_context_cache.agent_engine
         )
         return session_service_context
 

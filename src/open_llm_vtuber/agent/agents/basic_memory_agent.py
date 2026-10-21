@@ -116,6 +116,37 @@ class BasicMemoryAgent(AgentInterface):
         self._llm = llm
         self.chat = self._chat_function_factory()
 
+    def clone_for_session(
+        self,
+        system: str,
+        live2d_model=None,
+        tts_preprocessor_config: TTSPreprocessorConfig = None,
+        tool_manager: Optional[ToolManager] = None,
+        tool_executor: Optional[ToolExecutor] = None,
+        mcp_prompt_string: str = "",
+    ) -> "BasicMemoryAgent":
+        """Create an agent with independent memory that reuses this agent's LLM client."""
+        return BasicMemoryAgent(
+            llm=self._llm,
+            system=system,
+            live2d_model=(
+                live2d_model if live2d_model is not None else self._live2d_model
+            ),
+            tts_preprocessor_config=(
+                tts_preprocessor_config
+                if tts_preprocessor_config is not None
+                else self._tts_preprocessor_config
+            ),
+            faster_first_response=self._faster_first_response,
+            segment_method=self._segment_method,
+            use_mcpp=self._use_mcpp,
+            interrupt_method=self.interrupt_method,
+            tool_prompts=self._tool_prompts,
+            tool_manager=tool_manager,
+            tool_executor=tool_executor,
+            mcp_prompt_string=mcp_prompt_string,
+        )
+
     def set_system(self, system: str):
         """Set the system prompt."""
         logger.debug(f"Memory Agent: Setting system prompt: '''{system}'''")
