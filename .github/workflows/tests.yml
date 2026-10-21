@@ -11,6 +11,6 @@ jobs:
         with:
           python-version: "3.10"
       - name: Install test dependencies
-        run: python -m pip install numpy loguru
+        run: python -m pip install numpy loguru pydantic pyyaml chardet
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
