@@ -6,11 +6,16 @@ import wave
 import numpy as np
 
 
+ASR_SAMPLE_RATE = 16000
+MAX_AUDIO_SECONDS = 120
+MAX_AUDIO_SAMPLES = ASR_SAMPLE_RATE * MAX_AUDIO_SECONDS
+
+
 def decode_pcm_wav(
     contents: bytes,
     *,
-    sample_rate: int = 16000,
-    max_seconds: int = 120,
+    sample_rate: int = ASR_SAMPLE_RATE,
+    max_seconds: int = MAX_AUDIO_SECONDS,
 ) -> np.ndarray:
     """Decode mono 16-bit PCM WAV bytes into normalized float32 samples."""
     if not contents:

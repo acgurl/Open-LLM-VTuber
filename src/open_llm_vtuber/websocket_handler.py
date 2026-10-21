@@ -15,6 +15,7 @@ from .chat_group import (
 )
 from .message_handler import message_handler
 from .utils.stream_audio import prepare_audio_payload
+from .utils.audio import MAX_AUDIO_SAMPLES
 from .chat_history_manager import (
     create_new_history,
     get_history,
@@ -33,7 +34,6 @@ MAX_WS_CONNECTIONS = 64
 MAX_TEXT_INPUT_CHARS = 4000
 MAX_IMAGES_PER_MESSAGE = 4
 MAX_IMAGE_DATA_CHARS = 8 * 1024 * 1024
-MAX_AUDIO_SAMPLES = 16000 * 120  # 2 minutes at 16 kHz
 IMAGE_SOURCES = {"camera", "screen", "shared", "clipboard", "upload"}
 
 

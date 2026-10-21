@@ -11,12 +11,10 @@ from loguru import logger
 from .service_context import ServiceContext
 from .websocket_handler import WebSocketHandler
 from .proxy_handler import ProxyHandler
-from .utils.audio import decode_pcm_wav
+from .utils.audio import ASR_SAMPLE_RATE, MAX_AUDIO_SECONDS, decode_pcm_wav
 
 
 MAX_ASR_UPLOAD_BYTES = 10 * 1024 * 1024
-MAX_ASR_SECONDS = 120
-ASR_SAMPLE_RATE = 16000
 MAX_TTS_TEXT_CHARS = 2000
 MAX_TTS_SENTENCES = 30
 MAX_TTS_CONNECTIONS = 16
@@ -184,7 +182,7 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
             audio_array = decode_pcm_wav(
                 contents,
                 sample_rate=ASR_SAMPLE_RATE,
-                max_seconds=MAX_ASR_SECONDS,
+                max_seconds=MAX_AUDIO_SECONDS,
             )
 
             if asr_semaphore.locked():
