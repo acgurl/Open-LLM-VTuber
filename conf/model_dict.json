@@ -1,0 +1,87 @@
+[
+    {
+        "name": "mao_pro",
+        "description": "",
+        "url": "/live2d-models/mao_pro/runtime/mao_pro.model3.json",
+        "kScale": 0.5,
+        "lipSyncGain": 0.2,
+        "initialXshift": 0,
+        "initialYshift": 0,
+        "kXOffset": 1150,
+        "idleMotionGroupName": "Idle",
+        "emotionMap": {
+            "neutral": 0,
+            "anger": 2,
+            "disgust": 2,
+            "fear": 1,
+            "joy": 3,
+            "smirk": 3,
+            "sadness": 1,
+            "surprise": 3
+        },
+        "motionMap": {
+            "special1": {
+                "group": "",
+                "index": 3
+            },
+            "special2": {
+                "group": "",
+                "index": 4
+            },
+            "special3": {
+                "group": "",
+                "index": 5
+            }
+        },
+        "tapMotions": {
+            "HitAreaHead": {
+                "": 1
+            },
+            "HitAreaBody": {
+                "": 1
+            }
+        }
+    },
+    {
+        "name": "xiaozhi2",
+        "description": "小智 v0.1.1 (PSD2Live)",
+        "url": "/live2d-models/xiaozhi2/runtime_v011/xiaozhi2.model3.json",
+        "kScale": 0.5,
+        "lipSyncGain": 0.2,
+        "initialXshift": 0,
+        "initialYshift": 0,
+        "kXOffset": 0,
+        "idleMotionGroupName": "Idle",
+        "emotionMap": {},
+        "motionMap": {
+            "nod": {
+                "group": "Nod"
+            },
+            "shake": {
+                "group": "Shake"
+            }
+        }
+    },
+    {
+        "name": "nahida",
+        "description": "纳西妲 (Genshin Impact)",
+        "url": "/live2d-models/nahida/runtime/Nahida_v2.model3.json",
+        "kScale": 0.5,
+        "lipSyncGain": 0.2,
+        "initialXshift": 0,
+        "initialYshift": 0,
+        "kXOffset": 0,
+        "idleMotionGroupName": "Idle",
+        "emotionMap": {
+            "joy": 5,
+            "sadness": 2,
+            "anger": 4,
+            "surprise": 5,
+            "fear": 2,
+            "disgust": 4,
+            "smirk": 3
+        },
+        "motionMap": {},
+        "tapMotions": {}
+    }
+]
