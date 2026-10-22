@@ -3224,6 +3224,101 @@ index 6cdadb9..ff581f9 100644
      {text}
    </Text>
  ));
+diff --git a/src/renderer/src/components/footer/footer.tsx b/src/renderer/src/components/footer/footer.tsx
+index 7c05861..8537482 100644
+--- a/src/renderer/src/components/footer/footer.tsx
++++ b/src/renderer/src/components/footer/footer.tsx
+@@ -1,6 +1,6 @@
+ /* eslint-disable react/require-default-props */
+ import {
+-  Box, Textarea, IconButton, HStack,
++  Box, Textarea, IconButton, HStack, Spinner,
+ } from '@chakra-ui/react';
+ import { BsMicFill, BsMicMuteFill, BsPaperclip } from 'react-icons/bs';
+ import { IoHandRightSharp } from 'react-icons/io5';
+@@ -25,6 +25,7 @@ interface ToggleButtonProps {
+ 
+ interface ActionButtonsProps {
+   micOn: boolean
++  micStarting: boolean
+   onMicToggle: () => void
+   onInterrupt: () => void
+ }
+@@ -53,25 +54,39 @@ const ToggleButton = memo(({ isCollapsed, onToggle }: ToggleButtonProps) => (
+ 
+ ToggleButton.displayName = 'ToggleButton';
+ 
+-const ActionButtons = memo(({ micOn, onMicToggle, onInterrupt }: ActionButtonsProps) => (
+-  <HStack gap={2}>
+-    <IconButton
+-      bg={micOn ? 'green.500' : 'red.500'}
+-      {...footerStyles.footer.actionButton}
+-      onClick={onMicToggle}
+-    >
+-      {micOn ? <BsMicFill /> : <BsMicMuteFill />}
+-    </IconButton>
+-    <IconButton
+-      aria-label="Raise hand"
+-      bg="yellow.500"
+-      {...footerStyles.footer.actionButton}
+-      onClick={onInterrupt}
+-    >
+-      <IoHandRightSharp size="24" />
+-    </IconButton>
+-  </HStack>
+-));
++const ActionButtons = memo(({
++  micOn, micStarting, onMicToggle, onInterrupt,
++}: ActionButtonsProps) => {
++  const { t } = useTranslation();
++  const micStatus = micStarting
++    ? t('footer.micStarting')
++    : t(micOn ? 'footer.micOn' : 'footer.micOff');
++
++  return (
++    <HStack gap={2}>
++      <IconButton
++        aria-label={micStatus}
++        aria-pressed={micOn}
++        title={micStatus}
++        bg={micOn ? 'green.500' : 'red.500'}
++        {...footerStyles.footer.actionButton}
++        onClick={onMicToggle}
++        disabled={micStarting}
++        _disabled={{ opacity: 0.7, cursor: 'wait' }}
++      >
++        {micStarting ? <Spinner size="md" /> : (micOn ? <BsMicFill /> : <BsMicMuteFill />)}
++      </IconButton>
++      <IconButton
++        aria-label="Raise hand"
++        bg="yellow.500"
++        {...footerStyles.footer.actionButton}
++        onClick={onInterrupt}
++      >
++        <IoHandRightSharp size="24" />
++      </IconButton>
++    </HStack>
++  );
++});
+ 
+ ActionButtons.displayName = 'ActionButtons';
+ 
+@@ -121,6 +136,7 @@ function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
+     handleInterrupt,
+     handleMicToggle,
+     micOn,
++    micStarting,
+   } = useFooter();
+ 
+   return (
+@@ -135,6 +151,7 @@ function Footer({ isCollapsed = false, onToggle }: FooterProps): JSX.Element {
+             </Box>
+             <ActionButtons
+               micOn={micOn}
++              micStarting={micStarting}
+               onMicToggle={handleMicToggle}
+               onInterrupt={handleInterrupt}
+             />
 diff --git a/src/renderer/src/components/sidebar/chat-history-panel.tsx b/src/renderer/src/components/sidebar/chat-history-panel.tsx
 index 89e7035..a0f4a21 100644
 --- a/src/renderer/src/components/sidebar/chat-history-panel.tsx
@@ -3819,7 +3914,7 @@ index c5497ac..6f42d83 100644
  
    const [modelInfo, setModelInfoState] = useLocalStorage<ModelInfo | undefined>(
 diff --git a/src/renderer/src/context/vad-context.tsx b/src/renderer/src/context/vad-context.tsx
-index f38a4e6..276165b 100644
+index f38a4e6..8d925c7 100644
 --- a/src/renderer/src/context/vad-context.tsx
 +++ b/src/renderer/src/context/vad-context.tsx
 @@ -1,9 +1,9 @@
@@ -3834,23 +3929,199 @@ index f38a4e6..276165b 100644
  import { useInterrupt } from '@/components/canvas/live2d';
  import { audioTaskQueue } from '@/utils/task-queue';
  import { useSendAudio } from '@/hooks/utils/use-send-audio';
-@@ -111,7 +111,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+@@ -38,6 +38,9 @@ interface VADState {
+   /** Microphone active state */
+   micOn: boolean;
+ 
++  /** Microphone is being initialized */
++  micStarting: boolean;
++
+   /** Set microphone state */
+   setMicOn: (value: boolean) => void;
+ 
+@@ -45,7 +48,7 @@ interface VADState {
+   setAutoStopMic: (value: boolean) => void;
+ 
+   /** Start microphone and VAD */
+-  startMic: () => Promise<void>;
++  startMic: () => Promise<boolean>;
+ 
+   /** Stop microphone and VAD */
+   stopMic: () => void;
+@@ -111,7 +114,11 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
    const previousAiStateRef = useRef<AiState>('idle');
  
    // Persistent state management
 -  const [micOn, setMicOn] = useLocalStorage('micOn', DEFAULT_VAD_STATE.micOn);
 +  const [micOn, setMicOn] = useState(DEFAULT_VAD_STATE.micOn);
++  const [micStarting, setMicStarting] = useState(false);
++  const micOnRef = useRef(false);
++  const micStartingRef = useRef(false);
++  const startAttemptRef = useRef(0);
    const autoStopMicRef = useRef(true);
    const [autoStopMic, setAutoStopMicState] = useLocalStorage(
      'autoStopMic',
-@@ -276,6 +276,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+@@ -275,7 +282,8 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+   /**
     * Initialize new VAD instance
     */
-   const initVAD = async () => {
+-  const initVAD = async () => {
++  const initVAD = async (attempt: number) => {
 +    const { MicVAD } = await import('@ricky0123/vad-web');
      const newVAD = await MicVAD.new({
        model: "v5",
        preSpeechPadFrames: 20,
+@@ -291,38 +299,126 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+       onVADMisfire: handleVADMisfire,
+     });
+ 
++    if (startAttemptRef.current !== attempt) {
++      newVAD.destroy();
++      return null;
++    }
++
+     vadRef.current = newVAD;
+-    newVAD.start();
++    try {
++      await newVAD.start();
++    } catch (error) {
++      if (vadRef.current === newVAD) vadRef.current = null;
++      newVAD.destroy();
++      throw error;
++    }
++
++    if (startAttemptRef.current !== attempt) {
++      newVAD.destroy();
++      if (vadRef.current === newVAD) vadRef.current = null;
++      return null;
++    }
++    return newVAD;
+   };
+ 
++  const describeStartError = useCallback((error: unknown) => {
++    const name = error instanceof Error ? error.name : '';
++    if (name === 'TimeoutError') {
++      return t('error.micTimeout');
++    }
++    if (name === 'NotAllowedError' || name === 'SecurityError') {
++      return t('error.micPermissionDenied');
++    }
++    if (name === 'NotFoundError' || name === 'OverconstrainedError') {
++      return t('error.micNotFound');
++    }
++    if (name === 'NotReadableError' || name === 'AbortError') {
++      return t('error.micBusy');
++    }
++    if (name === 'NotSupportedError') {
++      return t('error.micUnsupported');
++    }
++    return error instanceof Error ? error.message : String(error);
++  }, [t]);
++
+   /**
+    * Start microphone and VAD processing
+    */
+-  const startMic = useCallback(async () => {
++  const startMic = useCallback(async (): Promise<boolean> => {
++    if (micOnRef.current || micStartingRef.current) return micOnRef.current;
++
++    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
++      toaster.create({
++        title: t('error.micUnsupported'),
++        type: 'error',
++        duration: 5000,
++      });
++      return false;
++    }
++
++    micStartingRef.current = true;
++    setMicStarting(true);
++    const attempt = ++startAttemptRef.current;
++    let timeoutId: number | undefined;
++
+     try {
+-      if (!vadRef.current) {
++      const timeoutError = new Error('microphone start timed out');
++      timeoutError.name = 'TimeoutError';
++      const timeout = new Promise<never>((_, reject) => {
++        timeoutId = window.setTimeout(() => reject(timeoutError), 20000);
++      });
++
++      let instance = vadRef.current;
++      if (!instance) {
+         console.log('Initializing VAD');
+-        await initVAD();
++        instance = await Promise.race([initVAD(attempt), timeout]);
+       } else {
+         console.log('Starting VAD');
+-        vadRef.current.start();
++        await Promise.race([instance.start(), timeout]);
++      }
++
++      if (!instance || startAttemptRef.current !== attempt) {
++        instance?.destroy();
++        if (vadRef.current === instance) vadRef.current = null;
++        return false;
+       }
++      micOnRef.current = true;
+       setMicOn(true);
++      return true;
+     } catch (error) {
+       console.error('Failed to start VAD:', error);
++      startAttemptRef.current += 1;
++      micStartingRef.current = false;
++      setMicStarting(false);
++      if (vadRef.current) {
++        vadRef.current.destroy();
++        vadRef.current = null;
++      }
+       toaster.create({
+-        title: `${t('error.failedStartVAD')}: ${error}`,
++        title: t('error.failedStartVAD'),
++        description: describeStartError(error),
+         type: 'error',
+-        duration: 2000,
++        duration: 5000,
+       });
++      return false;
++    } finally {
++      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
++      if (startAttemptRef.current === attempt) {
++        micStartingRef.current = false;
++        setMicStarting(false);
++      }
+     }
+-  }, [t]);
++  }, [t, describeStartError]);
+ 
+   /**
+    * Stop microphone and VAD processing
+    */
+   const stopMic = useCallback(() => {
+     console.log('Stopping VAD');
++    startAttemptRef.current += 1;
++    micStartingRef.current = false;
++    micOnRef.current = false;
++    setMicStarting(false);
+     if (vadRef.current) {
+       vadRef.current.pause();
+       vadRef.current.destroy();
+@@ -362,6 +458,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+     () => ({
+       autoStopMic: autoStopMicRef.current,
+       micOn,
++      micStarting,
+       setMicOn,
+       setAutoStopMic,
+       startMic,
+@@ -377,6 +474,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+     }),
+     [
+       micOn,
++      micStarting,
+       startMic,
+       stopMic,
+       settings,
 diff --git a/src/renderer/src/context/websocket-context.tsx b/src/renderer/src/context/websocket-context.tsx
 index 4c6a59c..7017a47 100644
 --- a/src/renderer/src/context/websocket-context.tsx
@@ -3871,6 +4142,26 @@ index 4c6a59c..7017a47 100644
  
  export interface HistoryInfo {
    uid: string;
+diff --git a/src/renderer/src/hooks/footer/use-footer.ts b/src/renderer/src/hooks/footer/use-footer.ts
+index 34865fa..6f1bc4b 100644
+--- a/src/renderer/src/hooks/footer/use-footer.ts
++++ b/src/renderer/src/hooks/footer/use-footer.ts
+@@ -18,7 +18,7 @@ export const useFooter = () => {
+ 
+   const { interrupt } = useInterrupt();
+   const { startMic, autoStartMicOn } = useVAD();
+-  const { handleMicToggle, micOn } = useMicToggle();
++  const { handleMicToggle, micOn, micStarting } = useMicToggle();
+   const { setAiState, aiState } = useAiState();
+   const { sendTriggerSignal } = useTriggerSpeak();
+   const { settings } = useProactiveSpeak();
+@@ -52,5 +52,6 @@ export const useFooter = () => {
+     handleInterrupt,
+     handleMicToggle,
+     micOn,
++    micStarting,
+   };
+ };
 diff --git a/src/renderer/src/hooks/utils/use-audio-task.ts b/src/renderer/src/hooks/utils/use-audio-task.ts
 index 27cba68..5e38e0c 100644
 --- a/src/renderer/src/hooks/utils/use-audio-task.ts
@@ -4256,6 +4547,120 @@ index 27cba68..5e38e0c 100644
    /**
     * Add a new audio task to the queue
     */
+diff --git a/src/renderer/src/hooks/utils/use-mic-toggle.ts b/src/renderer/src/hooks/utils/use-mic-toggle.ts
+index e7773b1..1048c70 100644
+--- a/src/renderer/src/hooks/utils/use-mic-toggle.ts
++++ b/src/renderer/src/hooks/utils/use-mic-toggle.ts
+@@ -1,8 +1,13 @@
++import { useTranslation } from 'react-i18next';
+ import { useVAD } from '@/context/vad-context';
+ import { useAiState } from '@/context/ai-state-context';
++import { toaster } from '@/components/ui/toaster';
+ 
+ export function useMicToggle() {
+-  const { startMic, stopMic, micOn } = useVAD();
++  const { t } = useTranslation();
++  const {
++    startMic, stopMic, micOn, micStarting,
++  } = useVAD();
+   const { aiState, setAiState } = useAiState();
+ 
+   const handleMicToggle = async (): Promise<void> => {
+@@ -11,13 +16,35 @@ export function useMicToggle() {
+       if (aiState === 'listening') {
+         setAiState('idle');
+       }
++      toaster.create({
++        title: t('footer.micOff'),
++        type: 'info',
++        duration: 1500,
++      });
+     } else {
+-      await startMic();
++      const hintTimer = window.setTimeout(() => {
++        toaster.create({
++          title: t('footer.micStarting'),
++          description: t('footer.micPermissionHint'),
++          type: 'info',
++          duration: 4000,
++        });
++      }, 1200);
++      const started = await startMic();
++      window.clearTimeout(hintTimer);
++      if (started) {
++        toaster.create({
++          title: t('footer.micOn'),
++          type: 'success',
++          duration: 1500,
++        });
++      }
+     }
+   };
+ 
+   return {
+     handleMicToggle,
+     micOn,
++    micStarting,
+   };
+ }
+diff --git a/src/renderer/src/locales/en/translation.json b/src/renderer/src/locales/en/translation.json
+index 7b6f3ad..7667424 100644
+--- a/src/renderer/src/locales/en/translation.json
++++ b/src/renderer/src/locales/en/translation.json
+@@ -69,7 +69,11 @@
+     "cameraControl": "Click to start camera",
+     "cameraStopping": "Click to stop camera",
+     "screenControl": "Click to start screen capture",
+-    "screenStopping": "Click to stop screen capture"
++    "screenStopping": "Click to stop screen capture",
++    "micOn": "Microphone is on",
++    "micOff": "Microphone is off",
++    "micStarting": "Starting microphone...",
++    "micPermissionHint": "If the browser asks for microphone access, click Allow."
+   },
+   "sidebar": {
+     "camera": "Camera",
+@@ -112,6 +116,11 @@
+     "failedStartBackgroundCamera": "Failed to start background camera",
+     "failedStartScreenCapture": "Failed to start screen capture",
+     "failedStartVAD": "Failed to start VAD",
++    "micUnsupported": "Microphone is unavailable in this browser. Open the page over HTTPS and allow microphone access.",
++    "micPermissionDenied": "Microphone permission was denied. Allow microphone access in your browser settings.",
++    "micNotFound": "No microphone device was found.",
++    "micBusy": "The microphone is in use by another app or cannot be read.",
++    "micTimeout": "Starting the microphone timed out. Check the microphone permission in the browser address bar and try again.",
+     "llmCantHear": "The LLM can't hear you.",
+     "audioPlayback": "Audio playback error",
+     "enterValidUuid": "Please enter a valid UUID",
+diff --git a/src/renderer/src/locales/zh/translation.json b/src/renderer/src/locales/zh/translation.json
+index 6102f75..99c2667 100644
+--- a/src/renderer/src/locales/zh/translation.json
++++ b/src/renderer/src/locales/zh/translation.json
+@@ -66,7 +66,11 @@
+     "cameraControl": "点击启动摄像头",
+     "cameraStopping": "点击停止摄像头",
+     "screenControl": "点击开始屏幕共享",
+-    "screenStopping": "点击停止屏幕共享"
++    "screenStopping": "点击停止屏幕共享",
++    "micOn": "麦克风已开启",
++    "micOff": "麦克风已关闭",
++    "micStarting": "正在启动麦克风...",
++    "micPermissionHint": "如果浏览器询问麦克风权限，请点击“允许”"
+   },
+   "sidebar": {
+     "camera": "摄像头",
+@@ -109,6 +113,11 @@
+     "failedStartBackgroundCamera": "启动背景摄像头失败",
+     "failedStartScreenCapture": "启动屏幕捕获失败",
+     "failedStartVAD": "启动语音活动检测失败",
++    "micUnsupported": "当前浏览器无法使用麦克风，请使用 HTTPS 打开并允许麦克风权限",
++    "micPermissionDenied": "麦克风权限被拒绝，请在浏览器设置中允许访问麦克风",
++    "micNotFound": "未找到可用的麦克风设备",
++    "micBusy": "麦克风被其他应用占用或无法读取",
++    "micTimeout": "启动麦克风超时，请检查浏览器地址栏的麦克风权限后重试",
+     "llmCantHear": "AI无法听到您的声音",
+     "audioPlayback": "音频播放错误",
+     "enterValidUuid": "请输入有效的UUID",
 diff --git a/src/renderer/src/services/websocket-handler.tsx b/src/renderer/src/services/websocket-handler.tsx
 index 5283617..e912bd6 100644
 --- a/src/renderer/src/services/websocket-handler.tsx
