@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+import time
 import uuid
 from datetime import datetime
 from typing import List, Optional, Dict
@@ -11,6 +12,10 @@ from ..live2d_model import Live2dModel
 from ..tts.tts_interface import TTSInterface
 from ..utils.stream_audio import prepare_audio_payload
 from .types import WebSocketSend
+
+
+TTS_SYNTHESIS_TIMEOUT_SECONDS = 30.0
+TTS_DELIVERY_TIMEOUT_SECONDS = 10.0
 
 
 class TTSTaskManager:
@@ -36,6 +41,7 @@ class TTSTaskManager:
         tts_engine: TTSInterface,
         websocket_send: WebSocketSend,
         streamed: bool = False,
+        audio_send: Optional[WebSocketSend] = None,
     ) -> None:
         """
         Queue a TTS task while maintaining order of delivery.
@@ -51,6 +57,7 @@ class TTSTaskManager:
         """
         if len(re.sub(r'[\s.,!?，。！？\'"』」）】\s]+', "", tts_text)) == 0:
             logger.debug("Empty TTS text, sending silent display payload")
+            payload_send = audio_send or websocket_send
             # Get current sequence number for silent payload
             current_sequence = self._sequence_counter
             self._sequence_counter += 1
@@ -58,7 +65,7 @@ class TTSTaskManager:
             # Start sender task if not running
             if not self._sender_task or self._sender_task.done():
                 self._sender_task = asyncio.create_task(
-                    self._process_payload_queue(websocket_send)
+                    self._process_payload_queue(payload_send)
                 )
 
             await self._send_silent_payload(
@@ -74,10 +81,12 @@ class TTSTaskManager:
         current_sequence = self._sequence_counter
         self._sequence_counter += 1
 
+        payload_send = audio_send or websocket_send
+
         # Start sender task if not running
         if not self._sender_task or self._sender_task.done():
             self._sender_task = asyncio.create_task(
-                self._process_payload_queue(websocket_send)
+                self._process_payload_queue(payload_send)
             )
 
         # Create and queue the TTS task
@@ -94,7 +103,7 @@ class TTSTaskManager:
         )
         self.task_list.append(task)
 
-    async def _process_payload_queue(self, websocket_send: WebSocketSend) -> None:
+    async def _process_payload_queue(self, audio_send: WebSocketSend) -> None:
         """
         Process and send payloads in correct order.
         Runs continuously until all payloads are processed.
@@ -109,9 +118,15 @@ class TTSTaskManager:
 
                 # Send payloads in order
                 while self._next_sequence_to_send in buffered_payloads:
-                    next_payload = buffered_payloads.pop(self._next_sequence_to_send)
-                    await websocket_send(json.dumps(next_payload))
+                    sequence = self._next_sequence_to_send
+                    next_payload = buffered_payloads.pop(sequence)
+                    message = json.dumps(next_payload)
+                    await audio_send(message)
                     self._next_sequence_to_send += 1
+                    logger.info(
+                        f"Sent TTS payload #{sequence} "
+                        f"({len(message) // 1024} KB) to the client"
+                    )
 
                 self._payload_queue.task_done()
 
@@ -146,8 +161,12 @@ class TTSTaskManager:
     ) -> None:
         """Process TTS generation and queue the result for ordered delivery"""
         audio_file_path = None
+        started_at = time.perf_counter()
         try:
-            audio_file_path = await self._generate_audio(tts_engine, tts_text)
+            audio_file_path = await asyncio.wait_for(
+                self._generate_audio(tts_engine, tts_text),
+                timeout=TTS_SYNTHESIS_TIMEOUT_SECONDS,
+            )
             # Decoding/converting audio with pydub is CPU-bound and would block
             # every other connection if done on the event loop.
             payload = await asyncio.to_thread(
@@ -158,6 +177,23 @@ class TTSTaskManager:
                 streamed=streamed,
             )
             # Queue the payload with its sequence number
+            await self._payload_queue.put((payload, sequence_number))
+            logger.info(
+                f"TTS ready in {time.perf_counter() - started_at:.2f}s "
+                f"(seq #{sequence_number}): '''{tts_text[:24]}'''"
+            )
+
+        except asyncio.TimeoutError:
+            logger.error(
+                f"TTS synthesis timed out after {TTS_SYNTHESIS_TIMEOUT_SECONDS:.0f}s "
+                f"for '''{tts_text[:24]}'''; sending a silent payload"
+            )
+            payload = prepare_audio_payload(
+                audio_path=None,
+                display_text=display_text,
+                actions=actions,
+                streamed=streamed,
+            )
             await self._payload_queue.put((payload, sequence_number))
 
         except Exception as e:
@@ -183,6 +219,18 @@ class TTSTaskManager:
             text=text,
             file_name_no_ext=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}",
         )
+
+    async def wait_for_delivery(
+        self, timeout: float = TTS_DELIVERY_TIMEOUT_SECONDS
+    ) -> None:
+        """Wait until every queued payload has been written to the client."""
+        try:
+            await asyncio.wait_for(self._payload_queue.join(), timeout)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "Timed out waiting for TTS payload delivery "
+                f"({self._next_sequence_to_send}/{self._sequence_counter} sent)"
+            )
 
     def clear(self) -> None:
         """Clear all pending tasks and reset state"""

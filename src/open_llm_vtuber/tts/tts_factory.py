@@ -14,6 +14,7 @@ class TTSFactory:
                 kwargs.get("voice"),
                 kwargs.get("pitch"),
                 kwargs.get("rate"),
+                kwargs.get("tailing_silence_ms", 0),
             )
         elif engine_type == "bark_tts":
             from .bark_tts import TTSEngine as BarkTTSEngine

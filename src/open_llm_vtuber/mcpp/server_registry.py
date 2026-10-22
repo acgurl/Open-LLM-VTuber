@@ -5,6 +5,7 @@ import json
 
 from pathlib import Path
 from typing import Dict, Optional, Union, Any
+from urllib.parse import urlparse
 from loguru import logger
 
 from .types import MCPServer
@@ -53,6 +54,47 @@ class ServerRegistry:
             return
 
         for server_name, server_details in servers_config.items():
+            if not isinstance(server_details, dict):
+                logger.warning(
+                    f"MCPSR: Invalid server details for '{server_name}'. Ignoring."
+                )
+                continue
+
+            url = server_details.get("url")
+            if url is not None:
+                parsed = urlparse(url) if isinstance(url, str) else None
+                if (
+                    parsed is None
+                    or parsed.scheme not in ("http", "https")
+                    or not parsed.netloc
+                ):
+                    logger.warning(
+                        f"MCPSR: Invalid HTTP url for '{server_name}'. Ignoring."
+                    )
+                    continue
+
+                headers = server_details.get("headers")
+                if headers is not None and (
+                    not isinstance(headers, dict)
+                    or not all(
+                        isinstance(key, str) and isinstance(value, str)
+                        for key, value in headers.items()
+                    )
+                ):
+                    logger.warning(
+                        f"MCPSR: Invalid HTTP headers for '{server_name}'. Ignoring."
+                    )
+                    continue
+
+                self.servers[server_name] = MCPServer(
+                    name=server_name,
+                    url=url,
+                    headers=headers,
+                    timeout=server_details.get("timeout", None),
+                )
+                logger.debug(f"MCPSR: Loaded HTTP server: '{server_name}' ({url}).")
+                continue
+
             if "command" not in server_details or "args" not in server_details:
                 logger.warning(
                     f"MCPSR: Invalid server details for '{server_name}'. Ignoring."

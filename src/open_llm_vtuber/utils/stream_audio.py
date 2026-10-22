@@ -1,8 +1,18 @@
 import base64
+import os
 from pydub import AudioSegment
 from pydub.utils import make_chunks
 from ..agent.output_types import Actions
 from ..agent.output_types import DisplayText
+
+
+_PASSTHROUGH_AUDIO_MIME = {
+    ".mp3": "audio/mpeg",
+    ".wav": "audio/wav",
+    ".ogg": "audio/ogg",
+    ".m4a": "audio/mp4",
+    ".aac": "audio/aac",
+}
 
 
 def _get_volume_by_chunks(audio: AudioSegment, chunk_length_ms: int) -> list:
@@ -53,6 +63,7 @@ def prepare_audio_payload(
         return {
             "type": "audio",
             "audio": None,
+            "audio_mime": None,
             "volumes": [],
             "slice_length": chunk_length_ms,
             "display_text": display_text,
@@ -63,7 +74,16 @@ def prepare_audio_payload(
 
     try:
         audio = AudioSegment.from_file(audio_path)
-        audio_bytes = audio.export(format="wav").read()
+        extension = os.path.splitext(audio_path)[1].lower()
+        audio_mime = _PASSTHROUGH_AUDIO_MIME.get(extension)
+        if audio_mime:
+            # Ship the engine's own encoding (Edge TTS emits MP3) instead of
+            # inflating it to WAV; base64 WAV frames were stalling playback.
+            with open(audio_path, "rb") as audio_file:
+                audio_bytes = audio_file.read()
+        else:
+            audio_mime = "audio/wav"
+            audio_bytes = audio.export(format="wav").read()
     except Exception as e:
         raise ValueError(
             f"Error loading or converting generated audio file to wav file '{audio_path}': {e}"
@@ -74,6 +94,7 @@ def prepare_audio_payload(
     payload = {
         "type": "audio",
         "audio": audio_base64,
+        "audio_mime": audio_mime,
         "volumes": volumes,
         "slice_length": chunk_length_ms,
         "display_text": display_text,

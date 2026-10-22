@@ -48,6 +48,7 @@ async def process_single_conversation(
     """
     # Create TTSTaskManager for this conversation
     tts_manager = TTSTaskManager()
+    audio_send = context.audio_send_text or websocket_send
     full_response = ""  # Initialize full_response here
     text_streamed = False
     text_delta_buffer = TextDeltaBuffer(
@@ -127,6 +128,7 @@ async def process_single_conversation(
                         tts_manager=tts_manager,
                         translate_engine=context.translate_engine,
                         streamed=text_streamed,
+                        audio_send=audio_send,
                     )
                     # Ensure response_part is treated as a string before concatenation
                     response_part_str = (
@@ -162,6 +164,7 @@ async def process_single_conversation(
             tts_manager=tts_manager,
             websocket_send=websocket_send,
             client_uid=client_uid,
+            audio_send=audio_send,
         )
 
         if context.history_uid and full_response:  # Check full_response before storing

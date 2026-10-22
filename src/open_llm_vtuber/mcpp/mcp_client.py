@@ -1,15 +1,21 @@
 """MCP Client for Open-LLM-Vtuber."""
 
-from contextlib import AsyncExitStack
-from typing import Dict, Any, List, Callable
+from contextlib import AsyncExitStack, asynccontextmanager
+from typing import AsyncIterator, Dict, Any, List, Callable
 from loguru import logger
 from datetime import timedelta
 
+import httpx
 from mcp import ClientSession, StdioServerParameters
 from mcp.types import Tool
 from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import (
+    create_mcp_http_client,
+    streamable_http_client,
+)
 
 from .server_registry import ServerRegistry
+from .types import MCPServer
 
 DEFAULT_TIMEOUT = timedelta(seconds=30)
 
@@ -40,24 +46,35 @@ class MCPClient:
             )
         logger.info("MCPC: Initialized MCPClient instance.")
 
-    async def _ensure_server_running_and_get_session(
-        self, server_name: str
-    ) -> ClientSession:
-        """Gets the existing session or creates a new one."""
-        if server_name in self.active_sessions:
-            return self.active_sessions[server_name]
-
-        logger.info(f"MCPC: Starting and connecting to server '{server_name}'...")
+    def _get_server(self, server_name: str) -> MCPServer:
         server = self.server_registery.get_server(server_name)
         if not server:
             raise ValueError(
                 f"MCPC: Server '{server_name}' not found in available servers."
             )
+        return server
 
+    @staticmethod
+    def _get_timeout(server: MCPServer) -> timedelta:
         timeout = server.timeout if server.timeout else DEFAULT_TIMEOUT
+        if isinstance(timeout, (int, float)):
+            timeout = timedelta(seconds=timeout)
+        return timeout
 
+    async def _ensure_stdio_session(self, server_name: str) -> ClientSession:
+        """Gets the existing stdio session or creates a new one."""
+        if server_name in self.active_sessions:
+            return self.active_sessions[server_name]
+
+        server = self._get_server(server_name)
+        timeout = self._get_timeout(server)
+
+        logger.info(f"MCPC: Starting and connecting to server '{server_name}'...")
         server_params = StdioServerParameters(
-            command=server.command, args=server.args, env=server.env, cwd=server.cwd
+            command=server.command,
+            args=server.args,
+            env=server.env,
+            cwd=server.cwd,
         )
 
         try:
@@ -80,6 +97,48 @@ class MCPClient:
                 f"MCPC: Failed to connect to server '{server_name}'."
             ) from e
 
+    @asynccontextmanager
+    async def _http_session(
+        self, server_name: str, server: MCPServer, timeout: timedelta
+    ) -> AsyncIterator[ClientSession]:
+        """Open a short-lived HTTP session in the caller's task.
+
+        The transport owns AnyIO task groups, so it must be entered and exited
+        from the same task. Tool calls run in a conversation task while
+        disconnect cleanup runs in the WebSocket task; a cached session would
+        therefore be closed from the wrong task.
+        """
+        logger.info(
+            f"MCPC: Connecting to remote server '{server_name}' at {server.url}..."
+        )
+        async with AsyncExitStack() as stack:
+            try:
+                http_client = await stack.enter_async_context(
+                    create_mcp_http_client(
+                        headers=server.headers or None,
+                        timeout=httpx.Timeout(timeout.total_seconds()),
+                    )
+                )
+                transport = await stack.enter_async_context(
+                    streamable_http_client(server.url, http_client=http_client)
+                )
+                read, write = transport[0], transport[1]
+
+                session = await stack.enter_async_context(
+                    ClientSession(read, write, read_timeout_seconds=timeout)
+                )
+                await session.initialize()
+            except Exception as e:
+                logger.exception(
+                    f"MCPC: Failed to connect to server '{server_name}': {e}"
+                )
+                raise RuntimeError(
+                    f"MCPC: Failed to connect to server '{server_name}'."
+                ) from e
+
+            logger.info(f"MCPC: Successfully connected to server '{server_name}'.")
+            yield session
+
     async def list_tools(self, server_name: str) -> List[Tool]:
         """List all available tools on the specified server."""
         # Check cache first
@@ -90,8 +149,15 @@ class MCPClient:
         logger.debug(
             f"MCPC: Cache miss for list_tools on server '{server_name}'. Fetching..."
         )
-        session = await self._ensure_server_running_and_get_session(server_name)
-        response = await session.list_tools()
+        server = self._get_server(server_name)
+        if server.url:
+            async with self._http_session(
+                server_name, server, self._get_timeout(server)
+            ) as session:
+                response = await session.list_tools()
+        else:
+            session = await self._ensure_stdio_session(server_name)
+            response = await session.list_tools()
 
         # Store in cache before returning
         self._list_tools_cache[server_name] = response.tools
@@ -106,9 +172,16 @@ class MCPClient:
         Returns:
             Dict containing the metadata and content_items from the tool response.
         """
-        session = await self._ensure_server_running_and_get_session(server_name)
+        server = self._get_server(server_name)
         logger.info(f"MCPC: Calling tool '{tool_name}' on server '{server_name}'...")
-        response = await session.call_tool(tool_name, tool_args)
+        if server.url:
+            async with self._http_session(
+                server_name, server, self._get_timeout(server)
+            ) as session:
+                response = await session.call_tool(tool_name, tool_args)
+        else:
+            session = await self._ensure_stdio_session(server_name)
+            response = await session.call_tool(tool_name, tool_args)
 
         if response.isError:
             error_text = (

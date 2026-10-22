@@ -3818,6 +3818,39 @@ index c5497ac..6f42d83 100644
    const [isLoading, setIsLoading] = useState(DEFAULT_CONFIG.isLoading);
  
    const [modelInfo, setModelInfoState] = useLocalStorage<ModelInfo | undefined>(
+diff --git a/src/renderer/src/context/vad-context.tsx b/src/renderer/src/context/vad-context.tsx
+index f38a4e6..276165b 100644
+--- a/src/renderer/src/context/vad-context.tsx
++++ b/src/renderer/src/context/vad-context.tsx
+@@ -1,9 +1,9 @@
+ /* eslint-disable no-use-before-define */
+ import {
+-  createContext, useContext, useRef, useCallback, useEffect, useReducer, useMemo,
++  createContext, useContext, useRef, useCallback, useEffect, useReducer, useMemo, useState,
+ } from 'react';
+ import { useTranslation } from 'react-i18next';
+-import { MicVAD } from '@ricky0123/vad-web';
++import type { MicVAD } from '@ricky0123/vad-web';
+ import { useInterrupt } from '@/components/canvas/live2d';
+ import { audioTaskQueue } from '@/utils/task-queue';
+ import { useSendAudio } from '@/hooks/utils/use-send-audio';
+@@ -111,7 +111,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+   const previousAiStateRef = useRef<AiState>('idle');
+ 
+   // Persistent state management
+-  const [micOn, setMicOn] = useLocalStorage('micOn', DEFAULT_VAD_STATE.micOn);
++  const [micOn, setMicOn] = useState(DEFAULT_VAD_STATE.micOn);
+   const autoStopMicRef = useRef(true);
+   const [autoStopMic, setAutoStopMicState] = useLocalStorage(
+     'autoStopMic',
+@@ -276,6 +276,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+    * Initialize new VAD instance
+    */
+   const initVAD = async () => {
++    const { MicVAD } = await import('@ricky0123/vad-web');
+     const newVAD = await MicVAD.new({
+       model: "v5",
+       preSpeechPadFrames: 20,
 diff --git a/src/renderer/src/context/websocket-context.tsx b/src/renderer/src/context/websocket-context.tsx
 index 4c6a59c..7017a47 100644
 --- a/src/renderer/src/context/websocket-context.tsx
@@ -3839,10 +3872,19 @@ index 4c6a59c..7017a47 100644
  export interface HistoryInfo {
    uid: string;
 diff --git a/src/renderer/src/hooks/utils/use-audio-task.ts b/src/renderer/src/hooks/utils/use-audio-task.ts
-index 27cba68..efe93ce 100644
+index 27cba68..5e38e0c 100644
 --- a/src/renderer/src/hooks/utils/use-audio-task.ts
 +++ b/src/renderer/src/hooks/utils/use-audio-task.ts
-@@ -10,23 +10,26 @@ import { audioTaskQueue } from '@/utils/task-queue';
+@@ -1,7 +1,7 @@
+ /* eslint-disable func-names */
+ /* eslint-disable no-underscore-dangle */
+ /* eslint-disable @typescript-eslint/ban-ts-comment */
+-import { useRef, useEffect, useCallback } from 'react';
++import { useRef, useCallback } from 'react';
+ import { useTranslation } from 'react-i18next';
+ import { useAiState } from '@/context/ai-state-context';
+ import { useSubtitle } from '@/context/subtitle-context';
+@@ -10,33 +10,38 @@ import { audioTaskQueue } from '@/utils/task-queue';
  import { audioManager } from '@/utils/audio-manager';
  import { toaster } from '@/components/ui/toaster';
  import { useWebSocket } from '@/context/websocket-context';
@@ -3857,6 +3899,7 @@ index 27cba68..efe93ce 100644
 -
  interface AudioTaskOptions {
    audioBase64: string
++  audioMime?: string
    volumes: number[]
    sliceLength: number
    displayText?: DisplayText | null
@@ -3872,7 +3915,11 @@ index 27cba68..efe93ce 100644
  /**
   * Custom hook for handling audio playback tasks with Live2D lip sync
   */
-@@ -37,6 +40,7 @@ export const useAudioTask = () => {
+ export const useAudioTask = () => {
+   const { t } = useTranslation();
+-  const { aiState, backendSynthComplete, setBackendSynthComplete } = useAiState();
++  const { aiState } = useAiState();
+   const { setSubtitleText } = useSubtitle();
    const { appendResponse, appendAIMessage } = useChatHistory();
    const { sendMessage } = useWebSocket();
    const { setExpression } = useLive2DExpression();
@@ -3880,13 +3927,14 @@ index 27cba68..efe93ce 100644
  
    // State refs to avoid stale closures
    const stateRef = useRef({
-@@ -80,21 +84,41 @@ export const useAudioTask = () => {
+@@ -80,33 +85,55 @@ export const useAudioTask = () => {
        return;
      }
  
 -    const { audioBase64, displayText, expressions, forwarded } = options;
 +    const {
 +      audioBase64,
++      audioMime,
 +      volumes,
 +      sliceLength,
 +      displayText,
@@ -3933,7 +3981,13 @@ index 27cba68..efe93ce 100644
        }
      }
  
-@@ -107,6 +131,7 @@ export const useAudioTask = () => {
+     try {
+       // Process audio if available
+       if (audioBase64) {
+-        const audioDataUrl = `data:audio/wav;base64,${audioBase64}`;
++        const audioDataUrl = `data:${audioMime || 'audio/wav'};base64,${audioBase64}`;
+ 
+         // Get Live2D manager and model
          const live2dManager = (window as any).getLive2DManager?.();
          if (!live2dManager) {
            console.error('Live2D manager not found');
@@ -3941,7 +3995,7 @@ index 27cba68..efe93ce 100644
            resolve();
            return;
          }
-@@ -114,6 +139,7 @@ export const useAudioTask = () => {
+@@ -114,6 +141,7 @@ export const useAudioTask = () => {
          const model = live2dManager.getModel(0);
          if (!model) {
            console.error('Live2D model not found at index 0');
@@ -3949,7 +4003,7 @@ index 27cba68..efe93ce 100644
            resolve();
            return;
          }
-@@ -135,8 +161,22 @@ export const useAudioTask = () => {
+@@ -135,8 +163,22 @@ export const useAudioTask = () => {
            );
          }
  
@@ -3974,7 +4028,7 @@ index 27cba68..efe93ce 100644
            console.log("Starting random 'Talk' motion");
            model.startRandomMotion(
              "Talk",
-@@ -152,8 +192,117 @@ export const useAudioTask = () => {
+@@ -152,8 +194,117 @@ export const useAudioTask = () => {
          // Register with global audio manager IMMEDIATELY after creating audio
          audioManager.setCurrentAudio(audio, model);
          let isFinished = false;
@@ -4092,7 +4146,7 @@ index 27cba68..efe93ce 100644
            audioManager.clearCurrentAudio(audio);
            if (!isFinished) {
              isFinished = true;
-@@ -161,10 +310,12 @@ export const useAudioTask = () => {
+@@ -161,10 +312,12 @@ export const useAudioTask = () => {
            }
          };
  
@@ -4108,13 +4162,13 @@ index 27cba68..efe93ce 100644
            // Check for interruption before playback
            if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
              console.warn('Audio playback cancelled due to interruption or audio was stopped');
-@@ -172,37 +323,31 @@ export const useAudioTask = () => {
+@@ -172,37 +325,31 @@ export const useAudioTask = () => {
              return;
            }
  
 +          // Without a volume envelope, fall back to decoding the WAV and driving
 +          // the cursor from the audio clock.
-+          if (wavHandler && !hasVolumeSchedule) {
++          if (wavHandler && !hasVolumeSchedule && (!audioMime || audioMime === 'audio/wav')) {
 +            const loaded = await wavHandler.start(audioDataUrl);
 +            if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
 +              console.warn('Audio playback cancelled while loading lip sync data');
@@ -4162,7 +4216,7 @@ index 27cba68..efe93ce 100644
            cleanup();
          });
  
-@@ -213,10 +358,12 @@ export const useAudioTask = () => {
+@@ -213,10 +360,12 @@ export const useAudioTask = () => {
  
          audio.load();
        } else {
@@ -4175,19 +4229,48 @@ index 27cba68..efe93ce 100644
        toaster.create({
          title: `${t('error.audioPlayback')}: ${error}`,
          type: "error",
+@@ -226,26 +375,6 @@ export const useAudioTask = () => {
+     }
+   });
+ 
+-  // Handle backend synthesis completion
+-  useEffect(() => {
+-    let isMounted = true;
+-
+-    const handleComplete = async () => {
+-      await audioTaskQueue.waitForCompletion();
+-      if (isMounted && backendSynthComplete) {
+-        stopCurrentAudioAndLipSync();
+-        sendMessage({ type: "frontend-playback-complete" });
+-        setBackendSynthComplete(false);
+-      }
+-    };
+-
+-    handleComplete();
+-
+-    return () => {
+-      isMounted = false;
+-    };
+-  }, [backendSynthComplete, sendMessage, setBackendSynthComplete, stopCurrentAudioAndLipSync]);
+-
+   /**
+    * Add a new audio task to the queue
+    */
 diff --git a/src/renderer/src/services/websocket-handler.tsx b/src/renderer/src/services/websocket-handler.tsx
-index 5283617..3aa6ea4 100644
+index 5283617..e912bd6 100644
 --- a/src/renderer/src/services/websocket-handler.tsx
 +++ b/src/renderer/src/services/websocket-handler.tsx
-@@ -30,7 +30,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -30,8 +30,8 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
    const { aiState, setAiState, backendSynthComplete, setBackendSynthComplete } = useAiState();
    const { setModelInfo } = useLive2DConfig();
    const { setSubtitleText } = useSubtitle();
 -  const { clearResponse, setForceNewMessage, appendHumanMessage, appendOrUpdateToolCallMessage } = useChatHistory();
+-  const { addAudioTask } = useAudioTask();
 +  const { clearResponse, setForceNewMessage, appendHumanMessage, appendAIMessage, appendOrUpdateToolCallMessage } = useChatHistory();
-   const { addAudioTask } = useAudioTask();
++  const { addAudioTask, stopCurrentAudioAndLipSync } = useAudioTask();
    const bgUrlContext = useBgUrl();
    const { confUid, setConfName, setConfUid, setConfigFiles } = useConfig();
+   const [pendingModelInfo, setPendingModelInfo] = useState<ModelInfo | undefined>(undefined);
 @@ -70,6 +70,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
          setAiState('thinking-speaking');
          audioTaskQueue.clearQueue();
@@ -4196,7 +4279,15 @@ index 5283617..3aa6ea4 100644
          break;
        case 'conversation-chain-end':
          audioTaskQueue.addTask(() => new Promise<void>((resolve) => {
-@@ -127,6 +128,14 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -110,6 +111,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+         }
+         if (message.client_uid) {
+           setSelfUid(message.client_uid);
++          wsService.connectAudio(message.client_uid);
+         }
+         setPendingModelInfo(message.model_info);
+         // setModelInfo(message.model_info);
+@@ -127,6 +129,14 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
            setSubtitleText(message.text);
          }
          break;
@@ -4211,7 +4302,19 @@ index 5283617..3aa6ea4 100644
        case 'config-files':
          if (message.configs) {
            setConfigFiles(message.configs);
-@@ -163,7 +172,9 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -153,17 +163,20 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+         }
+         break;
+       case 'audio':
+-        if (aiState === 'interrupted' || aiState === 'listening') {
++        if (aiState === 'interrupted') {
+           console.log('Audio playback intercepted. Sentence:', message.display_text?.text);
+         } else {
+           console.log("actions", message.actions);
+           addAudioTask({
+             audioBase64: message.audio || '',
++            audioMime: message.audio_mime || undefined,
+             volumes: message.volumes || [],
              sliceLength: message.slice_length || 0,
              displayText: message.display_text || null,
              expressions: message.actions?.expressions || null,
@@ -4221,7 +4324,7 @@ index 5283617..3aa6ea4 100644
            });
          }
          break;
-@@ -289,7 +300,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -289,7 +302,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
        default:
          console.warn('Unknown message type:', message.type);
      }
@@ -4230,8 +4333,48 @@ index 5283617..3aa6ea4 100644
  
    useEffect(() => {
      wsService.connect(wsUrl);
+@@ -298,12 +311,39 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+   useEffect(() => {
+     const stateSubscription = wsService.onStateChange(setWsState);
+     const messageSubscription = wsService.onMessage(handleWebSocketMessage);
++    const audioSubscription = wsService.onAudioMessage(handleWebSocketMessage);
+     return () => {
+       stateSubscription.unsubscribe();
+       messageSubscription.unsubscribe();
++      audioSubscription.unsubscribe();
+     };
+   }, [wsUrl, handleWebSocketMessage]);
+ 
++  // Single owner for the playback-complete handshake. useAudioTask is mounted
++  // in several components, so doing this inside the hook would send duplicate
++  // completions and stop the player multiple times.
++  useEffect(() => {
++    if (!backendSynthComplete) {
++      return undefined;
++    }
++
++    let cancelled = false;
++
++    (async () => {
++      await audioTaskQueue.waitForCompletion();
++      if (cancelled) {
++        return;
++      }
++      stopCurrentAudioAndLipSync();
++      wsService.sendMessage({ type: 'frontend-playback-complete' });
++      setBackendSynthComplete(false);
++    })();
++
++    return () => {
++      cancelled = true;
++    };
++  }, [backendSynthComplete, setBackendSynthComplete, stopCurrentAudioAndLipSync]);
++
+   const webSocketContextValue = useMemo(() => ({
+     sendMessage: wsService.sendMessage.bind(wsService),
+     wsState,
 diff --git a/src/renderer/src/services/websocket-service.tsx b/src/renderer/src/services/websocket-service.tsx
-index ad2b79f..fb03838 100644
+index ad2b79f..a4c6533 100644
 --- a/src/renderer/src/services/websocket-service.tsx
 +++ b/src/renderer/src/services/websocket-service.tsx
 @@ -25,6 +25,7 @@ export interface AudioPayload {
@@ -4257,7 +4400,13 @@ index ad2b79f..fb03838 100644
    pictures?: string[];
    sounds?: string[];
  }
-@@ -62,6 +69,9 @@ export interface MessageEvent {
+@@ -57,11 +64,15 @@ export interface MessageEvent {
+   timestamp: string;
+   type: string;
+   audio?: string;
++  audio_mime?: string;
+   volumes?: number[];
+   slice_length?: number;
    files?: BackgroundFile[];
    actions?: Actions;
    text?: string;
@@ -4267,6 +4416,175 @@ index ad2b79f..fb03838 100644
    model_info?: ModelInfo;
    conf_name?: string;
    conf_uid?: string;
+@@ -110,12 +121,24 @@ class WebSocketService {
+ 
+   private ws: WebSocket | null = null;
+ 
++  private audioWs: WebSocket | null = null;
++
+   private messageSubject = new Subject<MessageEvent>();
+ 
++  private audioMessageSubject = new Subject<MessageEvent>();
++
+   private stateSubject = new Subject<'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED'>();
+ 
+   private currentState: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED' = 'CLOSED';
+ 
++  private mainUrl: string | null = null;
++
++  private audioClientUid: string | null = null;
++
++  private audioReconnectTimer: ReturnType<typeof setTimeout> | null = null;
++
++  private audioHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
++
+   static getInstance() {
+     if (!WebSocketService.instance) {
+       WebSocketService.instance = new WebSocketService();
+@@ -144,6 +167,9 @@ class WebSocketService {
+       this.disconnect();
+     }
+ 
++    this.mainUrl = url;
++    this.disconnectAudio();
++
+     try {
+       this.ws = new WebSocket(url);
+       this.currentState = 'CONNECTING';
+@@ -170,11 +196,13 @@ class WebSocketService {
+       };
+ 
+       this.ws.onclose = () => {
++        this.disconnectAudio();
+         this.currentState = 'CLOSED';
+         this.stateSubject.next('CLOSED');
+       };
+ 
+       this.ws.onerror = () => {
++        this.disconnectAudio();
+         this.currentState = 'CLOSED';
+         this.stateSubject.next('CLOSED');
+       };
+@@ -185,6 +213,101 @@ class WebSocketService {
+     }
+   }
+ 
++  connectAudio(clientUid: string) {
++    if (!this.mainUrl || !clientUid || this.ws?.readyState !== WebSocket.OPEN) {
++      return;
++    }
++    if (this.audioWs && this.audioClientUid === clientUid &&
++        (this.audioWs.readyState === WebSocket.OPEN ||
++         this.audioWs.readyState === WebSocket.CONNECTING)) {
++      return;
++    }
++
++    this.disconnectAudio();
++    this.audioClientUid = clientUid;
++
++    let url: URL;
++    try {
++      url = new URL(this.mainUrl);
++    } catch (error) {
++      console.error('Failed to build audio WebSocket URL:', error);
++      return;
++    }
++    url.pathname = url.pathname.replace(/\/client-ws\/?$/, '/audio-ws');
++    if (!url.pathname.endsWith('/audio-ws')) {
++      url.pathname = `${url.pathname.replace(/\/$/, '')}/audio-ws`;
++    }
++    url.searchParams.set('client_uid', clientUid);
++
++    const socket = new WebSocket(url.toString());
++    this.audioWs = socket;
++
++    socket.onopen = () => {
++      console.log('Audio WebSocket connected');
++      this.startAudioHeartbeat();
++    };
++
++    socket.onmessage = (event) => {
++      try {
++        this.audioMessageSubject.next(JSON.parse(event.data));
++      } catch (error) {
++        console.error('Failed to parse audio WebSocket message:', error);
++      }
++    };
++
++    socket.onclose = () => {
++      if (this.audioWs !== socket) {
++        return;
++      }
++      this.stopAudioHeartbeat();
++      this.audioWs = null;
++      if (this.ws?.readyState === WebSocket.OPEN &&
++          this.audioClientUid === clientUid &&
++          !this.audioReconnectTimer) {
++        this.audioReconnectTimer = setTimeout(() => {
++          this.audioReconnectTimer = null;
++          this.connectAudio(clientUid);
++        }, 2000);
++      }
++    };
++
++    socket.onerror = () => {
++      socket.close();
++    };
++  }
++
++  private startAudioHeartbeat() {
++    this.stopAudioHeartbeat();
++    this.audioHeartbeatTimer = setInterval(() => {
++      if (this.audioWs?.readyState === WebSocket.OPEN) {
++        this.audioWs.send(JSON.stringify({ type: 'heartbeat' }));
++      }
++    }, 25000);
++  }
++
++  private stopAudioHeartbeat() {
++    if (this.audioHeartbeatTimer) {
++      clearInterval(this.audioHeartbeatTimer);
++      this.audioHeartbeatTimer = null;
++    }
++  }
++
++  private disconnectAudio() {
++    if (this.audioReconnectTimer) {
++      clearTimeout(this.audioReconnectTimer);
++      this.audioReconnectTimer = null;
++    }
++    this.stopAudioHeartbeat();
++    const socket = this.audioWs;
++    this.audioWs = null;
++    this.audioClientUid = null;
++    if (socket) {
++      socket.onclose = null;
++      socket.onerror = null;
++      socket.close();
++    }
++  }
++
+   sendMessage(message: object) {
+     if (this.ws?.readyState === WebSocket.OPEN) {
+       this.ws.send(JSON.stringify(message));
+@@ -202,11 +325,17 @@ class WebSocketService {
+     return this.messageSubject.subscribe(callback);
+   }
+ 
++  onAudioMessage(callback: (message: MessageEvent) => void) {
++    return this.audioMessageSubject.subscribe(callback);
++  }
++
+   onStateChange(callback: (state: 'CONNECTING' | 'OPEN' | 'CLOSING' | 'CLOSED') => void) {
+     return this.stateSubject.subscribe(callback);
+   }
+ 
+   disconnect() {
++    this.disconnectAudio();
++    this.mainUrl = null;
+     this.ws?.close();
+     this.ws = null;
+   }
 diff --git a/src/renderer/src/utils/audio-manager.ts b/src/renderer/src/utils/audio-manager.ts
 index 7caa275..e0c69e7 100644
 --- a/src/renderer/src/utils/audio-manager.ts

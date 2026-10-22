@@ -156,6 +156,16 @@ def init_client_ws_route(default_context_cache: ServiceContext) -> APIRouter:
         finally:
             ws_handler.release_connection_reservation(client_uid)
 
+    @router.websocket("/audio-ws")
+    async def audio_endpoint(websocket: WebSocket):
+        """Secondary WebSocket that carries only audio payloads."""
+        client_uid = websocket.query_params.get("client_uid")
+        await websocket.accept()
+        if not client_uid or not ws_handler.has_client(client_uid):
+            await websocket.close(code=1008, reason="Unknown client")
+            return
+        await ws_handler.handle_audio_connection(websocket, client_uid)
+
     return router
 
 

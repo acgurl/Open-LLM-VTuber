@@ -286,6 +286,7 @@ async def handle_group_member_turn(
             websocket_send=current_ws_send,
             client_uid=current_member_uid,
             broadcast_ctx=broadcast_ctx,
+            audio_send=context.audio_send_text or current_ws_send,
         )
 
     if full_response:
@@ -403,6 +404,7 @@ async def process_member_response(
                     tts_manager=tts_manager,
                     translate_engine=context.translate_engine,
                     streamed=text_streamed,
+                    audio_send=context.audio_send_text or current_ws_send,
                 )
                 full_response += response_part  # Accumulate text response
             else:

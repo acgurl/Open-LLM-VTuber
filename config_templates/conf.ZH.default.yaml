@@ -293,6 +293,7 @@ character_config:
       voice: 'en-US-AshleyNeural' # 语音
       pitch: '26' # 音调调整百分比
       rate: '1' # 语速
+      tailing_silence_ms: 0 # SSML 指定的句尾静音（毫秒）；Azure 仍会保留固有尾音
 
     bark_tts:
       voice: 'v2/en_speaker_1' # 语音

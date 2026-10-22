@@ -72,6 +72,8 @@ class WebSocketHandler:
     def __init__(self, default_context_cache: ServiceContext):
         """Initialize the WebSocket handler with default context"""
         self.client_connections: Dict[str, WebSocket] = {}
+        # Audio gets its own socket so large TTS payloads cannot block text deltas.
+        self.client_audio_connections: Dict[str, WebSocket] = {}
         self.client_contexts: Dict[str, ServiceContext] = {}
         # Slots are reserved before the expensive per-session initialization so a
         # burst of connections cannot spawn unbounded MCP processes.
@@ -121,6 +123,9 @@ class WebSocketHandler:
     def release_connection_reservation(self, client_uid: str) -> None:
         self._pending_connections.discard(client_uid)
 
+    def has_client(self, client_uid: str) -> bool:
+        return client_uid in self.client_connections
+
     async def handle_new_connection(
         self, websocket: WebSocket, client_uid: str
     ) -> None:
@@ -145,8 +150,22 @@ class WebSocketHandler:
 
             websocket.send_text = serialized_send_text
 
+            async def send_audio(data: str) -> None:
+                audio_websocket = self.client_audio_connections.get(client_uid)
+                if audio_websocket is not None:
+                    try:
+                        await audio_websocket.send_text(data)
+                        return
+                    except Exception as e:
+                        logger.warning(
+                            f"Audio WebSocket send failed for client {client_uid}: {e}; "
+                            "falling back to the main connection"
+                        )
+                        self.client_audio_connections.pop(client_uid, None)
+                await websocket.send_text(data)
+
             session_service_context = await self._init_service_context(
-                websocket.send_text, client_uid
+                websocket.send_text, client_uid, send_audio
             )
 
             await self._store_client_data(
@@ -165,6 +184,51 @@ class WebSocketHandler:
             )
             await self._cleanup_failed_connection(client_uid)
             raise
+
+    async def handle_audio_connection(
+        self, websocket: WebSocket, client_uid: str
+    ) -> None:
+        """Attach a secondary socket that only carries audio payloads."""
+        send_lock = asyncio.Lock()
+        raw_send_text = websocket.send_text
+
+        async def serialized_send_text(data: str) -> None:
+            async with send_lock:
+                await raw_send_text(data)
+
+        websocket.send_text = serialized_send_text
+
+        previous = self.client_audio_connections.get(client_uid)
+        self.client_audio_connections[client_uid] = websocket
+        if previous is not None and previous is not websocket:
+            try:
+                await previous.close(code=1000)
+            except Exception:
+                pass
+
+        logger.info(f"Audio channel connected for client {client_uid}")
+        try:
+            while True:
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            pass
+        except Exception as e:
+            logger.warning(
+                f"Audio WebSocket error for client {client_uid}: {e}"
+            )
+        finally:
+            if self.client_audio_connections.get(client_uid) is websocket:
+                self.client_audio_connections.pop(client_uid, None)
+            logger.info(f"Audio channel disconnected for client {client_uid}")
+
+    async def _close_audio_connection(self, client_uid: str) -> None:
+        websocket = self.client_audio_connections.pop(client_uid, None)
+        if websocket is None:
+            return
+        try:
+            await websocket.close(code=1000)
+        except Exception:
+            pass
 
     async def _store_client_data(
         self,
@@ -206,11 +270,8 @@ class WebSocketHandler:
         # Send initial group status
         await self.send_group_update(websocket, client_uid)
 
-        # Start microphone
-        await websocket.send_text(json.dumps({"type": "control", "text": "start-mic"}))
-
     async def _init_service_context(
-        self, send_text: Callable, client_uid: str
+        self, send_text: Callable, client_uid: str, audio_send: Callable
     ) -> ServiceContext:
         """Initialize service context for a new session by cloning the default context"""
         session_service_context = ServiceContext()
@@ -231,6 +292,7 @@ class WebSocketHandler:
             mcp_server_registery=self.default_context_cache.mcp_server_registery,
             tool_adapter=self.default_context_cache.tool_adapter,
             send_text=send_text,
+            audio_send=audio_send,
             client_uid=client_uid,
         )
         # Each connection needs its own agent state; the LLM client stays shared.
@@ -336,6 +398,7 @@ class WebSocketHandler:
         )
 
         # Clean up other client data
+        await self._close_audio_connection(client_uid)
         self.client_connections.pop(client_uid, None)
         context = self.client_contexts.pop(client_uid, None)
         self.received_data_buffers.pop(client_uid, None)
@@ -367,6 +430,7 @@ class WebSocketHandler:
 
     async def _cleanup_failed_connection(self, client_uid: str) -> None:
         """Clean up failed connection data"""
+        await self._close_audio_connection(client_uid)
         self.client_connections.pop(client_uid, None)
         context = self.client_contexts.pop(client_uid, None)
         self.received_data_buffers.pop(client_uid, None)

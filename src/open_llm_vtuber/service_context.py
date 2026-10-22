@@ -72,6 +72,7 @@ class ServiceContext:
         self.history_uid: str = ""  # Add history_uid field
 
         self.send_text: Callable = None
+        self.audio_send_text: Callable = None
         self.client_uid: str = None
 
     def __str__(self):
@@ -222,6 +223,7 @@ class ServiceContext:
         mcp_server_registery: ServerRegistry | None = None,
         tool_adapter: ToolAdapter | None = None,
         send_text: Callable = None,
+        audio_send: Callable = None,
         client_uid: str = None,
     ) -> None:
         """
@@ -246,6 +248,7 @@ class ServiceContext:
         self.mcp_server_registery = mcp_server_registery
         self.tool_adapter = tool_adapter
         self.send_text = send_text
+        self.audio_send_text = audio_send or send_text
         self.client_uid = client_uid
 
         # Initialize session-specific MCP components
@@ -369,10 +372,13 @@ class ServiceContext:
     def init_tts(self, tts_config: TTSConfig) -> None:
         if not self.tts_engine or (self.character_config.tts_config != tts_config):
             logger.info(f"Initializing TTS: {tts_config.tts_model}")
+            previous_engine = self.tts_engine
             self.tts_engine = TTSFactory.get_tts_engine(
                 tts_config.tts_model,
                 **getattr(tts_config, tts_config.tts_model.lower()).model_dump(),
             )
+            if previous_engine is not None:
+                previous_engine.close()
             # saving config should be done after successful initialization
             self.character_config.tts_config = tts_config
         else:

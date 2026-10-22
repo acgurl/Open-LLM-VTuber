@@ -39,6 +39,9 @@ class TTSInterface(metaclass=abc.ABCMeta):
         """
         raise NotImplementedError
 
+    def close(self) -> None:
+        """Release reusable resources such as pooled API clients."""
+
     def remove_file(self, filepath: str, verbose: bool = True) -> None:
         """
         Remove a file from the file system.

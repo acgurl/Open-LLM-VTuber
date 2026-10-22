@@ -119,6 +119,7 @@ class AzureTTSConfig(I18nMixin):
     voice: str = Field(..., alias="voice")
     pitch: str = Field(..., alias="pitch")
     rate: str = Field(..., alias="rate")
+    tailing_silence_ms: int = Field(0, alias="tailing_silence_ms", ge=0, le=3000)
 
     DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
         "api_key": Description(
@@ -132,6 +133,10 @@ class AzureTTSConfig(I18nMixin):
         ),
         "pitch": Description(en="Pitch adjustment percentage", zh="音高调整百分比"),
         "rate": Description(en="Speaking rate adjustment", zh="语速调整"),
+        "tailing_silence_ms": Description(
+            en="Silence Azure appends after speech via SSML (ms); the service keeps a small inherent tail",
+            zh="通过 SSML 指定 Azure 语音结尾的静音长度（毫秒）；服务本身仍会保留少量固有尾音",
+        ),
     }
 
 

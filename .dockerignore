@@ -81,3 +81,6 @@ dist/
 # Deployment secrets
 /conf/
 /data/
+
+# Runtime MCP config (may contain auth token, mounted at runtime)
+/mcp_servers.json

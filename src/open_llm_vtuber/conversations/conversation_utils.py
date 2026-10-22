@@ -138,10 +138,12 @@ async def process_agent_output(
     tts_manager: TTSTaskManager,
     translate_engine: Optional[Any] = None,
     streamed: bool = False,
+    audio_send: Optional[WebSocketSend] = None,
 ) -> str:
     """Process agent output with character information and optional translation"""
     output.display_text.name = character_config.character_name
     output.display_text.avatar = character_config.avatar
+    audio_send = audio_send or websocket_send
 
     full_response = ""
     try:
@@ -154,9 +156,10 @@ async def process_agent_output(
                 tts_manager,
                 translate_engine,
                 streamed,
+                audio_send,
             )
         elif isinstance(output, AudioOutput):
-            full_response = await handle_audio_output(output, websocket_send)
+            full_response = await handle_audio_output(output, audio_send)
         else:
             logger.warning(f"Unknown output type: {type(output)}")
     except Exception as e:
@@ -178,6 +181,7 @@ async def handle_sentence_output(
     tts_manager: TTSTaskManager,
     translate_engine: Optional[Any] = None,
     streamed: bool = False,
+    audio_send: Optional[WebSocketSend] = None,
 ) -> str:
     """Handle sentence output type with optional translation support"""
     full_response = ""
@@ -200,13 +204,14 @@ async def handle_sentence_output(
             tts_engine=tts_engine,
             websocket_send=websocket_send,
             streamed=streamed,
+            audio_send=audio_send,
         )
     return full_response
 
 
 async def handle_audio_output(
     output: AudioOutput,
-    websocket_send: WebSocketSend,
+    audio_send: WebSocketSend,
 ) -> str:
     """Process and send AudioOutput directly to the client"""
     full_response = ""
@@ -218,7 +223,7 @@ async def handle_audio_output(
             display_text=display_text,
             actions=actions.to_dict() if actions else None,
         )
-        await websocket_send(json.dumps(audio_payload))
+        await audio_send(json.dumps(audio_payload))
     return full_response
 
 
@@ -256,11 +261,20 @@ async def finalize_conversation_turn(
     websocket_send: WebSocketSend,
     client_uid: str,
     broadcast_ctx: Optional[BroadcastContext] = None,
+    audio_send: Optional[WebSocketSend] = None,
 ) -> None:
     """Finalize a conversation turn"""
     if tts_manager.task_list:
         await asyncio.gather(*tts_manager.task_list)
-        await websocket_send(json.dumps({"type": "backend-synth-complete"}))
+        # The sender task writes payloads asynchronously; make sure the last
+        # audio frame is out before the client is told playback may finish.
+        await tts_manager.wait_for_delivery()
+        # Send the completion on the audio channel so it cannot overtake a
+        # large audio payload that is still in flight. Falls back to the main
+        # channel when no audio channel is connected.
+        completion_send = audio_send or websocket_send
+        await completion_send(json.dumps({"type": "backend-synth-complete"}))
+        logger.info("All TTS payloads delivered; waiting for client playback")
 
         response = await message_handler.wait_for_response(
             client_uid,
