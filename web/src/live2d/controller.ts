@@ -9,6 +9,12 @@ const MAX_ZOOM = 5;
 const ZOOM_STEP = 1.05; // 每格滚轮 ±5%
 const ZOOM_EASING = 0.3;
 const DRAG_THRESHOLD_PX = 5;
+// 默认构图：模型可见轮廓高度占视口 81%，顶部留白 10%，窄屏时宽度不超过 92%
+const FRAME_HEIGHT_RATIO = 0.81;
+const FRAME_TOP_RATIO = 0.1;
+const FRAME_WIDTH_RATIO = 0.92;
+const ALPHA_THRESHOLD = 24;
+const TAP_GUARD_MS = 400;
 
 type Rect = { x: number; y: number; width: number; height: number };
 type DrawableHost = {
@@ -32,12 +38,17 @@ class Live2DController {
   private resizeHandler = () => this.layout();
   private canvas: HTMLCanvasElement | null = null;
   private baseScale = 1;
-  private baseX = 0;
-  private baseY = 0;
+  private frameCenter = { x: 0, y: 0 };
+  private contentCenter = { x: 0, y: 0 };
+  private contentBounds: Rect | null = null;
   private zoom = 1;
   private zoomTarget = 1;
   private offset = { x: 0, y: 0 };
   private drawableCount = 0;
+  private pointers = new Map<number, { x: number; y: number }>();
+  private pinch: { distance: number; zoom: number; mid: { x: number; y: number } } | null =
+    null;
+  private tapGuardUntil = 0;
   private loadSeq = 0;
   private loadingUrl: string | null = null;
   private dragArmed = false;
@@ -101,6 +112,7 @@ class Live2DController {
       this.model = null;
       this.mouthKind = null;
       this.drawableCount = 0;
+      this.contentBounds = null;
     }
     this.loadingUrl = url;
     if (url === null) {
@@ -120,11 +132,7 @@ class Live2DController {
       const internal = model.internalModel as unknown as Record<string, any>;
       if (internal?.coreModel?.setParameterValueById) this.mouthKind = 'cubism4';
       else if (internal?.live2DModel) this.mouthKind = 'cubism2';
-      try {
-        this.drawableCount = (internal as unknown as DrawableHost).getDrawableIDs().length;
-      } catch {
-        this.drawableCount = 0;
-      }
+      this.measureContent();
       const bindInfo = this.info ?? info;
       if (bindInfo) this.bindTap(model, bindInfo);
       this.layout();
@@ -169,7 +177,8 @@ class Live2DController {
     (model as unknown as { on(e: string, fn: (areas: string[]) => void): void }).on(
       'hit',
       (hitAreas: string[]) => {
-        if (this.dragging || this.dragArmed) return;
+        if (this.dragging || this.dragArmed || this.pinch) return;
+        if (Date.now() < this.tapGuardUntil) return;
         for (const area of hitAreas) {
           const motions = tap[area];
           if (!motions) continue;
@@ -185,30 +194,137 @@ class Live2DController {
     );
   }
 
+  // 取渲染出来的实际像素轮廓来构图：几何轮廓会把不可见网格算进去，主体会偏小。
+  private measureContent() {
+    const app = this.app;
+    const model = this.model;
+    if (!app || !model) return;
+    const internal = model.internalModel as unknown as { width: number; height: number };
+    const canvasW = internal.width || model.width || 1;
+    const canvasH = internal.height || model.height || 1;
+    const w = app.screen.width;
+    const h = app.screen.height;
+    try {
+      this.drawableCount = (model.internalModel as unknown as DrawableHost).getDrawableIDs()
+        .length;
+    } catch {
+      this.drawableCount = 0;
+    }
+
+    // 先整幅缩放塞进视口，保证轮廓不被裁掉
+    const probeScale = Math.min((w * 0.9) / canvasW, (h * 0.9) / canvasH);
+    model.anchor.set(0, 0);
+    model.scale.set(probeScale);
+    model.x = (w - canvasW * probeScale) / 2;
+    model.y = (h - canvasH * probeScale) / 2;
+
+    const pixelBounds = this.scanVisiblePixels(probeScale);
+    this.contentBounds = pixelBounds ?? this.geometryBounds(canvasW, canvasH);
+  }
+
+  private scanVisiblePixels(scale: number): Rect | null {
+    const app = this.app;
+    const model = this.model;
+    if (!app || !model) return null;
+    const width = app.renderer.width;
+    const height = app.renderer.height;
+    const resolution = app.renderer.resolution || 1;
+    try {
+      app.renderer.render(app.stage);
+      if (!app.renderer.extract) return null;
+      const pixels = app.renderer.extract.pixels();
+      if (pixels.length !== width * height * 4) return null;
+      let minX = width;
+      let minY = height;
+      let maxX = -1;
+      let maxY = -1;
+      for (let y = 0; y < height; y++) {
+        const row = y * width * 4;
+        for (let x = 0; x < width; x++) {
+          if (pixels[row + x * 4 + 3] <= ALPHA_THRESHOLD) continue;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+      if (maxX < minX || maxY < minY) return null;
+      return {
+        x: (minX / resolution - model.x) / scale,
+        y: (minY / resolution - model.y) / scale,
+        width: (maxX - minX + 1) / resolution / scale,
+        height: (maxY - minY + 1) / resolution / scale,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private geometryBounds(canvasW: number, canvasH: number): Rect {
+    const model = this.model;
+    const fallback = { x: 0, y: 0, width: canvasW, height: canvasH };
+    if (!model) return fallback;
+    const internal = model.internalModel as unknown as DrawableHost;
+    let count = 0;
+    try {
+      count = internal.getDrawableIDs().length;
+    } catch {
+      count = 0;
+    }
+    if (!count) return fallback;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    try {
+      for (let i = 0; i < count; i++) {
+        const b = internal.getDrawableBounds(i, scratchBounds);
+        if (!(b.width > 0) || !(b.height > 0)) continue;
+        minX = Math.min(minX, b.x);
+        minY = Math.min(minY, b.y);
+        maxX = Math.max(maxX, b.x + b.width);
+        maxY = Math.max(maxY, b.y + b.height);
+      }
+    } catch {
+      return fallback;
+    }
+    if (minX === Infinity || maxX <= minX || maxY <= minY) return fallback;
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
   private layout() {
     const app = this.app;
     const model = this.model;
     if (!app || !model) return;
     const w = app.screen.width;
     const h = app.screen.height;
-    const info = this.info ?? {};
     const internal = model.internalModel as unknown as { width: number; height: number };
-    const mw = internal.width || model.width || 1;
-    const mh = internal.height || model.height || 1;
-    const fit = Math.min((w * 0.9) / mw, (h * 0.95) / mh);
-    this.baseScale = fit * (info.kScale ?? 1);
-    this.baseX = w / 2 + (info.kXOffset ?? 0) + (info.initialXshift ?? 0);
-    this.baseY = h + (info.initialYshift ?? 0);
+    const canvasW = internal.width || model.width || 1;
+    const canvasH = internal.height || model.height || 1;
+    const content = this.contentBounds ?? { x: 0, y: 0, width: canvasW, height: canvasH };
+    this.baseScale = Math.min(
+      (h * FRAME_HEIGHT_RATIO) / content.height,
+      (w * FRAME_WIDTH_RATIO) / content.width,
+    );
+    this.contentCenter = {
+      x: content.x + content.width / 2,
+      y: content.y + content.height / 2,
+    };
+    this.frameCenter = {
+      x: w / 2,
+      y: h * FRAME_TOP_RATIO + (content.height * this.baseScale) / 2,
+    };
     this.applyTransform();
   }
 
   private applyTransform() {
     const model = this.model;
     if (!model) return;
-    model.anchor.set(0.5, 1);
-    model.scale.set(this.baseScale * this.zoom);
-    model.x = this.baseX + this.offset.x;
-    model.y = this.baseY + this.offset.y;
+    const scale = this.baseScale * this.zoom;
+    model.anchor.set(0, 0);
+    model.scale.set(scale);
+    model.x = this.frameCenter.x + this.offset.x - this.contentCenter.x * scale;
+    model.y = this.frameCenter.y + this.offset.y - this.contentCenter.y * scale;
   }
 
   private stepZoom() {
@@ -260,6 +376,11 @@ class Live2DController {
   };
 
   private onPointerDown = (e: PointerEvent) => {
+    if (e.pointerType === 'touch') this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (this.pointers.size >= 2) {
+      this.beginPinch();
+      return;
+    }
     if (e.button !== 0) return;
     const p = this.toStage(e.clientX, e.clientY);
     if (!this.isOverModel(p.x, p.y)) return;
@@ -268,7 +389,62 @@ class Live2DController {
     this.dragOrigin = { x: this.offset.x, y: this.offset.y };
   };
 
+  private beginPinch() {
+    const pts = [...this.pointers.values()];
+    if (pts.length < 2) return;
+    this.dragArmed = false;
+    this.dragging = false;
+    this.pinch = {
+      distance: Math.max(1, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y)),
+      zoom: this.zoom,
+      mid: { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 },
+    };
+    this.setCursor('');
+  }
+
+  // 双指：以两指中点为焦点缩放，同时跟随中点平移
+  private updatePinch() {
+    const pinch = this.pinch;
+    const pts = [...this.pointers.values()];
+    if (!pinch || pts.length < 2) return;
+    const rect = this.canvas?.getBoundingClientRect();
+    const ox = rect?.left ?? 0;
+    const oy = rect?.top ?? 0;
+    const mid = {
+      x: (pts[0].x + pts[1].x) / 2 - ox,
+      y: (pts[0].y + pts[1].y) / 2 - oy,
+    };
+    const distance = Math.max(1, Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y));
+    const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, pinch.zoom * (distance / pinch.distance)));
+    this.offset = {
+      x: this.offset.x + mid.x - pinch.mid.x,
+      y: this.offset.y + mid.y - pinch.mid.y,
+    };
+    pinch.mid = mid;
+    this.zoomTo(next, mid);
+  }
+
+  // 保持 focal 处的画面不动来缩放
+  private zoomTo(next: number, focal: { x: number; y: number }) {
+    if (!this.model || next === this.zoom) return;
+    const ratio = next / this.zoom;
+    this.offset = {
+      x: focal.x - this.frameCenter.x - (focal.x - this.frameCenter.x - this.offset.x) * ratio,
+      y: focal.y - this.frameCenter.y - (focal.y - this.frameCenter.y - this.offset.y) * ratio,
+    };
+    this.zoom = next;
+    this.zoomTarget = next;
+    this.applyTransform();
+  }
+
   private onPointerMove = (e: PointerEvent) => {
+    if (this.pointers.has(e.pointerId)) {
+      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (this.pinch && this.pointers.size >= 2) {
+      this.updatePinch();
+      return;
+    }
     if (this.dragArmed || this.dragging) {
       const dx = e.clientX - this.dragStart.x;
       const dy = e.clientY - this.dragStart.y;
@@ -282,6 +458,7 @@ class Live2DController {
       this.applyTransform();
       return;
     }
+    if (e.pointerType === 'touch') return;
     const p = this.toStage(e.clientX, e.clientY);
     const over = this.isOverModel(p.x, p.y);
     if (over !== this.hovering) {
@@ -290,7 +467,12 @@ class Live2DController {
     }
   };
 
-  private onPointerUp = () => {
+  private onPointerUp = (e: PointerEvent) => {
+    if (this.pointers.delete(e.pointerId) && this.pinch) {
+      this.pinch = null;
+      this.tapGuardUntil = Date.now() + TAP_GUARD_MS;
+      this.zoomTarget = this.zoom;
+    }
     this.dragArmed = false;
     if (this.dragging) {
       this.dragging = false;
@@ -347,6 +529,8 @@ class Live2DController {
     this.canvas = null;
     this.dragArmed = false;
     this.dragging = false;
+    this.pointers.clear();
+    this.pinch = null;
     this.stopIdle();
     this.app?.destroy(true);
     this.app = null;

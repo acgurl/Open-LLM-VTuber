@@ -630,10 +630,10 @@ LLM 被提示在句子里插入方括号关键字（提示词 `prompts/utils/liv
 | `name` | string | 查找键，对应 `live2d_model_name` |
 | `description` | string | 自由文本 |
 | `url` | string | `.model3.json` 的 URL 路径，已以 `/live2d-models/` 开头，**原样使用** |
-| `kScale` | number | 模型缩放 |
+| `kScale` | number | 模型缩放（旧前端遗留，当前前端按模型可见轮廓自动构图，不使用） |
 | `lipSyncGain` | number | 口型增益（唯一的增益来源） |
-| `initialXshift` / `initialYshift` | number | 画布偏移 |
-| `kXOffset` | number | 水平偏移 |
+| `initialXshift` / `initialYshift` | number | 画布偏移（同上，当前前端不使用） |
+| `kXOffset` | number | 水平偏移（同上，当前前端不使用） |
 | `idleMotionGroupName` | string | 待机动作组名，如 `"Idle"` |
 | `emotionMap` | object | 情绪关键字 → **表情索引（int）**。可为 `{}` |
 | `motionMap` | object | 动作关键字 → `{"group": string, "index"?: int}`。可为 `{}` |
@@ -985,7 +985,7 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 
 **Live2D / 表现层**
 
-- [ ] 用 `model_info.url` 加载模型，`kScale`/`kXOffset`/`initialXshift`/`initialYshift` 定位
+- [ ] 用 `model_info.url` 加载模型，按渲染出的可见轮廓自动构图（主体约占视口高度 81%、顶部留白 10%）；缩放/拖拽/移动端双指缩放自行实现
 - [ ] `volumes` + `slice_length` + `lipSyncGain` 驱动口型
 - [ ] `actions.expressions`（索引数组）/ `actions.motions`（`{group,index?}` 数组）驱动表情动作
 - [ ] `idleMotionGroupName` 待机动作、`tapMotions` 点击区域
