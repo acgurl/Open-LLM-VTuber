@@ -67,6 +67,16 @@ def _get_safe_history_path(conf_uid: str, history_uid: str) -> str:
     return full_path
 
 
+def _load_history_file(filepath: str) -> list:
+    with open(filepath, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _save_history_file(filepath: str, history_data: list) -> None:
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(history_data, f, ensure_ascii=False, indent=2)
+
+
 def create_new_history(conf_uid: str) -> str:
     """Create a new history file with a unique ID and return the history_uid"""
     if not conf_uid:
@@ -87,8 +97,7 @@ def create_new_history(conf_uid: str) -> str:
                 "timestamp": datetime.now().isoformat(timespec="seconds"),
             }
         ]
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(initial_data, f, ensure_ascii=False, indent=2)
+        _save_history_file(filepath, initial_data)
     except Exception as e:
         logger.error(f"Failed to create new history file: {e}")
         return ""
@@ -128,11 +137,9 @@ def store_message(
     history_data = []
     if os.path.exists(filepath):
         try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                history_data = json.load(f)
+            history_data = _load_history_file(filepath)
         except Exception:
             logger.error(f"Failed to load history file: {filepath}")
-            pass
 
     now_str = datetime.now().isoformat(timespec="seconds")
     new_item = {
@@ -149,8 +156,7 @@ def store_message(
 
     history_data.append(new_item)
 
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(history_data, f, ensure_ascii=False, indent=2)
+    _save_history_file(filepath, history_data)
     logger.debug(f"Successfully stored {role} message")
 
 
@@ -164,8 +170,7 @@ def get_metadata(conf_uid: str, history_uid: str) -> dict:
         return {}
 
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            history_data = json.load(f)
+        history_data = _load_history_file(filepath)
 
         if history_data and history_data[0]["role"] == "metadata":
             return history_data[0]
@@ -188,8 +193,7 @@ def update_metadate(conf_uid: str, history_uid: str, metadata: dict) -> bool:
         return False
 
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            history_data = json.load(f)
+        history_data = _load_history_file(filepath)
 
         if history_data and history_data[0]["role"] == "metadata":
             # Update existing metadata while preserving other fields
@@ -203,8 +207,7 @@ def update_metadate(conf_uid: str, history_uid: str, metadata: dict) -> bool:
             new_metadata.update(metadata)  # Add new fields
             history_data.insert(0, new_metadata)
 
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(history_data, f, ensure_ascii=False, indent=2)
+        _save_history_file(filepath, history_data)
 
         logger.debug(f"Updated metadata for history {history_uid}")
         return True
@@ -229,10 +232,9 @@ def get_history(conf_uid: str, history_uid: str) -> List[HistoryMessage]:
         return []
 
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            history_data = json.load(f)
-            # Filter out metadata
-            return [msg for msg in history_data if msg["role"] != "metadata"]
+        history_data = _load_history_file(filepath)
+        # Filter out metadata
+        return [msg for msg in history_data if msg["role"] != "metadata"]
     except Exception:
         return []
 
@@ -272,26 +274,23 @@ def get_history_list(conf_uid: str) -> List[dict]:
             filepath = os.path.join(conf_dir, filename)
 
             try:
-                with open(filepath, "r", encoding="utf-8") as f:
-                    messages = json.load(f)
+                messages = _load_history_file(filepath)
 
-                    # Filter out metadata for checking if history is empty
-                    actual_messages = [
-                        msg for msg in messages if msg["role"] != "metadata"
-                    ]
-                    if not actual_messages:
-                        empty_history_uids.append(history_uid)
-                        continue
+                # Filter out metadata for checking if history is empty
+                actual_messages = [msg for msg in messages if msg["role"] != "metadata"]
+                if not actual_messages:
+                    empty_history_uids.append(history_uid)
+                    continue
 
-                    latest_message = actual_messages[-1]
-                    history_info = {
-                        "uid": history_uid,
-                        "latest_message": latest_message,
-                        "timestamp": (
-                            latest_message["timestamp"] if latest_message else None
-                        ),
-                    }
-                    histories.append(history_info)
+                latest_message = actual_messages[-1]
+                history_info = {
+                    "uid": history_uid,
+                    "latest_message": latest_message,
+                    "timestamp": (
+                        latest_message["timestamp"] if latest_message else None
+                    ),
+                }
+                histories.append(history_info)
             except Exception as e:
                 logger.error(f"Error reading history file {filename}: {e}")
                 continue
@@ -332,8 +331,7 @@ def modify_latest_message(
         return False
 
     try:
-        with open(filepath, "r", encoding="utf-8") as f:
-            history_data = json.load(f)
+        history_data = _load_history_file(filepath)
 
         if not history_data:
             logger.warning("History is empty")
@@ -347,8 +345,7 @@ def modify_latest_message(
             return False
 
         latest_message["content"] = new_content
-        with open(filepath, "w", encoding="utf-8") as f:
-            json.dump(history_data, f, ensure_ascii=False, indent=2)
+        _save_history_file(filepath, history_data)
 
         logger.debug(f"Successfully modified latest {role} message")
         return True
