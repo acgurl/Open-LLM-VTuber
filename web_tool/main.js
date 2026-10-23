@@ -38,7 +38,7 @@ uploadAudioBtn.addEventListener('click', async () => {
         const audioContext = new (window.AudioContext || window.webkitAudioContext)();
         const arrayBuffer = await file.arrayBuffer();
         const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-        
+
         // Create WAV file
         const wavBuffer = await audioBufferToWav(audioBuffer);
         const wavBlob = new Blob([wavBuffer], { type: 'audio/wav' });
@@ -57,7 +57,7 @@ uploadAudioBtn.addEventListener('click', async () => {
         transcriptionArea.value = data.text;
         asrStatus.textContent = 'Transcription complete!';
         asrStatus.className = 'status success';
-        
+
         // Clean up
         audioContext.close();
     } catch (error) {
@@ -115,13 +115,13 @@ stopRecordingBtn.addEventListener('click', async () => {
 function connectWebSocket() {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(`${wsProtocol}://${window.location.host}/tts-ws`);
-    
+
     ws.onopen = () => {
         console.log('WebSocket connected');
         generateSpeechBtn.disabled = false;
         ttsStatus.textContent = 'Connected to TTS service';
         ttsStatus.className = 'status success';
-        
+
         // Initialize AudioContext if needed
         if (!audioContext) {
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -132,27 +132,27 @@ function connectWebSocket() {
 
     ws.onmessage = async (event) => {
         const response = JSON.parse(event.data);
-        
+
         if (response.status === 'partial') {
             ttsStatus.textContent = 'Generating audio...';
             ttsStatus.className = 'status';
-            
+
             try {
                 const audioPath = response.audioPath.split('/').pop();
                 pendingAudioPaths.add(audioPath);
-                
+
                 if (audioContext.state === 'suspended') {
                     await audioContext.resume();
                 }
-                
+
                 // Use retry mechanism for fetching audio
                 const audioResponse = await fetchWithRetry(`${API_BASE_URL}/cache/${audioPath}`);
                 const arrayBuffer = await audioResponse.arrayBuffer();
-                
+
                 if (arrayBuffer.byteLength === 0) {
                     throw new Error('Empty audio data received');
                 }
-                
+
                 const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
                 audioBuffers.push(audioBuffer);
                 pendingAudioPaths.delete(audioPath);
@@ -177,13 +177,13 @@ function connectWebSocket() {
                     const ratio = targetSampleRate / buffer.sampleRate;
                     return acc + Math.ceil(buffer.length * ratio);
                 }, 0);
-                
+
                 const combinedBuffer = audioContext.createBuffer(
                     1,  // mono
                     totalLength,
                     targetSampleRate
                 );
-                
+
                 let offset = 0;
                 for (const buffer of audioBuffers) {
                     // Resample if needed
@@ -194,19 +194,19 @@ function connectWebSocket() {
                     combinedBuffer.copyToChannel(channelData, 0, offset);
                     offset += channelData.length;
                 }
-                
+
                 // Convert to WAV for download
                 const wavBlob = new Blob([await audioBufferToWav(combinedBuffer)], { type: 'audio/wav' });
                 const audioUrl = URL.createObjectURL(wavBlob);
-                
+
                 // Update audio player
                 audioPlayer.src = audioUrl;
                 audioPlayer.load();
                 downloadAudioBtn.disabled = false;
-                
+
                 // Store for download
                 currentAudioPath = audioUrl;
-                
+
                 ttsStatus.textContent = 'Audio generated successfully!';
                 ttsStatus.className = 'status success';
             } catch (error) {
@@ -231,7 +231,7 @@ function connectWebSocket() {
         generateSpeechBtn.disabled = true;
         ttsStatus.textContent = 'Disconnected. Trying to reconnect...';
         ttsStatus.className = 'status error';
-        
+
         // Clean up any pending audio resources
         audioBuffers = [];
         pendingAudioPaths.clear();
@@ -239,7 +239,7 @@ function connectWebSocket() {
             URL.revokeObjectURL(currentAudioPath);
             currentAudioPath = null;
         }
-        
+
         setTimeout(connectWebSocket, 5000);
     };
 
@@ -247,7 +247,7 @@ function connectWebSocket() {
         console.error('WebSocket error:', error);
         ttsStatus.textContent = 'Connection error. Retrying...';
         ttsStatus.className = 'status error';
-        
+
         // Clean up audio resources on error
         audioBuffers = [];
         pendingAudioPaths.clear();
@@ -265,19 +265,19 @@ async function audioBufferToWav(buffer) {
     if (buffer.sampleRate !== 16000) {
         audioData = await resampleAudio(audioData, buffer.sampleRate, 16000);
     }
-    
+
     const numChannels = 1; // Mono
     const sampleRate = 16000;
     const format = 1; // PCM
     const bitDepth = 16;
-    
+
     const dataLength = audioData.length * (bitDepth / 8);
     const headerLength = 44;
     const totalLength = headerLength + dataLength;
-    
+
     const arrayBuffer = new ArrayBuffer(totalLength);
     const view = new DataView(arrayBuffer);
-    
+
     // Write WAV header
     writeString(view, 0, 'RIFF');
     view.setUint32(4, totalLength - 8, true);
@@ -292,10 +292,10 @@ async function audioBufferToWav(buffer) {
     view.setUint16(34, bitDepth, true);
     writeString(view, 36, 'data');
     view.setUint32(40, dataLength, true);
-    
+
     // Write audio data
     floatTo16BitPCM(view, 44, audioData);
-    
+
     return arrayBuffer;
 }
 
@@ -303,19 +303,19 @@ function resampleAudio(audioData, originalSampleRate, targetSampleRate) {
     const ratio = targetSampleRate / originalSampleRate;
     const newLength = Math.round(audioData.length * ratio);
     const result = new Float32Array(newLength);
-    
+
     for (let i = 0; i < newLength; i++) {
         const position = i / ratio;
         const index = Math.floor(position);
         const fraction = position - index;
-        
+
         if (index + 1 < audioData.length) {
             result[i] = audioData[index] * (1 - fraction) + audioData[index + 1] * fraction;
         } else {
             result[i] = audioData[index];
         }
     }
-    
+
     return result;
 }
 

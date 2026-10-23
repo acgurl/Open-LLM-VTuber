@@ -212,9 +212,7 @@ class WebSocketHandler:
         except WebSocketDisconnect:
             pass
         except Exception as e:
-            logger.warning(
-                f"Audio WebSocket error for client {client_uid}: {e}"
-            )
+            logger.warning(f"Audio WebSocket error for client {client_uid}: {e}")
         finally:
             if self.client_audio_connections.get(client_uid) is websocket:
                 self.client_audio_connections.pop(client_uid, None)

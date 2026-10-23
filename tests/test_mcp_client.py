@@ -35,15 +35,11 @@ class TransportSelectionTests(unittest.IsolatedAsyncioTestCase):
         temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(temp_dir.cleanup)
         config_path = Path(temp_dir.name) / "mcp_servers.json"
-        config_path.write_text(
-            json.dumps({"mcp_servers": servers}), encoding="utf-8"
-        )
+        config_path.write_text(json.dumps({"mcp_servers": servers}), encoding="utf-8")
         return MCPClient(ServerRegistry(config_path))
 
     async def test_http_server_uses_http_session(self):
-        client = self.make_client(
-            {"remote": {"url": "http://127.0.0.1:8765/mcp"}}
-        )
+        client = self.make_client({"remote": {"url": "http://127.0.0.1:8765/mcp"}})
         session = FakeSession()
         http_calls = []
 
@@ -55,8 +51,9 @@ class TransportSelectionTests(unittest.IsolatedAsyncioTestCase):
         async def fail_stdio(_server_name):
             raise AssertionError("stdio session must not be used for HTTP servers")
 
-        with patch.object(client, "_http_session", fake_http_session), patch.object(
-            client, "_ensure_stdio_session", fail_stdio
+        with (
+            patch.object(client, "_http_session", fake_http_session),
+            patch.object(client, "_ensure_stdio_session", fail_stdio),
         ):
             tools = await client.list_tools("remote")
             await client.call_tool("remote", "ping", {"q": 1})
@@ -78,8 +75,9 @@ class TransportSelectionTests(unittest.IsolatedAsyncioTestCase):
         def fail_http_session(*_args, **_kwargs):
             raise AssertionError("HTTP session must not be used for stdio servers")
 
-        with patch.object(client, "_http_session", fail_http_session), patch.object(
-            client, "_ensure_stdio_session", fake_stdio_session
+        with (
+            patch.object(client, "_http_session", fail_http_session),
+            patch.object(client, "_ensure_stdio_session", fake_stdio_session),
         ):
             await client.list_tools("local")
             await client.call_tool("local", "ping", {})

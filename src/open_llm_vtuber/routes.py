@@ -48,9 +48,7 @@ def _with_terminal_punctuation(sentence: str) -> str:
 async def _stream_tts_sentences(websocket: WebSocket, tts_engine, sentences) -> None:
     for sentence in sentences:
         sentence = _with_terminal_punctuation(sentence)
-        file_name = (
-            f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid4())[:8]}"
-        )
+        file_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid4())[:8]}"
         audio_path = await tts_engine.async_generate_audio(
             text=sentence, file_name_no_ext=file_name
         )
@@ -66,9 +64,7 @@ async def _stream_tts_sentences(websocket: WebSocket, tts_engine, sentences) -> 
     await websocket.send_json({"status": "complete"})
 
 
-async def _process_tts_request(
-    websocket: WebSocket, tts_engine, text: str
-) -> None:
+async def _process_tts_request(websocket: WebSocket, tts_engine, text: str) -> None:
     if len(text) > MAX_TTS_TEXT_CHARS:
         await websocket.send_json(
             {
@@ -285,9 +281,7 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
             )
 
             if asr_semaphore.locked():
-                return _json_error(
-                    429, "Too many concurrent transcription requests"
-                )
+                return _json_error(429, "Too many concurrent transcription requests")
 
             async with asr_semaphore:
                 text = await default_context_cache.asr_engine.async_transcribe_np(
@@ -301,9 +295,7 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
             return _json_error(400, str(e))
         except Exception:
             logger.exception("Error during transcription")
-            return _json_error(
-                500, "Internal server error during transcription"
-            )
+            return _json_error(500, "Internal server error during transcription")
 
     @router.websocket("/tts-ws")
     async def tts_endpoint(websocket: WebSocket):
@@ -317,9 +309,7 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
         try:
             await websocket.accept()
             logger.info("TTS WebSocket connection established")
-            await _serve_tts_connection(
-                websocket, default_context_cache.tts_engine
-            )
+            await _serve_tts_connection(websocket, default_context_cache.tts_engine)
         finally:
             tts_slots.release()
 

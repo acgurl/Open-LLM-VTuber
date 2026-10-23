@@ -163,7 +163,7 @@ jobs:
         run: |
           echo "upload_to_r2 value: '${{ github.event.inputs.upload_to_r2 }}'"
           echo "type: $(typeof ${{ github.event.inputs.upload_to_r2 }})"
-          
+
       # If chosen, upload to Cloudflare R2
       - name: Upload to Cloudflare R2
         if: ${{ github.event.inputs.upload_to_r2 == 'true' }}
@@ -190,10 +190,10 @@ jobs:
           echo "Files uploaded to R2. Public URLs:"
           for file in Open-LLM-VTuber-v${{ env.VERSION }}-zh.zip Open-LLM-VTuber-v${{ env.VERSION }}-en.zip open-llm-vtuber-electron-*.dmg open-llm-vtuber-electron-*-setup.exe; do
             echo "$R2_PUBLIC_URL/v${{ env.VERSION }}/$file"
-          done   
+          done
 
           echo "R2 upload process completed"
-          
+
       # Generate download links markdown
       - name: Generate R2 download links markdown
         if: ${{ github.event.inputs.upload_to_r2 == 'true' }}
@@ -203,24 +203,24 @@ jobs:
           # Get electron app version from filenames
           EXE_VERSION=$(ls open-llm-vtuber-electron-*-setup.exe | sed -E 's/open-llm-vtuber-electron-(.*)-setup.exe/\1/')
           DMG_VERSION=$(ls open-llm-vtuber-electron-*.dmg | sed -E 's/open-llm-vtuber-electron-(.*).dmg/\1/')
-          
+
           # Create markdown text with download links and save to file
           cat > download-links.md << EOF
-          
+
           ## Faster download links for Chinese users 给内地用户准备的(相对)快速的下载链接
           Open-LLM-VTuber-v${{ env.VERSION }}-zh.zip (包含 sherpa onnx asr 的 sense-voice 模型，就不用再从github上拉取了)
           - [Open-LLM-VTuber-v${{ env.VERSION }}-en.zip]($R2_PUBLIC_URL/v${{ env.VERSION }}/Open-LLM-VTuber-v${{ env.VERSION }}-en.zip)
           - [Open-LLM-VTuber-v${{ env.VERSION }}-zh.zip]($R2_PUBLIC_URL/v${{ env.VERSION }}/Open-LLM-VTuber-v${{ env.VERSION }}-zh.zip)
-          
+
           open-llm-vtuber-electron-$EXE_VERSION-frontend.exe (桌面版前端，Windows)
           - [open-llm-vtuber-electron-$EXE_VERSION-setup.exe]($R2_PUBLIC_URL/v${{ env.VERSION }}/open-llm-vtuber-electron-$EXE_VERSION-setup.exe)
-          
+
           open-llm-vtuber-electron-$DMG_VERSION-frontend.dmg (桌面版前端，macOS)
           - [open-llm-vtuber-electron-$DMG_VERSION.dmg]($R2_PUBLIC_URL/v${{ env.VERSION }}/open-llm-vtuber-electron-$DMG_VERSION.dmg)
           EOF
-          
+
           echo "Download links markdown file created"
-      
+
       # Upload download links as an artifact
       - name: Upload download links markdown
         if: ${{ github.event.inputs.upload_to_r2 == 'true' }}
@@ -229,7 +229,7 @@ jobs:
           name: download-links
           path: download-links.md
           retention-days: 30
-          
+
       # Add the download links to GitHub release if creating one
       - name: Add download links to release description
         if: ${{ github.event.inputs.upload_to_r2 == 'true' && github.event.inputs.create_github_release == 'true' }}

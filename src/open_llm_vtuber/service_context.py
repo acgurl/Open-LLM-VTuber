@@ -526,9 +526,7 @@ class ServiceContext:
         - config_file_name (str): The name of the configuration file.
         """
         try:
-            character_config_data = self._load_character_config_data(
-                config_file_name
-            )
+            character_config_data = self._load_character_config_data(config_file_name)
             await self._apply_character_config(character_config_data)
             await self._notify_config_switched(websocket, config_file_name)
         except Exception as e:
@@ -537,9 +535,7 @@ class ServiceContext:
 
     def _load_character_config_data(self, config_file_name: str) -> Any:
         if config_file_name == "conf.yaml":
-            character_config_data = read_yaml("conf.yaml").get(
-                "character_config"
-            )
+            character_config_data = read_yaml("conf.yaml").get("character_config")
         else:
             # Resolve inside the character presets directory; the raw client
             # string must not be able to reach anywhere else (including
@@ -562,14 +558,10 @@ class ServiceContext:
             if not isinstance(base_config_data, dict):
                 raise ValueError("Base character config must be a mapping")
 
-            character_config_data = deep_merge(
-                base_config_data, alt_config_data
-            )
+            character_config_data = deep_merge(base_config_data, alt_config_data)
 
         if not character_config_data:
-            raise ValueError(
-                f"Failed to load configuration from {config_file_name}"
-            )
+            raise ValueError(f"Failed to load configuration from {config_file_name}")
 
         return character_config_data
 
@@ -633,9 +625,7 @@ class ServiceContext:
                 )
             )
         except Exception:
-            logger.debug(
-                "Client disconnected before config-switch error was sent"
-            )
+            logger.debug("Client disconnected before config-switch error was sent")
 
 
 def deep_merge(dict1, dict2):

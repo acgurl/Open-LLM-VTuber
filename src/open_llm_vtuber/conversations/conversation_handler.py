@@ -136,9 +136,7 @@ async def handle_conversation_trigger(
             task_key not in current_conversation_tasks
             or current_conversation_tasks[task_key].done()
         ):
-            if await _reject_if_at_capacity(
-                websocket, current_conversation_tasks
-            ):
+            if await _reject_if_at_capacity(websocket, current_conversation_tasks):
                 return
 
             logger.info(f"Starting new group conversation for {task_key}")
@@ -165,9 +163,7 @@ async def handle_conversation_trigger(
         if await _reject_if_at_capacity(websocket, current_conversation_tasks):
             return
 
-        channels = context.channels or OutboundChannels.from_text(
-            websocket.send_text
-        )
+        channels = context.channels or OutboundChannels.from_text(websocket.send_text)
         task = asyncio.create_task(
             process_single_conversation(
                 context=context,

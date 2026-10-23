@@ -147,9 +147,7 @@ class HandleConfigSwitchTests(unittest.IsolatedAsyncioTestCase):
                 ServiceContext, "load_from_config", new=AsyncMock()
             ) as load_from_config,
         ):
-            await self.context.handle_config_switch(
-                self.websocket, "../outside.yaml"
-            )
+            await self.context.handle_config_switch(self.websocket, "../outside.yaml")
 
         self.assertEqual(
             self.websocket.sent,

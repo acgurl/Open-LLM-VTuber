@@ -59,9 +59,7 @@ class OutboundChannelTests(unittest.IsolatedAsyncioTestCase):
             "prepare_audio_payload",
             return_value={"type": "audio"},
         ):
-            transcript = await conversation_utils.handle_audio_output(
-                output, channels
-            )
+            transcript = await conversation_utils.handle_audio_output(output, channels)
 
         self.assertEqual(transcript, "hi")
         self.assertEqual(audio_sent, [{"type": "audio"}])

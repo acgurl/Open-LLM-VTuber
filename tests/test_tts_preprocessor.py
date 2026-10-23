@@ -44,18 +44,14 @@ class MarkdownToPlainTextTests(unittest.TestCase):
 
     def test_can_preserve_single_asterisk_spans(self) -> None:
         self.assertEqual(
-            markdown_to_plain_text(
-                "*wave* hello", keep_single_asterisk_content=False
-            ),
+            markdown_to_plain_text("*wave* hello", keep_single_asterisk_content=False),
             "*wave* hello",
         )
         self.assertEqual(markdown_to_plain_text("*wave* hello"), "wave hello")
 
     def test_role_play_actions_are_removed_only_when_requested(self) -> None:
         self.assertEqual(filter_for_tts("**你好**", ignore_asterisks=True), "你好")
-        self.assertEqual(
-            filter_for_tts("*wave* hello", ignore_asterisks=True), "hello"
-        )
+        self.assertEqual(filter_for_tts("*wave* hello", ignore_asterisks=True), "hello")
         self.assertEqual(
             filter_for_tts("*wave* hello", ignore_asterisks=False),
             "wave hello",

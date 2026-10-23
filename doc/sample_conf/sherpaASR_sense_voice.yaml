@@ -54,8 +54,8 @@ SherpaOnnxASR:
 
 # ============== Text to Speech ==============
 TTS_MODEL: "edgeTTS"
-# text to speech model options: 
-#   "AzureTTS", "pyttsx3TTS", "edgeTTS", "barkTTS", 
+# text to speech model options:
+#   "AzureTTS", "pyttsx3TTS", "edgeTTS", "barkTTS",
 #   "cosyvoiceTTS", "meloTTS", "piperTTS", "coquiTTS",
 #   "fishAPITTS"
 
@@ -64,4 +64,3 @@ edgeTTS:
   # Check out doc at https://github.com/rany2/edge-tts
   # Use `edge-tts --list-voices` to list all available voices
   voice: "en-US-AvaMultilingualNeural" #"zh-CN-XiaoxiaoNeural" # "ja-JP-NanamiNeural"
-

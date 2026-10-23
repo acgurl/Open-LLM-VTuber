@@ -95,9 +95,7 @@ class ConversationTriggerTests(unittest.IsolatedAsyncioTestCase):
         tasks = {}
         self.fill_tasks(tasks, conversation_handler.MAX_CONCURRENT_CONVERSATIONS)
 
-        await self.trigger(
-            "text-input", {"type": "text-input", "text": "hello"}, tasks
-        )
+        await self.trigger("text-input", {"type": "text-input", "text": "hello"}, tasks)
 
         self.assertEqual(
             self.websocket.sent,
@@ -140,15 +138,18 @@ class ConversationTriggerTests(unittest.IsolatedAsyncioTestCase):
         context = FakeContext()
         context.system_config.tool_prompts = {"proactive_speak_prompt": "prompt.txt"}
 
-        with patch.object(
-            conversation_handler.prompt_loader,
-            "load_util",
-            return_value="Say hello",
-        ) as load_prompt, patch.object(
-            conversation_handler,
-            "process_single_conversation",
-            new=AsyncMock(),
-        ) as process:
+        with (
+            patch.object(
+                conversation_handler.prompt_loader,
+                "load_util",
+                return_value="Say hello",
+            ) as load_prompt,
+            patch.object(
+                conversation_handler,
+                "process_single_conversation",
+                new=AsyncMock(),
+            ) as process,
+        ):
             await self.trigger(
                 "ai-speak-signal", {"type": "ai-speak-signal"}, {}, context
             )
@@ -219,11 +220,14 @@ class ConnectionCleanupTests(unittest.IsolatedAsyncioTestCase):
     async def test_disconnect_cleanup_cancels_task_and_closes_context(self):
         self.seed_client("client")
 
-        with patch.object(
-            websocket_handler_module, "handle_client_disconnect", new=AsyncMock()
-        ), patch.object(
-            websocket_handler_module.message_handler, "cleanup_client"
-        ) as cleanup:
+        with (
+            patch.object(
+                websocket_handler_module, "handle_client_disconnect", new=AsyncMock()
+            ),
+            patch.object(
+                websocket_handler_module.message_handler, "cleanup_client"
+            ) as cleanup,
+        ):
             await self.handler.handle_disconnect("client")
 
         self.assert_cleaned_up("client")

@@ -112,4 +112,3 @@ Here is a breakdown of the core fields under `character_config`:
   - **Start by Copying**: The easiest way to get started is to duplicate an existing `.yaml` file and modify its contents with your `conf.yaml` content.
   - **Keep it Simple**: Only add the configuration keys you want to override from the base `conf.yaml`. This keeps your character files clean and easy to manage.
   - **Unique `conf_uid`**: Once again, ensure every character file has a unique `conf_uid` to prevent chat history conflicts.
-

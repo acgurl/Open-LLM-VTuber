@@ -91,9 +91,7 @@ def prepare_audio_payload(
         try:
             audio, audio_bytes, audio_mime = _load_audio(audio_path)
         except Exception as e:
-            raise ValueError(
-                f"Error loading generated audio file '{audio_path}': {e}"
-            )
+            raise ValueError(f"Error loading generated audio file '{audio_path}': {e}")
         audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
         volumes = _get_volume_by_chunks(audio, chunk_length_ms)
 

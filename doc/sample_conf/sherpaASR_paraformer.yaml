@@ -54,8 +54,8 @@ SherpaOnnxASR:
 
   # ============== Text to Speech ==============
 TTS_MODEL: "edgeTTS"
-# text to speech model options: 
-#   "AzureTTS", "pyttsx3TTS", "edgeTTS", "barkTTS", 
+# text to speech model options:
+#   "AzureTTS", "pyttsx3TTS", "edgeTTS", "barkTTS",
 #   "cosyvoiceTTS", "meloTTS", "piperTTS", "coquiTTS",
 #   "fishAPITTS", "SherpaOnnxTTS"
 

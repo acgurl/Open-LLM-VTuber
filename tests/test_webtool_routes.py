@@ -52,10 +52,7 @@ class TTSWebSocketTests(unittest.TestCase):
             ["你好.", "Hello!", "世界."],
         )
         self.assertTrue(
-            all(
-                message["audioPath"].startswith("audio/")
-                for message in messages[:3]
-            )
+            all(message["audioPath"].startswith("audio/") for message in messages[:3])
         )
         self.assertEqual(
             self.context.tts_engine.calls,

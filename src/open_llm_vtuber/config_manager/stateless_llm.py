@@ -14,7 +14,7 @@ class StatelessLLMBaseConfig(I18nMixin):
     DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "interrupt_method": Description(
             en="""The method to use for prompting the interruption signal.
-            If the provider supports inserting system prompt anywhere in the chat memory, use "system". 
+            If the provider supports inserting system prompt anywhere in the chat memory, use "system".
             Otherwise, use "user". You don't need to change this setting.""",
             zh="""用于表示中断信号的方法(提示词模式)。如果LLM支持在聊天记忆中的任何位置插入系统提示词，请使用“system”。
             否则，请使用“user”。您不需要更改此设置。""",

@@ -104,7 +104,9 @@ class TTSEngine(PooledTTSEngine):
     def _log_failure(result) -> None:
         if result.reason == speechsdk.ResultReason.Canceled:
             cancellation_details = result.cancellation_details
-            logger.error(f"Azure speech synthesis canceled: {cancellation_details.reason}")
+            logger.error(
+                f"Azure speech synthesis canceled: {cancellation_details.reason}"
+            )
             if cancellation_details.reason == speechsdk.CancellationReason.Error:
                 if cancellation_details.error_details:
                     logger.error(f"Error details: {cancellation_details.error_details}")

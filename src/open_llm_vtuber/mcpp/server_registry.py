@@ -127,11 +127,7 @@ class ServerRegistry:
     @staticmethod
     def _is_valid_http_url(url: Any) -> bool:
         parsed = urlparse(url) if isinstance(url, str) else None
-        return bool(
-            parsed
-            and parsed.scheme in ("http", "https")
-            and parsed.netloc
-        )
+        return bool(parsed and parsed.scheme in ("http", "https") and parsed.netloc)
 
     @staticmethod
     def _is_valid_headers(headers: Any) -> bool:

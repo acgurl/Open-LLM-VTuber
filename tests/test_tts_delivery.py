@@ -29,13 +29,9 @@ class PayloadDeliveryTests(unittest.IsolatedAsyncioTestCase):
         async def send(message: str) -> None:
             sent.append(json.loads(message))
 
-        manager._sender_task = asyncio.create_task(
-            manager._process_payload_queue(send)
-        )
+        manager._sender_task = asyncio.create_task(manager._process_payload_queue(send))
         manager._sequence_counter = 1
-        await manager._payload_queue.put(
-            ({"type": "audio", "audio": "abc"}, 0)
-        )
+        await manager._payload_queue.put(({"type": "audio", "audio": "abc"}, 0))
 
         await manager.wait_for_delivery(timeout=1.0)
 
