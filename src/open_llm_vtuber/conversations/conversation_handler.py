@@ -9,6 +9,7 @@ from loguru import logger
 from ..chat_group import ChatGroupManager
 from ..chat_history_manager import store_message
 from ..service_context import ServiceContext
+from ..utils.async_utils import cancel_and_wait
 from .group_conversation import process_group_conversation
 from .single_conversation import process_single_conversation
 from .conversation_utils import EMOJI_LIST
@@ -45,16 +46,9 @@ async def _cancel_previous_task(
     tasks: Dict[str, Optional[asyncio.Task]], task_key: str
 ) -> None:
     previous = tasks.get(task_key)
-    if not previous or previous.done():
-        return
-
-    previous.cancel()
-    try:
-        await previous
-    except asyncio.CancelledError:
-        pass
-    except Exception as e:
-        logger.error(f"Conversation task {task_key} failed: {type(e).__name__}")
+    await cancel_and_wait(
+        previous, failure_message=f"Conversation task {task_key} failed"
+    )
 
 
 def _track_task(

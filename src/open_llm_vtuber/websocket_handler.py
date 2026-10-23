@@ -14,6 +14,7 @@ from .chat_group import (
     broadcast_to_group,
 )
 from .message_handler import message_handler
+from .utils.async_utils import cancel_and_wait
 from .utils.stream_audio import prepare_audio_payload
 from .utils.audio import MAX_AUDIO_SAMPLES
 from .chat_history_manager import (
@@ -416,16 +417,7 @@ class WebSocketHandler:
         self, client_uid: str, failure_message: str
     ) -> None:
         task = self.current_conversation_tasks.pop(client_uid, None)
-        if not task or task.done():
-            return
-
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.exception(failure_message)
+        await cancel_and_wait(task, failure_message=failure_message)
 
     async def _cleanup_failed_connection(self, client_uid: str) -> None:
         """Clean up failed connection data"""
