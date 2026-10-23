@@ -5,7 +5,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 try:
-    from open_llm_vtuber.utils.sentence_divider import SentenceDivider
+    from open_llm_vtuber.utils.sentence_divider import (
+        SentenceDivider,
+        comma_splitter,
+    )
 except ImportError as exc:
     raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
 
@@ -23,6 +26,12 @@ async def _collect(divider, items):
 
 
 class SentenceDividerTests(unittest.IsolatedAsyncioTestCase):
+    def test_complete_response_is_empty_before_streaming(self):
+        self.assertEqual(SentenceDivider().complete_response, "")
+
+    def test_empty_comma_split_returns_strings(self):
+        self.assertEqual(comma_splitter(""), ("", ""))
+
     async def test_splits_first_sentence_at_comma(self):
         divider = SentenceDivider(faster_first_response=True, segment_method="regex")
 

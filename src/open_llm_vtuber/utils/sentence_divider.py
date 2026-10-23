@@ -176,7 +176,7 @@ def comma_splitter(text: str) -> Tuple[str, str]:
         Tuple[str, str]: (split text with comma, remaining text)
     """
     if not text:
-        return [], ""
+        return "", ""
 
     bracket_depth = 0
     parenthesis_depth = 0
@@ -379,6 +379,7 @@ class SentenceDivider:
         self._buffer = ""
         # Replace active_tags dict with a stack to handle nesting
         self._tag_stack = []
+        self._full_response = []
 
     def _get_current_tags(self) -> List[TagInfo]:
         """
