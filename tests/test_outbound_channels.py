@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 try:
     from open_llm_vtuber.agent.output_types import Actions, DisplayText
     from open_llm_vtuber.conversations import conversation_utils
-    from open_llm_vtuber.conversations.types import OutboundChannels
+    from open_llm_vtuber.conversations.types import BroadcastContext, OutboundChannels
 except ImportError as exc:
     raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
 
@@ -111,6 +111,40 @@ class OutboundChannelTests(unittest.IsolatedAsyncioTestCase):
             [
                 {"type": "force-new-message"},
                 {"type": "control", "text": "conversation-chain-end"},
+            ],
+        )
+
+    async def test_finalize_excludes_current_member_from_chain_end(self):
+        channels, _, _ = self.make_channels()
+        manager = _TTSManager()
+        broadcast = AsyncMock()
+        broadcast_ctx = BroadcastContext(
+            broadcast_func=broadcast,
+            group_members=["a", "b"],
+            current_client_uid="a",
+        )
+
+        with patch.object(
+            conversation_utils.message_handler,
+            "wait_for_response",
+            new=AsyncMock(return_value=True),
+        ):
+            await conversation_utils.finalize_conversation_turn(
+                tts_manager=manager,
+                channels=channels,
+                client_uid="a",
+                broadcast_ctx=broadcast_ctx,
+            )
+
+        self.assertEqual(
+            [call.args for call in broadcast.await_args_list],
+            [
+                (["a", "b"], {"type": "force-new-message"}, "a"),
+                (
+                    ["a", "b"],
+                    {"type": "control", "text": "conversation-chain-end"},
+                    "a",
+                ),
             ],
         )
 

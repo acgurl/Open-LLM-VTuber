@@ -374,6 +374,7 @@ async def send_conversation_end_signal(
         await broadcast_ctx.broadcast_func(
             broadcast_ctx.group_members,
             chain_end_msg,
+            broadcast_ctx.current_client_uid,
         )
 
     logger.info(f"😎👍✅ Conversation Chain {session_emoji} completed!")
