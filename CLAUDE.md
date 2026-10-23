@@ -112,7 +112,7 @@ The codebase uses the missing `_cleanup_failed_connection` method pattern - when
 - **Main server**: `src/open_llm_vtuber/server.py`
 - **WebSocket routing**: `src/open_llm_vtuber/routes.py`
 - **Configuration**: `conf.yaml` (user), `config_templates/` (defaults)
-- **Frontend**: `frontend/` (Git submodule)
+- **Frontend source**: `web/` (React 18 + Vite + TypeScript; `npm run build` → `web/dist`, copied into the `frontend/` submodule for serving). Run `cp -r ../frontend/libs public/libs` once before the first build — those binaries are not tracked.
 - **Live2D models**: `live2d-models/`
 - **Character definitions**: `characters/`
 - **Chat history**: `data/storage/open_llm_vtuber.db` (SQLite; legacy `chat_history/` JSON is imported and moved to `data/storage/legacy_history/` on first start)

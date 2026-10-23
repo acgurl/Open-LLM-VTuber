@@ -1,0 +1,118 @@
+{
+  "app": {
+    "title": "Open-LLM-VTuber"
+  },
+  "status": {
+    "connecting": "连接中…",
+    "online": "已连接",
+    "reconnecting": "连接断开，重连中…",
+    "offline": "离线",
+    "thinking": "思考中…",
+    "proactive": "AI 想主动说点什么…",
+    "connectionEstablished": "连接已建立",
+    "listening": "正在聆听…",
+    "speaking": "正在说话…",
+    "switching": "切换角色中…",
+    "micStarting": "麦克风启动中…"
+  },
+  "input": {
+    "placeholder": "说点什么…",
+    "send": "发送",
+    "stop": "打断",
+    "mic": "麦克风",
+    "micOn": "关闭麦克风",
+    "micOff": "打开麦克风",
+    "uploadImage": "附加图片",
+    "sourceUpload": "上传图片",
+    "sourceCamera": "拍照",
+    "sourceScreen": "屏幕截图",
+    "imageTooMany": "最多附加 4 张图片",
+    "imageTooLarge": "图片过大（单张上限 8 MiB）",
+    "tooLong": "消息过长（上限 4000 字）"
+  },
+  "subtitle": {
+    "you": "你"
+  },
+  "camera": {
+    "start": "开启摄像头",
+    "stop": "关闭摄像头",
+    "live": "实况"
+  },
+  "history": {
+    "title": "历史记录",
+    "new": "新对话",
+    "empty": "还没有历史记录",
+    "unavailable": "历史不可用",
+    "delete": "删除",
+    "confirmDelete": "确认删除这条历史？",
+    "open": "打开"
+  },
+  "settings": {
+    "title": "设置",
+    "character": "角色",
+    "background": "背景",
+    "noBackground": "无背景",
+    "subtitles": "字幕",
+    "language": "语言",
+    "account": "账户",
+    "logout": "退出登录",
+    "group": "群聊",
+    "speech": "语音",
+    "proactiveSpeak": "让 AI 主动说话"
+  },
+  "group": {
+    "title": "群聊",
+    "members": "成员",
+    "owner": "群主",
+    "you": "我",
+    "inviteHint": "在另一个标签页打开本页面，然后把它的连接 ID 粘贴到这里邀请。",
+    "thisId": "本页连接 ID",
+    "invitePlaceholder": "对方的 client_uid",
+    "invite": "邀请",
+    "remove": "移出",
+    "leave": "退出群聊",
+    "notInGroup": "当前不在任何群聊中",
+    "refresh": "刷新"
+  },
+  "tool": {
+    "running": "调用中",
+    "completed": "已完成",
+    "error": "出错"
+  },
+  "think": {
+    "label": "思考过程"
+  },
+  "error": {
+    "title": "提示",
+    "authRequired": "登录已失效，正在跳转登录…",
+    "originNotAllowed": "连接被拒绝：部署非同源",
+    "serverBusy": "服务器繁忙，请稍后再试",
+    "tooManyConnections": "连接数超限，请关闭其它标签页后重试",
+    "micPermissionDenied": "麦克风权限被拒绝",
+    "micNoDevice": "未检测到麦克风设备",
+    "micInUse": "麦克风被其它应用占用",
+    "micInsecure": "麦克风需要 HTTPS 环境",
+    "micTimeout": "麦克风启动超时，请检查权限设置",
+    "micSlow": "麦克风启动较慢，请确认已允许权限",
+    "camPermissionDenied": "摄像头权限被拒绝",
+    "camNoDevice": "未检测到摄像头设备",
+    "camInUse": "摄像头被其它应用占用",
+    "camInsecure": "摄像头需要 HTTPS 环境",
+    "audioTooLong": "录音过长，已被丢弃，请重录",
+    "switchFailed": "角色切换失败，请重试",
+    "generic": "出错了"
+  },
+  "server": {
+    "Server is busy, please try again shortly": "服务器繁忙，请稍后再试",
+    "Audio input is too long; the recording was discarded": "录音过长，已被丢弃，请重录",
+    "Failed to switch configuration": "角色切换失败，请重试",
+    "Invalid request": "请求无效",
+    "Cannot group clients belonging to different users": "不能把不同账户的连接拉进群聊",
+    "Only group owner or self can remove members": "只有群主或本人可以移出成员"
+  },
+  "drawer": {
+    "history": "历史",
+    "settings": "设置",
+    "close": "关闭"
+  }
+}

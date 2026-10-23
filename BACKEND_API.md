@@ -978,6 +978,11 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 - [ ] 渲染 `user-input-transcription`
 - [ ] 打断按钮：停播放 + 发 `interrupt-signal`（`text` = 已听到的文本）
 
+**图片输入（可选）**
+
+- [ ] `text-input` 与 `mic-audio-end` 都可带 `images`（≤4 张、单张 base64 ≤8 MiB 字符、`source` ∈ camera/screen/shared/clipboard/upload）
+- [ ] 实况摄像头窗口：常驻预览流，每轮语音结束时抓一帧随 `mic-audio-end` 发出；窗口关闭时不带 `images` 字段
+
 **Live2D / 表现层**
 
 - [ ] 用 `model_info.url` 加载模型，`kScale`/`kXOffset`/`initialXshift`/`initialYshift` 定位

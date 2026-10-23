@@ -1,0 +1,118 @@
+{
+  "app": {
+    "title": "Open-LLM-VTuber"
+  },
+  "status": {
+    "connecting": "Connecting…",
+    "online": "Connected",
+    "reconnecting": "Disconnected, reconnecting…",
+    "offline": "Offline",
+    "thinking": "Thinking…",
+    "proactive": "AI wants to speak something…",
+    "connectionEstablished": "Connection established",
+    "listening": "Listening…",
+    "speaking": "Speaking…",
+    "switching": "Switching character…",
+    "micStarting": "Starting microphone…"
+  },
+  "input": {
+    "placeholder": "Say something…",
+    "send": "Send",
+    "stop": "Interrupt",
+    "mic": "Microphone",
+    "micOn": "Turn microphone off",
+    "micOff": "Turn microphone on",
+    "uploadImage": "Attach image",
+    "sourceUpload": "Upload image",
+    "sourceCamera": "Camera",
+    "sourceScreen": "Screenshot",
+    "imageTooMany": "At most 4 images per message",
+    "imageTooLarge": "Image too large (8 MiB max each)",
+    "tooLong": "Message too long (4000 chars max)"
+  },
+  "subtitle": {
+    "you": "You"
+  },
+  "camera": {
+    "start": "Start camera",
+    "stop": "Stop camera",
+    "live": "LIVE"
+  },
+  "history": {
+    "title": "History",
+    "new": "New chat",
+    "empty": "No history yet",
+    "unavailable": "History unavailable",
+    "delete": "Delete",
+    "confirmDelete": "Delete this conversation?",
+    "open": "Open"
+  },
+  "settings": {
+    "title": "Settings",
+    "character": "Character",
+    "background": "Background",
+    "noBackground": "None",
+    "subtitles": "Subtitles",
+    "language": "Language",
+    "account": "Account",
+    "logout": "Log out",
+    "group": "Group chat",
+    "speech": "Speech",
+    "proactiveSpeak": "Let AI speak first"
+  },
+  "group": {
+    "title": "Group chat",
+    "members": "Members",
+    "owner": "Owner",
+    "you": "Me",
+    "inviteHint": "Open this page in another tab and paste its connection ID here to invite it.",
+    "thisId": "This tab's connection ID",
+    "invitePlaceholder": "Peer client_uid",
+    "invite": "Invite",
+    "remove": "Remove",
+    "leave": "Leave group",
+    "notInGroup": "Not in any group",
+    "refresh": "Refresh"
+  },
+  "tool": {
+    "running": "Running",
+    "completed": "Completed",
+    "error": "Failed"
+  },
+  "think": {
+    "label": "Thinking"
+  },
+  "error": {
+    "title": "Notice",
+    "authRequired": "Session expired, redirecting to login…",
+    "originNotAllowed": "Connection refused: deployment is not same-origin",
+    "serverBusy": "Server is busy, please retry shortly",
+    "tooManyConnections": "Too many connections; close other tabs and retry",
+    "micPermissionDenied": "Microphone permission denied",
+    "micNoDevice": "No microphone found",
+    "micInUse": "Microphone is used by another app",
+    "micInsecure": "Microphone requires HTTPS",
+    "micTimeout": "Microphone start timed out; check permissions",
+    "micSlow": "Microphone is slow to start; please grant permission",
+    "camPermissionDenied": "Camera permission denied",
+    "camNoDevice": "No camera found",
+    "camInUse": "Camera is used by another app",
+    "camInsecure": "Camera requires HTTPS",
+    "audioTooLong": "Recording too long and was discarded; please re-record",
+    "switchFailed": "Failed to switch character",
+    "generic": "Something went wrong"
+  },
+  "server": {
+    "Server is busy, please try again shortly": "Server is busy, please retry shortly",
+    "Audio input is too long; the recording was discarded": "Recording too long and was discarded; please re-record",
+    "Failed to switch configuration": "Failed to switch character",
+    "Invalid request": "Invalid request",
+    "Cannot group clients belonging to different users": "Cannot group clients of different users",
+    "Only group owner or self can remove members": "Only the owner or the member themself can remove"
+  },
+  "drawer": {
+    "history": "History",
+    "settings": "Settings",
+    "close": "Close"
+  }
+}
