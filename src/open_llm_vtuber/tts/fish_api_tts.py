@@ -1,3 +1,4 @@
+import os
 from typing import Literal
 from fish_audio_sdk import Session, TTSRequest
 from loguru import logger
@@ -55,6 +56,11 @@ class TTSEngine(TTSInterface):
 
         except Exception as e:
             logger.critical(f"\nError: Fish TTS API fail to generate audio: {e}")
+            if os.path.exists(file_name):
+                try:
+                    os.remove(file_name)
+                except OSError as rm_err:
+                    logger.error(f"Could not remove incomplete file: {rm_err}")
             return None
 
         return file_name

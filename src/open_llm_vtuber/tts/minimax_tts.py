@@ -81,9 +81,18 @@ class TTSEngine(TTSInterface):
                                     audio += decoded
                         except Exception as e:
                             logger.error(f"Failed to parse audio chunk: {e}")
+            if not audio:
+                logger.error("Minimax TTS returned no audio data")
+                return None
+
             with open(file_name, "wb") as f:
                 f.write(audio)
             return file_name
         except Exception as e:
             logger.error(f"Exception in minimax_tts generate_audio: {e}")
+            if os.path.exists(file_name):
+                try:
+                    os.remove(file_name)
+                except OSError as rm_err:
+                    logger.error(f"Could not remove incomplete file: {rm_err}")
             return None
