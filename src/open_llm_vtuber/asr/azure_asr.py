@@ -88,8 +88,8 @@ class VoiceRecognition(ASRInterface):
                 speech_config=self.speech_config, audio_config=audio_config
             )
 
-            # Perform recognition
-            result = speech_recognizer.recognize_once()
+            # Perform recognition off the event loop
+            result = await asyncio.to_thread(speech_recognizer.recognize_once)
 
             if result.reason == speechsdk.ResultReason.RecognizedSpeech:
                 # Get detected language
@@ -137,18 +137,25 @@ class VoiceRecognition(ASRInterface):
         Raises:
             Exception: If transcription fails
         """
+        created_loop = False
+        loop = None
         try:
             try:
                 loop = asyncio.get_event_loop()
             except RuntimeError:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
+                created_loop = True
 
             # Run async method synchronously
             return loop.run_until_complete(self.async_transcribe_np(audio))
         except Exception as e:
             logger.error(f"Transcription failed: {e}")
             raise
+        finally:
+            if created_loop and loop is not None:
+                loop.close()
+                asyncio.set_event_loop(None)
 
 
 if __name__ == "__main__":

@@ -164,7 +164,7 @@ class VoiceRecognition(ASRInterface):
             )
         elif self.model_type == "sense_voice":
             if not self.sense_voice or not os.path.isfile(self.sense_voice):
-                if self.sense_voice.startswith(
+                if self.sense_voice and self.sense_voice.startswith(
                     "./models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
                 ):
                     logger.warning(
@@ -185,10 +185,12 @@ class VoiceRecognition(ASRInterface):
                     #     url="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2",
                     #     output_dir="./models",
                     # )
-                else:
-                    logger.critical(
-                        "The SenseVoice model is missing. Please provide the path to the model.onnx file."
-                    )
+
+            if not self.sense_voice or not os.path.isfile(self.sense_voice):
+                raise FileNotFoundError(
+                    "The SenseVoice model is missing. Please provide the path to the model.onnx file."
+                )
+
             recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
                 model=self.sense_voice,
                 tokens=self.tokens,
