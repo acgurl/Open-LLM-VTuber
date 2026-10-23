@@ -679,7 +679,10 @@ class WebSocketHandler:
                         return
                     self.received_data_buffers[client_uid] = np.append(
                         buffer,
-                        np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32),
+                        # VAD yields int16 PCM bytes; ASR engines and the
+                        # mic-audio-data path both expect [-1, 1] floats.
+                        np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
+                        / 32768.0,
                     )
                     await websocket.send_text(
                         json.dumps({"type": "control", "text": "mic-audio-end"})
