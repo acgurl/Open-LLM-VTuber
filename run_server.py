@@ -47,6 +47,42 @@ def init_logger(console_log_level: str = "INFO") -> None:
     )
 
 
+_FRONTEND_MESSAGES = {
+    "missing": {
+        "zh": "未找到前端子模块，正在尝试初始化子模块...",
+        "en": "Frontend submodule not found, attempting to initialize submodules...",
+    },
+    "success": {
+        "zh": "👍 前端子模块（和其他子模块）初始化成功。",
+        "en": "👍 Frontend submodule (and other submodules) initialized successfully.",
+    },
+    "still_missing_critical": {
+        "zh": '子模块初始化失败。\n你之后可能会在浏览器中看到 {{"detail":"Not Found"}} 的错误提示。请检查我们的快速入门指南和常见问题页面以获取更多信息。',
+        "en": 'Failed to initialize submodules. \nYou might see {{"detail":"Not Found"}} in your browser. Please check our quick start guide and common issues page from our documentation.',
+    },
+    "still_missing_hint": {
+        "zh": "初始化子模块后，前端文件仍然缺失。\n"
+        "你是否手动更改或删除了 `frontend` 文件夹？\n"
+        "它是一个 Git 子模块 - 你不应该直接修改它。\n"
+        "如果你这样做了，请使用 `git restore frontend` 丢弃你的更改，然后再试一次。\n",
+        "en": "Frontend files are still missing after submodule initialization.\n"
+        "Did you manually change or delete the `frontend` folder?  \n"
+        "It's a Git submodule — you shouldn't modify it directly.  \n"
+        "If you did, discard your changes with `git restore frontend`, then try again.\n",
+    },
+    "init_failed": {
+        "zh": '初始化子模块失败: {error}。\n怀疑你跟 GitHub 之间有网络问题。你之后可能会在浏览器中看到 {{"detail":"Not Found"}} 的错误提示。请检查我们的快速入门指南和常见问题页面以获取更多信息。\n',
+        "en": 'Failed to initialize submodules: {error}. \nYou might see {{"detail":"Not Found"}} in your browser. Please check our quick start guide and common issues page from our documentation.\n',
+    },
+}
+
+
+def _frontend_message(lang, key: str, **kwargs) -> str:
+    messages = _FRONTEND_MESSAGES[key]
+    template = messages.get(lang or "", messages["en"])
+    return template.replace("{error}", str(kwargs.get("error", "")))
+
+
 def check_frontend_submodule(lang=None):
     """
     Check if the frontend submodule is initialized. If not, attempt to initialize it.
@@ -57,54 +93,19 @@ def check_frontend_submodule(lang=None):
 
     frontend_path = Path(__file__).parent / "frontend" / "index.html"
     if not frontend_path.exists():
-        if lang == "zh":
-            logger.warning("未找到前端子模块，正在尝试初始化子模块...")
-        else:
-            logger.warning(
-                "Frontend submodule not found, attempting to initialize submodules..."
-            )
+        logger.warning(_frontend_message(lang, "missing"))
 
         try:
             subprocess.run(
                 ["git", "submodule", "update", "--init", "--recursive"], check=True
             )
             if frontend_path.exists():
-                if lang == "zh":
-                    logger.info("👍 前端子模块（和其他子模块）初始化成功。")
-                else:
-                    logger.info(
-                        "👍 Frontend submodule (and other submodules) initialized successfully."
-                    )
+                logger.info(_frontend_message(lang, "success"))
             else:
-                if lang == "zh":
-                    logger.critical(
-                        '子模块初始化失败。\n你之后可能会在浏览器中看到 {{"detail":"Not Found"}} 的错误提示。请检查我们的快速入门指南和常见问题页面以获取更多信息。'
-                    )
-                    logger.error(
-                        "初始化子模块后，前端文件仍然缺失。\n"
-                        + "你是否手动更改或删除了 `frontend` 文件夹？\n"
-                        + "它是一个 Git 子模块 - 你不应该直接修改它。\n"
-                        + "如果你这样做了，请使用 `git restore frontend` 丢弃你的更改，然后再试一次。\n"
-                    )
-                else:
-                    logger.critical(
-                        'Failed to initialize submodules. \nYou might see {{"detail":"Not Found"}} in your browser. Please check our quick start guide and common issues page from our documentation.'
-                    )
-                    logger.error(
-                        "Frontend files are still missing after submodule initialization.\n"
-                        + "Did you manually change or delete the `frontend` folder?  \n"
-                        + "It's a Git submodule — you shouldn't modify it directly.  \n"
-                        + "If you did, discard your changes with `git restore frontend`, then try again.\n"
-                    )
+                logger.critical(_frontend_message(lang, "still_missing_critical"))
+                logger.error(_frontend_message(lang, "still_missing_hint"))
         except Exception as e:
-            if lang == "zh":
-                logger.critical(
-                    f'初始化子模块失败: {e}。\n怀疑你跟 GitHub 之间有网络问题。你之后可能会在浏览器中看到 {{"detail":"Not Found"}} 的错误提示。请检查我们的快速入门指南和常见问题页面以获取更多信息。\n'
-                )
-            else:
-                logger.critical(
-                    f'Failed to initialize submodules: {e}. \nYou might see {{"detail":"Not Found"}} in your browser. Please check our quick start guide and common issues page from our documentation.\n'
-                )
+            logger.critical(_frontend_message(lang, "init_failed", error=e))
 
 
 def parse_args():
