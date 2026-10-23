@@ -96,6 +96,19 @@ class ToolLoopStateTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(self.added, [("A", "assistant"), ("B", "assistant")])
 
+    async def test_switches_to_prompt_mode_without_tool_manager_disable(self):
+        agent = self.agent
+        agent.prompt_mode_flag = False
+        agent._mcp_prompt_string = ""
+        agent._json_detector = StreamJSONDetector()
+        agent._tool_manager = object()
+        agent._llm = _UnsupportedToolsLLM()
+
+        _ = [item async for item in agent._openai_tool_interaction_loop([], [])]
+
+        self.assertTrue(agent.prompt_mode_flag)
+        self.assertIn(("hello", "assistant"), self.added)
+
     async def test_prompt_mode_resets_json_detector_after_success(self):
         agent = self.agent
         agent.prompt_mode_flag = True
@@ -133,6 +146,25 @@ class _PromptModeLLM:
 class _PromptModeToolExecutor:
     def process_tool_from_prompt_json(self, _detected):
         return []
+
+
+class _UnsupportedToolsLLM:
+    def __init__(self):
+        self.calls = 0
+
+    def chat_completion(self, _messages, _system, tools=None):
+        self.calls += 1
+        if self.calls == 1:
+
+            async def unsupported():
+                yield "__API_NOT_SUPPORT_TOOLS__"
+
+            return unsupported()
+
+        async def text_round():
+            yield "hello"
+
+        return text_round()
 
 
 if __name__ == "__main__":

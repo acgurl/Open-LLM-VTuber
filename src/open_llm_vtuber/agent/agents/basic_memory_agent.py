@@ -512,7 +512,16 @@ class BasicMemoryAgent(AgentInterface):
                                     break
                         yield event
                 else:
-                    if isinstance(event, str):
+                    if event == "__API_NOT_SUPPORT_TOOLS__":
+                        logger.warning(
+                            f"LLM {getattr(self._llm, 'model', '')} has no native tool support. Switching to prompt mode."
+                        )
+                        self.prompt_mode_flag = True
+                        if self._json_detector:
+                            self._json_detector.reset()
+                        goto_next_while_iteration = True
+                        break
+                    elif isinstance(event, str):
                         current_turn_text += event
                         yield event
                     elif isinstance(event, list) and all(
@@ -534,17 +543,6 @@ class BasicMemoryAgent(AgentInterface):
                                 for tc in pending_tool_calls
                             ],
                         }
-                        break
-                    elif event == "__API_NOT_SUPPORT_TOOLS__":
-                        logger.warning(
-                            f"LLM {getattr(self._llm, 'model', '')} has no native tool support. Switching to prompt mode."
-                        )
-                        self.prompt_mode_flag = True
-                        if self._tool_manager:
-                            self._tool_manager.disable()
-                        if self._json_detector:
-                            self._json_detector.reset()
-                        goto_next_while_iteration = True
                         break
             if goto_next_while_iteration:
                 continue
