@@ -1,7 +1,6 @@
-from typing import List, Dict, Callable, Optional, TypedDict, Awaitable, ClassVar
+from typing import List, Dict, Callable, Optional, Awaitable, ClassVar
 from dataclasses import dataclass, field
 
-from ..agent.output_types import Actions, DisplayText
 
 # Type definitions
 WebSocketSend = Callable[[str], Awaitable[None]]
@@ -19,19 +18,6 @@ class OutboundChannels:
     def from_text(cls, send: WebSocketSend) -> "OutboundChannels":
         """Use one socket for both text and audio."""
         return cls(text=send, audio=send)
-
-
-class AudioPayload(TypedDict):
-    """Type definition for audio payload"""
-
-    type: str
-    audio: Optional[str]
-    volumes: Optional[List[float]]
-    slice_length: Optional[int]
-    display_text: Optional[DisplayText]
-    actions: Optional[Actions]
-    forwarded: Optional[bool]
-    streamed: Optional[bool]
 
 
 @dataclass

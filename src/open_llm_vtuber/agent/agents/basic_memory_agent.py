@@ -10,7 +10,7 @@ from typing import (
 )
 from loguru import logger
 from .agent_interface import AgentInterface
-from ..output_types import SentenceOutput, DisplayText
+from ..output_types import SentenceOutput
 from ..stateless_llm.stateless_llm_interface import StatelessLLMInterface
 from ..stateless_llm.claude_llm import AsyncLLM as ClaudeAsyncLLM
 from ..stateless_llm.openai_compatible_llm import AsyncLLM as OpenAICompatibleAsyncLLM
@@ -160,13 +160,8 @@ class BasicMemoryAgent(AgentInterface):
         self,
         message: Union[str, List[Dict[str, Any]]],
         role: str,
-        display_text: DisplayText | None = None,
-        skip_memory: bool = False,
     ):
         """Add message to memory."""
-        if skip_memory:
-            return
-
         text_content = ""
         if isinstance(message, list):
             for item in message:
@@ -188,12 +183,6 @@ class BasicMemoryAgent(AgentInterface):
             "role": role,
             "content": text_content,
         }
-
-        if display_text:
-            if display_text.name:
-                message_data["name"] = display_text.name
-            if display_text.avatar:
-                message_data["avatar"] = display_text.avatar
 
         if (
             self._memory
