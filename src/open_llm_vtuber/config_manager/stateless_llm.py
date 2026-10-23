@@ -22,69 +22,54 @@ class StatelessLLMBaseConfig(I18nMixin):
     }
 
 
-class StatelessLLMWithTemplate(StatelessLLMBaseConfig):
-    """Configuration for OpenAI-compatible LLM providers."""
+_OPENAI_COMPATIBLE_DESCRIPTIONS: ClassVar[dict[str, Description]] = {
+    "base_url": Description(en="Base URL for the API endpoint", zh="API的URL端点"),
+    "llm_api_key": Description(en="API key for authentication", zh="API 认证密钥"),
+    "organization_id": Description(
+        en="Organization ID for the API (Optional)", zh="组织 ID (可选)"
+    ),
+    "project_id": Description(
+        en="Project ID for the API (Optional)", zh="项目 ID (可选)"
+    ),
+    "model": Description(en="Name of the LLM model to use", zh="LLM 模型名称"),
+    "temperature": Description(
+        en="What sampling temperature to use, between 0 and 2.",
+        zh="使用的采样温度，介于 0 和 2 之间。",
+    ),
+}
+
+
+class OpenAICompatibleBase(StatelessLLMBaseConfig):
+    """Shared fields for OpenAI-compatible providers."""
 
     base_url: str = Field(..., alias="base_url")
     llm_api_key: str = Field(..., alias="llm_api_key")
     model: str = Field(..., alias="model")
     organization_id: str | None = Field(None, alias="organization_id")
     project_id: str | None = Field(None, alias="project_id")
+    temperature: float = Field(1.0, alias="temperature")
+
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
+        **StatelessLLMBaseConfig.DESCRIPTIONS,
+        **_OPENAI_COMPATIBLE_DESCRIPTIONS,
+    }
+
+
+class StatelessLLMWithTemplate(OpenAICompatibleBase):
+    """Configuration for template-based OpenAI-compatible providers."""
+
     template: str | None = Field(None, alias="template")
-    temperature: float = Field(1.0, alias="temperature")
-
-    _OPENAI_COMPATIBLE_DESCRIPTIONS: ClassVar[dict[str, Description]] = {
-        "base_url": Description(en="Base URL for the API endpoint", zh="API的URL端点"),
-        "llm_api_key": Description(en="API key for authentication", zh="API 认证密钥"),
-        "organization_id": Description(
-            en="Organization ID for the API (Optional)", zh="组织 ID (可选)"
-        ),
-        "project_id": Description(
-            en="Project ID for the API (Optional)", zh="项目 ID (可选)"
-        ),
-        "model": Description(en="Name of the LLM model to use", zh="LLM 模型名称"),
-        "temperature": Description(
-            en="What sampling temperature to use, between 0 and 2.",
-            zh="使用的采样温度，介于 0 和 2 之间。",
-        ),
-    }
 
     DESCRIPTIONS: ClassVar[dict[str, Description]] = {
-        **StatelessLLMBaseConfig.DESCRIPTIONS,
-        **_OPENAI_COMPATIBLE_DESCRIPTIONS,
+        **OpenAICompatibleBase.DESCRIPTIONS,
+        "template": Description(
+            en="Prompt template name for the provider", zh="提供者使用的提示词模板名称"
+        ),
     }
 
 
-class OpenAICompatibleConfig(StatelessLLMBaseConfig):
+class OpenAICompatibleConfig(OpenAICompatibleBase):
     """Configuration for OpenAI-compatible LLM providers."""
-
-    base_url: str = Field(..., alias="base_url")
-    llm_api_key: str = Field(..., alias="llm_api_key")
-    model: str = Field(..., alias="model")
-    organization_id: str | None = Field(None, alias="organization_id")
-    project_id: str | None = Field(None, alias="project_id")
-    temperature: float = Field(1.0, alias="temperature")
-
-    _OPENAI_COMPATIBLE_DESCRIPTIONS: ClassVar[dict[str, Description]] = {
-        "base_url": Description(en="Base URL for the API endpoint", zh="API的URL端点"),
-        "llm_api_key": Description(en="API key for authentication", zh="API 认证密钥"),
-        "organization_id": Description(
-            en="Organization ID for the API (Optional)", zh="组织 ID (可选)"
-        ),
-        "project_id": Description(
-            en="Project ID for the API (Optional)", zh="项目 ID (可选)"
-        ),
-        "model": Description(en="Name of the LLM model to use", zh="LLM 模型名称"),
-        "temperature": Description(
-            en="What sampling temperature to use, between 0 and 2.",
-            zh="使用的采样温度，介于 0 和 2 之间。",
-        ),
-    }
-
-    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
-        **StatelessLLMBaseConfig.DESCRIPTIONS,
-        **_OPENAI_COMPATIBLE_DESCRIPTIONS,
-    }
 
 
 # Ollama config is completely the same as OpenAICompatibleConfig
@@ -148,18 +133,12 @@ class GeminiConfig(OpenAICompatibleConfig):
     base_url: str = Field(
         "https://generativelanguage.googleapis.com/v1beta/openai/", alias="base_url"
     )
-    interrupt_method: Literal["system", "user"] = Field(
-        "user", alias="interrupt_method"
-    )
 
 
 class MistralConfig(OpenAICompatibleConfig):
     """Configuration for Mistral API."""
 
     base_url: str = Field("https://api.mistral.ai/v1", alias="base_url")
-    interrupt_method: Literal["system", "user"] = Field(
-        "user", alias="interrupt_method"
-    )
 
 
 class ZhipuConfig(OpenAICompatibleConfig):
@@ -189,9 +168,6 @@ class ClaudeConfig(StatelessLLMBaseConfig):
     base_url: str = Field("https://api.anthropic.com", alias="base_url")
     llm_api_key: str = Field(..., alias="llm_api_key")
     model: str = Field(..., alias="model")
-    interrupt_method: Literal["system", "user"] = Field(
-        "user", alias="interrupt_method"
-    )
 
     _CLAUDE_DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "base_url": Description(
