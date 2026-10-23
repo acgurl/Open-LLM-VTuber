@@ -1,5 +1,4 @@
 import asyncio
-import re
 from typing import Awaitable, Callable, Optional, Union, Any, List, Dict
 import numpy as np
 import json
@@ -14,6 +13,7 @@ from ..asr.asr_interface import ASRInterface
 from ..live2d_model import Live2dModel
 from ..tts.tts_interface import TTSInterface
 from ..utils.stream_audio import prepare_audio_payload
+from ..utils.text import is_silent_text
 
 
 PLAYBACK_COMPLETE_TIMEOUT_SECONDS = 120.0
@@ -185,7 +185,7 @@ async def handle_sentence_output(
         logger.debug(f"🏃 Processing output: '''{tts_text}'''...")
 
         if translate_engine:
-            if len(re.sub(r'[\s.,!?，。！？\'"』」）】\s]+', "", tts_text)):
+            if not is_silent_text(tts_text):
                 tts_text = translate_engine.translate(tts_text)
             logger.info(f"🏃 Text after translation: '''{tts_text}'''...")
         else:

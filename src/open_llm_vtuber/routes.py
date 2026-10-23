@@ -3,7 +3,6 @@ import json
 import re
 import asyncio
 from uuid import uuid4
-from datetime import datetime
 from fastapi import APIRouter, WebSocket, UploadFile, File, Response
 from starlette.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
@@ -11,7 +10,12 @@ from loguru import logger
 from .service_context import ServiceContext
 from .websocket_handler import WebSocketHandler
 from .proxy_handler import ProxyHandler
-from .utils.audio import ASR_SAMPLE_RATE, MAX_AUDIO_SECONDS, decode_pcm_wav
+from .utils.audio import (
+    ASR_SAMPLE_RATE,
+    MAX_AUDIO_SECONDS,
+    decode_pcm_wav,
+    new_audio_file_stem,
+)
 
 
 MAX_ASR_UPLOAD_BYTES = 10 * 1024 * 1024
@@ -48,9 +52,8 @@ def _with_terminal_punctuation(sentence: str) -> str:
 async def _stream_tts_sentences(websocket: WebSocket, tts_engine, sentences) -> None:
     for sentence in sentences:
         sentence = _with_terminal_punctuation(sentence)
-        file_name = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid4())[:8]}"
         audio_path = await tts_engine.async_generate_audio(
-            text=sentence, file_name_no_ext=file_name
+            text=sentence, file_name_no_ext=new_audio_file_stem()
         )
         logger.info(f"Generated audio for sentence at: {audio_path}")
         await websocket.send_json(

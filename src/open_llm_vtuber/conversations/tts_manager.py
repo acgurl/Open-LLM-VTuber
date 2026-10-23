@@ -1,26 +1,20 @@
 import asyncio
 import json
-import re
 import time
-import uuid
-from datetime import datetime
 from typing import List, Optional, Dict
 from loguru import logger
 
 from ..agent.output_types import DisplayText, Actions
 from ..live2d_model import Live2dModel
 from ..tts.tts_interface import TTSInterface
+from ..utils.audio import new_audio_file_stem
 from ..utils.stream_audio import prepare_audio_payload
+from ..utils.text import is_silent_text
 from .types import WebSocketSend
 
 
 TTS_SYNTHESIS_TIMEOUT_SECONDS = 30.0
 TTS_DELIVERY_TIMEOUT_SECONDS = 10.0
-_SILENT_TEXT_PATTERN = re.compile(r'[\s.,!?，。！？\'"』」）】\s]+')
-
-
-def _is_silent_text(text: str) -> bool:
-    return not _SILENT_TEXT_PATTERN.sub("", text)
 
 
 class TTSTaskManager:
@@ -62,7 +56,7 @@ class TTSTaskManager:
         self._ensure_sender(audio_send)
         current_sequence = self._next_sequence()
 
-        if _is_silent_text(tts_text):
+        if is_silent_text(tts_text):
             logger.debug("Empty TTS text, sending silent display payload")
             await self._send_silent_payload(
                 display_text, actions, current_sequence, streamed
@@ -203,7 +197,7 @@ class TTSTaskManager:
         logger.debug(f"🏃Generating audio for '''{text}'''...")
         return await tts_engine.async_generate_audio(
             text=text,
-            file_name_no_ext=f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}",
+            file_name_no_ext=new_audio_file_stem(),
         )
 
     async def wait_for_delivery(

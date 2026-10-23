@@ -1,9 +1,16 @@
-"""Audio input validation helpers."""
+"""Audio helpers."""
 
 import io
+import uuid
 import wave
+from datetime import datetime
 
 import numpy as np
+
+
+def new_audio_file_stem() -> str:
+    """Build a unique cache file stem for a generated audio file."""
+    return f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
 
 
 ASR_SAMPLE_RATE = 16000
