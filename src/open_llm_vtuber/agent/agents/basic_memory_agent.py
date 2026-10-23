@@ -331,6 +331,23 @@ class BasicMemoryAgent(AgentInterface):
 
         return messages
 
+    async def _drain_tool_executor(
+        self,
+        tool_executor_iterator: AsyncIterator[Dict[str, Any]],
+        results: List[Dict[str, Any]],
+        label: str,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Forward executor updates and collect the final tool results."""
+        try:
+            while True:
+                update = await anext(tool_executor_iterator)
+                if update.get("type") == "final_tool_results":
+                    results.extend(update.get("results", []))
+                    return
+                yield update
+        except StopAsyncIteration:
+            logger.warning(f"{label} finished without final results marker.")
+
     async def _claude_tool_interaction_loop(
         self,
         initial_messages: List[Dict[str, Any]],
@@ -421,18 +438,10 @@ class BasicMemoryAgent(AgentInterface):
                     tool_calls=pending_tool_calls,
                     caller_mode="Claude",
                 )
-                try:
-                    while True:
-                        update = await anext(tool_executor_iterator)
-                        if update.get("type") == "final_tool_results":
-                            tool_results_for_llm = update.get("results", [])
-                            break
-                        else:
-                            yield update
-                except StopAsyncIteration:
-                    logger.warning(
-                        "Tool executor finished without final results marker."
-                    )
+                async for update in self._drain_tool_executor(
+                    tool_executor_iterator, tool_results_for_llm, "Tool executor"
+                ):
+                    yield update
 
                 if tool_results_for_llm:
                     messages.append({"role": "user", "content": tool_results_for_llm})
@@ -559,18 +568,12 @@ class BasicMemoryAgent(AgentInterface):
                         tool_calls=parsed_tools,
                         caller_mode="Prompt",
                     )
-                    try:
-                        while True:
-                            update = await anext(tool_executor_iterator)
-                            if update.get("type") == "final_tool_results":
-                                tool_results_for_llm = update.get("results", [])
-                                break
-                            else:
-                                yield update
-                    except StopAsyncIteration:
-                        logger.warning(
-                            "Prompt mode tool executor finished without final results marker."
-                        )
+                    async for update in self._drain_tool_executor(
+                        tool_executor_iterator,
+                        tool_results_for_llm,
+                        "Prompt mode tool executor",
+                    ):
+                        yield update
 
                     if tool_results_for_llm:
                         result_strings = [
@@ -600,18 +603,10 @@ class BasicMemoryAgent(AgentInterface):
                     tool_calls=pending_tool_calls,
                     caller_mode="OpenAI",
                 )
-                try:
-                    while True:
-                        update = await anext(tool_executor_iterator)
-                        if update.get("type") == "final_tool_results":
-                            tool_results_for_llm = update.get("results", [])
-                            break
-                        else:
-                            yield update
-                except StopAsyncIteration:
-                    logger.warning(
-                        "OpenAI tool executor finished without final results marker."
-                    )
+                async for update in self._drain_tool_executor(
+                    tool_executor_iterator, tool_results_for_llm, "OpenAI tool executor"
+                ):
+                    yield update
 
                 if tool_results_for_llm:
                     messages.extend(tool_results_for_llm)
