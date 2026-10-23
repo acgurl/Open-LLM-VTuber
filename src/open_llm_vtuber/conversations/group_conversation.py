@@ -1,16 +1,12 @@
 from typing import Any, Dict, List, Optional, Union
 import asyncio
-import json
 from loguru import logger
 from fastapi import WebSocket
 import numpy as np
 
-from ..agent.output_types import AudioOutput, SentenceOutput
-
 from .conversation_utils import (
-    TextDeltaBuffer,
+    consume_agent_stream,
     create_batch_input,
-    process_agent_output,
     process_user_input,
     finalize_conversation_turn,
     cleanup_conversation,
@@ -343,74 +339,15 @@ async def process_member_response(
     group_members: Optional[List[str]] = None,
 ) -> str:
     """Process group member's response, handling text/audio and tool status events."""
-    full_response = ""
-    text_streamed = False
 
     async def send_text_delta(message: Dict[str, Any]) -> None:
         if broadcast_func and group_members:
             await broadcast_func(group_members, message)
 
-    text_delta_buffer = TextDeltaBuffer(
-        send=send_text_delta,
-        character_name=context.character_config.character_name,
-        avatar=context.character_config.avatar,
+    return await consume_agent_stream(
+        context.agent_engine.chat(batch_input),
+        context=context,
+        channels=channels,
+        tts_manager=tts_manager,
+        send_text_delta=send_text_delta,
     )
-
-    try:
-        # agent.chat now yields Union[SentenceOutput, Dict[str, Any]]
-        agent_output_stream = context.agent_engine.chat(batch_input)
-
-        async for output_item in agent_output_stream:
-            if (
-                isinstance(output_item, dict)
-                and output_item.get("type") == "text_delta"
-            ):
-                text_streamed = True
-                await text_delta_buffer.push(output_item.get("text", ""))
-
-            elif (
-                isinstance(output_item, dict)
-                and output_item.get("type") == "tool_call_status"
-            ):
-                await text_delta_buffer.flush()
-                if broadcast_func and group_members:
-                    logger.debug(f"Broadcasting tool status update: {output_item}")
-                    output_item["name"] = context.character_config.character_name
-                    await broadcast_func(group_members, output_item)
-                else:
-                    logger.warning(
-                        "Cannot broadcast tool status: broadcast_func or group_members missing."
-                    )
-            elif isinstance(output_item, (SentenceOutput, AudioOutput)):
-                # Handle SentenceOutput or AudioOutput: Send to current user, broadcast audio later if needed
-                await text_delta_buffer.flush()
-                response_part = await process_agent_output(
-                    output=output_item,
-                    character_config=context.character_config,
-                    live2d_model=context.live2d_model,
-                    tts_engine=context.tts_engine,
-                    channels=channels,
-                    tts_manager=tts_manager,
-                    translate_engine=context.translate_engine,
-                    streamed=text_streamed,
-                )
-                full_response += response_part  # Accumulate text response
-            else:
-                logger.warning(
-                    f"Received unexpected item type from agent chat stream: {type(output_item)}"
-                )
-
-        await text_delta_buffer.close()
-
-    except Exception as e:
-        logger.exception(f"Error processing group member response stream: {e}")
-        await text_delta_buffer.flush()
-        await channels.text(
-            json.dumps(
-                {"type": "error", "message": f"Error processing response: {str(e)}"}
-            )
-        )
-    finally:
-        text_delta_buffer.cancel()
-
-    return full_response

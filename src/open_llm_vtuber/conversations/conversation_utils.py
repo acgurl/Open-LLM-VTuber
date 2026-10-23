@@ -129,6 +129,71 @@ def create_batch_input(
     )
 
 
+async def consume_agent_stream(
+    agent_stream,
+    *,
+    context: Any,
+    channels: OutboundChannels,
+    tts_manager: TTSTaskManager,
+    send_text_delta: Callable[[Dict[str, Any]], Awaitable[None]],
+    error_prefix: str = "Error processing response",
+) -> str:
+    """Consume an agent stream, forwarding text deltas and TTS output."""
+    full_response = ""
+    text_streamed = False
+    text_delta_buffer = TextDeltaBuffer(
+        send=send_text_delta,
+        character_name=context.character_config.character_name,
+        avatar=context.character_config.avatar,
+    )
+
+    try:
+        async for output_item in agent_stream:
+            if (
+                isinstance(output_item, dict)
+                and output_item.get("type") == "text_delta"
+            ):
+                text_streamed = True
+                await text_delta_buffer.push(output_item.get("text", ""))
+            elif (
+                isinstance(output_item, dict)
+                and output_item.get("type") == "tool_call_status"
+            ):
+                await text_delta_buffer.flush()
+                output_item["name"] = context.character_config.character_name
+                await send_text_delta(output_item)
+            elif isinstance(output_item, (SentenceOutput, AudioOutput)):
+                await text_delta_buffer.flush()
+                response_part = await process_agent_output(
+                    output=output_item,
+                    character_config=context.character_config,
+                    live2d_model=context.live2d_model,
+                    tts_engine=context.tts_engine,
+                    channels=channels,
+                    tts_manager=tts_manager,
+                    translate_engine=context.translate_engine,
+                    streamed=text_streamed,
+                )
+                full_response += str(response_part) if response_part is not None else ""
+            else:
+                logger.warning(
+                    f"Received unexpected item type from agent chat stream: {type(output_item)}"
+                )
+                logger.debug(f"Unexpected item content: {output_item}")
+
+        await text_delta_buffer.close()
+    except Exception as e:
+        logger.exception(f"{error_prefix} stream: {e}")
+        await text_delta_buffer.flush()
+        await channels.text(
+            json.dumps({"type": "error", "message": f"{error_prefix}: {str(e)}"})
+        )
+    finally:
+        text_delta_buffer.cancel()
+
+    return full_response
+
+
 async def process_agent_output(
     output: Union[AudioOutput, SentenceOutput],
     character_config: Any,

@@ -13,7 +13,11 @@ try:
         DisplayText,
         SentenceOutput,
     )
-    from open_llm_vtuber.conversations import group_conversation, single_conversation
+    from open_llm_vtuber.conversations import (
+        conversation_utils,
+        group_conversation,
+        single_conversation,
+    )
     from open_llm_vtuber.conversations.types import OutboundChannels
 except ImportError as exc:
     raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
@@ -62,7 +66,7 @@ class GroupStreamTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with patch.object(
-            group_conversation,
+            conversation_utils,
             "process_agent_output",
             new=AsyncMock(return_value="回答。"),
         ):
@@ -83,6 +87,47 @@ class GroupStreamTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sent[0]["full_text"], "你")
         self.assertEqual(sent[1]["name"], "AI")
         channels.text.assert_not_awaited()
+
+
+class StreamErrorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reports_error_and_keeps_partial_response(self):
+        text_sent = []
+
+        async def text_send(message: str) -> None:
+            text_sent.append(json.loads(message))
+
+        async def failing_stream():
+            yield {"type": "text_delta", "text": "部分"}
+            yield _sentence("部分。")
+            raise RuntimeError("boom")
+
+        context = SimpleNamespace(
+            character_config=SimpleNamespace(character_name="AI", avatar=None),
+            live2d_model=None,
+            tts_engine=None,
+            translate_engine=None,
+        )
+        channels = OutboundChannels(text=text_send, audio=AsyncMock())
+
+        with patch.object(
+            conversation_utils,
+            "process_agent_output",
+            new=AsyncMock(return_value="部分。"),
+        ):
+            full_response = await conversation_utils.consume_agent_stream(
+                failing_stream(),
+                context=context,
+                channels=channels,
+                tts_manager=Mock(),
+                send_text_delta=lambda message: channels.text(json.dumps(message)),
+            )
+
+        self.assertEqual(full_response, "部分。")
+        self.assertEqual(text_sent[-1]["type"], "error")
+        self.assertIn("boom", text_sent[-1]["message"])
+        self.assertEqual(
+            [message["type"] for message in text_sent[:-1]], ["text-delta"]
+        )
 
 
 class SingleStreamTests(unittest.IsolatedAsyncioTestCase):
@@ -116,7 +161,7 @@ class SingleStreamTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(
-                single_conversation,
+                conversation_utils,
                 "process_agent_output",
                 new=AsyncMock(return_value="回答。"),
             ),
