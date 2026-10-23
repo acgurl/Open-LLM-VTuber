@@ -7,6 +7,11 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 try:
+    from open_llm_vtuber.agent import stateless_llm_factory
+    from open_llm_vtuber.agent.stateless_llm_factory import (
+        _LLM_BUILDERS,
+        LLMFactory,
+    )
     from open_llm_vtuber.asr.asr_factory import _ASR_BUILDERS, ASRFactory
     from open_llm_vtuber.config_manager.asr import ASRConfig
     from open_llm_vtuber.config_manager.tts import TTSConfig
@@ -77,6 +82,39 @@ class FactoryRegistryTests(unittest.TestCase):
     def test_unknown_tts_choice_raises(self):
         with self.assertRaises(ValueError):
             TTSFactory.get_tts_engine("missing")
+
+    def test_llm_registry_covers_config_choices(self):
+        from open_llm_vtuber.config_manager.agent import BasicMemoryAgentConfig
+
+        choices = _literal_values(
+            BasicMemoryAgentConfig.model_fields["llm_provider"].annotation
+        )
+        self.assertTrue(choices <= set(_LLM_BUILDERS))
+
+    def test_openai_compatible_aliases_share_builder(self):
+        with patch.object(stateless_llm_factory, "OpenAICompatibleLLM") as llm:
+            LLMFactory.create_llm(
+                "deepseek_llm",
+                model="model",
+                base_url="url",
+                llm_api_key="key",
+                organization_id=None,
+                project_id=None,
+                temperature=0.7,
+            )
+
+        llm.assert_called_once_with(
+            model="model",
+            base_url="url",
+            llm_api_key="key",
+            organization_id=None,
+            project_id=None,
+            temperature=0.7,
+        )
+
+    def test_unknown_llm_choice_raises(self):
+        with self.assertRaises(ValueError):
+            LLMFactory.create_llm("missing")
 
     def test_unknown_asr_choice_raises(self):
         with self.assertRaises(ValueError):
