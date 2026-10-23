@@ -16,6 +16,11 @@ from .types import WebSocketSend
 
 TTS_SYNTHESIS_TIMEOUT_SECONDS = 30.0
 TTS_DELIVERY_TIMEOUT_SECONDS = 10.0
+_SILENT_TEXT_PATTERN = re.compile(r'[\s.,!?，。！？\'"』」）】\s]+')
+
+
+def _is_silent_text(text: str) -> bool:
+    return not _SILENT_TEXT_PATTERN.sub("", text)
 
 
 class TTSTaskManager:
@@ -55,19 +60,11 @@ class TTSTaskManager:
             websocket_send: WebSocket send function
             streamed: Whether the display text was already sent as text deltas
         """
-        if len(re.sub(r'[\s.,!?，。！？\'"』」）】\s]+', "", tts_text)) == 0:
+        self._ensure_sender(audio_send or websocket_send)
+        current_sequence = self._next_sequence()
+
+        if _is_silent_text(tts_text):
             logger.debug("Empty TTS text, sending silent display payload")
-            payload_send = audio_send or websocket_send
-            # Get current sequence number for silent payload
-            current_sequence = self._sequence_counter
-            self._sequence_counter += 1
-
-            # Start sender task if not running
-            if not self._sender_task or self._sender_task.done():
-                self._sender_task = asyncio.create_task(
-                    self._process_payload_queue(payload_send)
-                )
-
             await self._send_silent_payload(
                 display_text, actions, current_sequence, streamed
             )
@@ -76,18 +73,6 @@ class TTSTaskManager:
         logger.debug(
             f"🏃Queuing TTS task for: '''{tts_text}''' (by {display_text.name})"
         )
-
-        # Get current sequence number
-        current_sequence = self._sequence_counter
-        self._sequence_counter += 1
-
-        payload_send = audio_send or websocket_send
-
-        # Start sender task if not running
-        if not self._sender_task or self._sender_task.done():
-            self._sender_task = asyncio.create_task(
-                self._process_payload_queue(payload_send)
-            )
 
         # Create and queue the TTS task
         task = asyncio.create_task(
@@ -102,6 +87,17 @@ class TTSTaskManager:
             )
         )
         self.task_list.append(task)
+
+    def _next_sequence(self) -> int:
+        sequence = self._sequence_counter
+        self._sequence_counter += 1
+        return sequence
+
+    def _ensure_sender(self, audio_send: WebSocketSend) -> None:
+        if not self._sender_task or self._sender_task.done():
+            self._sender_task = asyncio.create_task(
+                self._process_payload_queue(audio_send)
+            )
 
     async def _process_payload_queue(self, audio_send: WebSocketSend) -> None:
         """
@@ -188,24 +184,15 @@ class TTSTaskManager:
                 f"TTS synthesis timed out after {TTS_SYNTHESIS_TIMEOUT_SECONDS:.0f}s "
                 f"for '''{tts_text[:24]}'''; sending a silent payload"
             )
-            payload = prepare_audio_payload(
-                audio_path=None,
-                display_text=display_text,
-                actions=actions,
-                streamed=streamed,
+            await self._send_silent_payload(
+                display_text, actions, sequence_number, streamed
             )
-            await self._payload_queue.put((payload, sequence_number))
 
         except Exception as e:
             logger.error(f"Error preparing audio payload: {e}")
-            # Queue silent payload for error case
-            payload = prepare_audio_payload(
-                audio_path=None,
-                display_text=display_text,
-                actions=actions,
-                streamed=streamed,
+            await self._send_silent_payload(
+                display_text, actions, sequence_number, streamed
             )
-            await self._payload_queue.put((payload, sequence_number))
 
         finally:
             if audio_file_path:

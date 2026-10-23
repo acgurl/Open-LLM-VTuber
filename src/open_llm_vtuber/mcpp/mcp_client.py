@@ -139,6 +139,18 @@ class MCPClient:
             logger.info(f"MCPC: Successfully connected to server '{server_name}'.")
             yield session
 
+    @asynccontextmanager
+    async def _session(self, server_name: str) -> AsyncIterator[ClientSession]:
+        """Yield a session using the transport configured for the server."""
+        server = self._get_server(server_name)
+        if server.url:
+            async with self._http_session(
+                server_name, server, self._get_timeout(server)
+            ) as session:
+                yield session
+        else:
+            yield await self._ensure_stdio_session(server_name)
+
     async def list_tools(self, server_name: str) -> List[Tool]:
         """List all available tools on the specified server."""
         # Check cache first
@@ -149,14 +161,7 @@ class MCPClient:
         logger.debug(
             f"MCPC: Cache miss for list_tools on server '{server_name}'. Fetching..."
         )
-        server = self._get_server(server_name)
-        if server.url:
-            async with self._http_session(
-                server_name, server, self._get_timeout(server)
-            ) as session:
-                response = await session.list_tools()
-        else:
-            session = await self._ensure_stdio_session(server_name)
+        async with self._session(server_name) as session:
             response = await session.list_tools()
 
         # Store in cache before returning
@@ -172,15 +177,8 @@ class MCPClient:
         Returns:
             Dict containing the metadata and content_items from the tool response.
         """
-        server = self._get_server(server_name)
         logger.info(f"MCPC: Calling tool '{tool_name}' on server '{server_name}'...")
-        if server.url:
-            async with self._http_session(
-                server_name, server, self._get_timeout(server)
-            ) as session:
-                response = await session.call_tool(tool_name, tool_args)
-        else:
-            session = await self._ensure_stdio_session(server_name)
+        async with self._session(server_name) as session:
             response = await session.call_tool(tool_name, tool_args)
 
         if response.isError:

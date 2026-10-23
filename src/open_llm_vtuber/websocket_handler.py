@@ -126,6 +126,18 @@ class WebSocketHandler:
     def has_client(self, client_uid: str) -> bool:
         return client_uid in self.client_connections
 
+    @staticmethod
+    def _install_serialized_send(websocket: WebSocket) -> None:
+        """Serialize frames; TTS and conversation tasks send concurrently."""
+        send_lock = asyncio.Lock()
+        raw_send_text = websocket.send_text
+
+        async def serialized_send_text(data: str) -> None:
+            async with send_lock:
+                await raw_send_text(data)
+
+        websocket.send_text = serialized_send_text
+
     async def handle_new_connection(
         self, websocket: WebSocket, client_uid: str
     ) -> None:
@@ -140,15 +152,7 @@ class WebSocketHandler:
             Exception: If initialization fails
         """
         try:
-            # TTS tasks and the conversation loop send concurrently; serialize frames.
-            send_lock = asyncio.Lock()
-            raw_send_text = websocket.send_text
-
-            async def serialized_send_text(data: str) -> None:
-                async with send_lock:
-                    await raw_send_text(data)
-
-            websocket.send_text = serialized_send_text
+            self._install_serialized_send(websocket)
 
             async def send_audio(data: str) -> None:
                 audio_websocket = self.client_audio_connections.get(client_uid)
@@ -189,14 +193,7 @@ class WebSocketHandler:
         self, websocket: WebSocket, client_uid: str
     ) -> None:
         """Attach a secondary socket that only carries audio payloads."""
-        send_lock = asyncio.Lock()
-        raw_send_text = websocket.send_text
-
-        async def serialized_send_text(data: str) -> None:
-            async with send_lock:
-                await raw_send_text(data)
-
-        websocket.send_text = serialized_send_text
+        self._install_serialized_send(websocket)
 
         previous = self.client_audio_connections.get(client_uid)
         self.client_audio_connections[client_uid] = websocket
@@ -397,21 +394,24 @@ class WebSocketHandler:
             send_group_update=self.send_group_update,
         )
 
-        # Clean up other client data
+        await self._release_client(
+            client_uid, "Conversation task failed during disconnect"
+        )
+
+        logger.info(f"Client {client_uid} disconnected")
+        message_handler.cleanup_client(client_uid)
+
+    async def _release_client(self, client_uid: str, failure_message: str) -> None:
+        """Drop the client's sockets, task, and context."""
         await self._close_audio_connection(client_uid)
         self.client_connections.pop(client_uid, None)
         context = self.client_contexts.pop(client_uid, None)
         self.received_data_buffers.pop(client_uid, None)
-        await self._cancel_conversation_task(
-            client_uid, "Conversation task failed during disconnect"
-        )
+        await self._cancel_conversation_task(client_uid, failure_message)
 
-        # Call context close to clean up resources (e.g., MCPClient)
+        # Closing the context releases resources such as the MCP client.
         if context:
             await context.close()
-
-        logger.info(f"Client {client_uid} disconnected")
-        message_handler.cleanup_client(client_uid)
 
     async def _cancel_conversation_task(
         self, client_uid: str, failure_message: str
@@ -430,19 +430,10 @@ class WebSocketHandler:
 
     async def _cleanup_failed_connection(self, client_uid: str) -> None:
         """Clean up failed connection data"""
-        await self._close_audio_connection(client_uid)
-        self.client_connections.pop(client_uid, None)
-        context = self.client_contexts.pop(client_uid, None)
-        self.received_data_buffers.pop(client_uid, None)
         self.chat_group_manager.client_group_map.pop(client_uid, None)
-
-        await self._cancel_conversation_task(
+        await self._release_client(
             client_uid, "Conversation task failed during connection cleanup"
         )
-
-        if context:
-            await context.close()
-
         message_handler.cleanup_client(client_uid)
 
     async def broadcast_to_group(
