@@ -73,6 +73,35 @@ class PayloadDeliveryTests(unittest.IsolatedAsyncioTestCase):
         manager.clear()
         await asyncio.sleep(0)
 
+    async def test_empty_text_keeps_sequence_with_spoken_payloads(self):
+        manager = TTSTaskManager()
+        audio_sent = []
+
+        async def audio_send(message: str) -> None:
+            audio_sent.append(json.loads(message))
+
+        for tts_text, display in (("……", "……"), ("测试。", "测试。")):
+            await manager.speak(
+                tts_text=tts_text,
+                display_text=DisplayText(text=display),
+                actions=None,
+                live2d_model=None,
+                tts_engine=_FailingTTSEngine(),
+                websocket_send=audio_send,
+                audio_send=audio_send,
+            )
+
+        await asyncio.gather(*manager.task_list)
+        await manager.wait_for_delivery(timeout=1.0)
+
+        self.assertEqual(
+            [payload["display_text"]["text"] for payload in audio_sent],
+            ["……", "测试。"],
+        )
+        self.assertTrue(all(payload["audio"] is None for payload in audio_sent))
+        manager.clear()
+        await asyncio.sleep(0)
+
 
 if __name__ == "__main__":
     unittest.main()

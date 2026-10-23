@@ -21,12 +21,16 @@ except ImportError as exc:
 class FakeWebSocket:
     def __init__(self) -> None:
         self.sent = []
+        self.closed = False
 
     async def send_text(self, data: str) -> None:
         self.sent.append(json.loads(data))
 
     async def send_json(self, data: dict) -> None:
         self.sent.append(data)
+
+    async def close(self, code: int = 1000) -> None:
+        self.closed = True
 
 
 class NoGroupManager:
@@ -40,6 +44,7 @@ class NoGroupManager:
 class FakeContext:
     def __init__(self) -> None:
         self.closed = False
+        self.channels = None
         self.system_config = Mock()
         self.system_config.tool_prompts = {}
 
@@ -184,7 +189,9 @@ class ConnectionCleanupTests(unittest.IsolatedAsyncioTestCase):
                 await self.task
 
     def seed_client(self, client_uid: str) -> None:
+        self.audio_websocket = FakeWebSocket()
         self.handler.client_connections[client_uid] = FakeWebSocket()
+        self.handler.client_audio_connections[client_uid] = self.audio_websocket
         self.handler.client_contexts[client_uid] = self.context
         self.handler.received_data_buffers[client_uid] = np.array([])
         self.handler.current_conversation_tasks[client_uid] = self.task
@@ -192,7 +199,9 @@ class ConnectionCleanupTests(unittest.IsolatedAsyncioTestCase):
     def assert_cleaned_up(self, client_uid: str) -> None:
         self.assertTrue(self.task.cancelled())
         self.assertTrue(self.context.closed)
+        self.assertTrue(self.audio_websocket.closed)
         self.assertNotIn(client_uid, self.handler.client_contexts)
+        self.assertNotIn(client_uid, self.handler.client_audio_connections)
         self.assertNotIn(client_uid, self.handler.received_data_buffers)
         self.assertNotIn(client_uid, self.handler.current_conversation_tasks)
 
