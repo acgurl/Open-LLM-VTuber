@@ -30,6 +30,7 @@ async def process_group_conversation(
     broadcast_func: BroadcastFunc,
     group_members: List[str],
     initiator_client_uid: str,
+    group_id: str,
     user_input: Union[str, np.ndarray],
     images: Optional[List[Dict[str, Any]]] = None,
     session_emoji: str = np.random.choice(EMOJI_LIST),
@@ -56,7 +57,7 @@ async def process_group_conversation(
 
         # Initialize state with group_id
         state = GroupConversationState(
-            group_id=f"group_{initiator_client_uid}",  # Use same format as chat_group
+            group_id=group_id,
             session_emoji=session_emoji,
             group_queue=list(group_members),
             memory_index={

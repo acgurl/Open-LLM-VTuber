@@ -142,6 +142,7 @@ async def handle_conversation_trigger(
                     broadcast_func=broadcast_to_group,
                     group_members=group.members,
                     initiator_client_uid=client_uid,
+                    group_id=group.group_id,
                     user_input=user_input,
                     images=images,
                     session_emoji=session_emoji,

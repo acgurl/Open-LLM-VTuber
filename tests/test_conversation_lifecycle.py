@@ -4,6 +4,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import numpy as np
@@ -170,6 +171,49 @@ class ConversationTriggerTests(unittest.IsolatedAsyncioTestCase):
             [{"type": "full-text", "text": "AI wants to speak something..."}],
         )
         load_prompt.assert_called_once_with("prompt.txt")
+
+
+class SharedGroupManager:
+    def __init__(self):
+        self.group = SimpleNamespace(
+            group_id="group-owner",
+            owner_uid="owner",
+            members={"owner", "guest"},
+        )
+
+    def get_client_group(self, _client_uid):
+        return self.group
+
+
+class GroupConversationTriggerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_group_trigger_passes_the_real_group_id(self):
+        manager = SharedGroupManager()
+        tasks = {}
+        websocket = FakeWebSocket()
+
+        with patch.object(
+            conversation_handler,
+            "process_group_conversation",
+            new=AsyncMock(),
+        ) as process:
+            await conversation_handler.handle_conversation_trigger(
+                msg_type="text-input",
+                data={"type": "text-input", "text": "hello"},
+                client_uid="guest",
+                context=FakeContext(),
+                websocket=websocket,
+                client_contexts={},
+                client_connections={},
+                chat_group_manager=manager,
+                received_data_buffers={},
+                current_conversation_tasks=tasks,
+                broadcast_to_group=AsyncMock(),
+            )
+            await drain_task_queue()
+
+        kwargs = process.await_args.kwargs
+        self.assertEqual(kwargs["group_id"], "group-owner")
+        self.assertEqual(kwargs["initiator_client_uid"], "guest")
 
 
 class ConnectionCleanupTests(unittest.IsolatedAsyncioTestCase):
