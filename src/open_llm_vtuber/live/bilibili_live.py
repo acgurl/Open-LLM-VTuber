@@ -122,10 +122,13 @@ class BiliBiliLivePlatform(LivePlatformInterface):
         Disconnect from the proxy server and stop the BiliBili client.
         """
         self._running = False
-        for task in list(self._background_tasks):
+        tasks = list(self._background_tasks)
+        self._background_tasks.clear()
+        for task in tasks:
             if not task.done():
                 task.cancel()
-        self._background_tasks.clear()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
         # Stop BiliBili client if running
         if self._client:

@@ -178,6 +178,10 @@ class ProxyHandler:
 
         if self.server_task:
             self.server_task.cancel()
+            try:
+                await self.server_task
+            except asyncio.CancelledError:
+                pass
 
         # Close session
         if self._session:

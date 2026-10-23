@@ -250,9 +250,12 @@ class HumeAIAgent(AgentInterface):
         """Release the WebSocket and any background tasks."""
         if self._idle_timer:
             self._idle_timer.cancel()
-        for task in list(self._background_tasks):
-            task.cancel()
+        tasks = list(self._background_tasks)
         self._background_tasks.clear()
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
         if self._ws:
             await self._ws.close()
             self._ws = None
