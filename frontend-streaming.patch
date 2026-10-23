@@ -4403,6 +4403,33 @@ index 34865fa..6f1bc4b 100644
 +    micStarting,
    };
  };
+diff --git a/src/renderer/src/hooks/sidebar/use-history-drawer.ts b/src/renderer/src/hooks/sidebar/use-history-drawer.ts
+index 86be338..324e34c 100644
+--- a/src/renderer/src/hooks/sidebar/use-history-drawer.ts
++++ b/src/renderer/src/hooks/sidebar/use-history-drawer.ts
+@@ -1,4 +1,4 @@
+-import { useState } from 'react';
++import { useEffect, useState } from 'react';
+ import { useTranslation } from 'react-i18next';
+ import { useChatHistory } from '@/context/chat-history-context';
+ import { useWebSocket, HistoryInfo } from '@/context/websocket-context';
+@@ -15,7 +15,15 @@ export const useHistoryDrawer = () => {
+     messages,
+     updateHistoryList,
+   } = useChatHistory();
+-  const { sendMessage } = useWebSocket();
++  const { sendMessage, wsState } = useWebSocket();
++
++  // The server only pushes history updates on connect, so an open drawer would
++  // otherwise keep showing the list captured at connection time.
++  useEffect(() => {
++    if (open && wsState === 'OPEN') {
++      sendMessage({ type: 'fetch-history-list' });
++    }
++  }, [open, wsState, sendMessage]);
+ 
+   const fetchAndSetHistory = (uid: string) => {
+     if (!uid || uid === currentHistoryUid) return;
 diff --git a/src/renderer/src/hooks/utils/use-audio-task.ts b/src/renderer/src/hooks/utils/use-audio-task.ts
 index 27cba68..3c3b229 100644
 --- a/src/renderer/src/hooks/utils/use-audio-task.ts
@@ -5007,7 +5034,7 @@ index 6102f75..99c2667 100644
      "audioPlayback": "音频播放错误",
      "enterValidUuid": "请输入有效的UUID",
 diff --git a/src/renderer/src/services/websocket-handler.tsx b/src/renderer/src/services/websocket-handler.tsx
-index 5283617..35c86ae 100644
+index 5283617..264fb6c 100644
 --- a/src/renderer/src/services/websocket-handler.tsx
 +++ b/src/renderer/src/services/websocket-handler.tsx
 @@ -22,6 +22,16 @@ import { useGroup } from '@/context/group-context';
@@ -5050,6 +5077,15 @@ index 5283617..35c86ae 100644
    useEffect(() => {
      autoStartMicOnConvEndRef.current = autoStartMicOnConvEnd;
    }, [autoStartMicOnConvEnd]);
+@@ -53,7 +66,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+   }, [pendingModelInfo, setModelInfo, confUid]);
+ 
+   const {
+-    setCurrentHistoryUid, setMessages, setHistoryList,
++    currentHistoryUid, setCurrentHistoryUid, setMessages, setHistoryList,
+   } = useChatHistory();
+ 
+   const handleControlMessage = useCallback((controlText: string) => {
 @@ -70,6 +83,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
          setAiState('thinking-speaking');
          audioTaskQueue.clearQueue();
@@ -5058,7 +5094,7 @@ index 5283617..35c86ae 100644
          break;
        case 'conversation-chain-end':
          audioTaskQueue.addTask(() => new Promise<void>((resolve) => {
-@@ -91,6 +105,120 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -91,6 +105,137 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
      }
    }, [setAiState, clearResponse, setForceNewMessage, startMic, stopMic]);
  
@@ -5126,11 +5162,21 @@ index 5283617..35c86ae 100644
 +    if (!message.histories) {
 +      return;
 +    }
-+    setHistoryList(message.histories);
-+    if (message.histories.length > 0) {
-+      setCurrentHistoryUid(message.histories[0].uid);
-+    }
-+  }, [setHistoryList, setCurrentHistoryUid]);
++    const fetched = message.histories;
++    setHistoryList((previous: HistoryInfo[]) => {
++      if (!currentHistoryUid) {
++        return fetched;
++      }
++      const current = previous.find((history) => history.uid === currentHistoryUid);
++      // The server only lists histories that have messages, so a freshly
++      // created session would disappear after a refresh. Keep it visible;
++      // switching the active session is the job of new-history-created.
++      if (current && !fetched.some((history) => history.uid === current.uid)) {
++        return [current, ...fetched];
++      }
++      return fetched;
++    });
++  }, [setHistoryList, currentHistoryUid]);
 +
 +  const handleNewHistoryCreated = useCallback((message: MessageEvent) => {
 +    setAiState('idle');
@@ -5145,7 +5191,14 @@ index 5283617..35c86ae 100644
 +      latest_message: null,
 +      timestamp: new Date().toISOString(),
 +    };
-+    setHistoryList((prev: HistoryInfo[]) => [newHistory, ...prev]);
++    // Only the active session may be listed while empty; drop stale empty
++    // shells left behind by reconnects or previous chats.
++    setHistoryList((prev: HistoryInfo[]) => [
++      newHistory,
++      ...prev.filter(
++        (history) => history.uid !== newHistory.uid && history.latest_message !== null,
++      ),
++    ]);
 +    toaster.create({
 +      title: t('notification.newChatHistory'),
 +      type: 'success',
@@ -5179,7 +5232,7 @@ index 5283617..35c86ae 100644
    const handleWebSocketMessage = useCallback((message: MessageEvent) => {
      console.log('Received message from server:', message);
      switch (message.type) {
-@@ -100,52 +228,23 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -100,52 +245,23 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
          }
          break;
        case 'set-model-and-conf':
@@ -5237,7 +5290,7 @@ index 5283617..35c86ae 100644
          break;
        case 'background-files':
          if (message.files) {
-@@ -153,19 +252,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -153,19 +269,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
          }
          break;
        case 'audio':
@@ -5258,7 +5311,7 @@ index 5283617..35c86ae 100644
          break;
        case 'history-data':
          if (message.messages) {
-@@ -178,24 +265,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -178,24 +282,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
          });
          break;
        case 'new-history-created':
@@ -5284,7 +5337,7 @@ index 5283617..35c86ae 100644
          break;
        case 'history-deleted':
          toaster.create({
-@@ -207,12 +277,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -207,12 +294,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
          });
          break;
        case 'history-list':
@@ -5298,7 +5351,7 @@ index 5283617..35c86ae 100644
          break;
        case 'user-input-transcription':
          console.log('user-input-transcription: ', message.text);
-@@ -264,32 +329,12 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -264,32 +346,12 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
          interrupt(false); // do not send interrupt signal to server
          break;
        case 'tool_call_status':
@@ -5333,7 +5386,7 @@ index 5283617..35c86ae 100644
  
    useEffect(() => {
      wsService.connect(wsUrl);
-@@ -298,12 +343,39 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -298,12 +360,39 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
    useEffect(() => {
      const stateSubscription = wsService.onStateChange(setWsState);
      const messageSubscription = wsService.onMessage(handleWebSocketMessage);
