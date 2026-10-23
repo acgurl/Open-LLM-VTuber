@@ -160,6 +160,20 @@ async def _send_operation_result(
     )
 
 
+async def _notify_member(
+    client_connections: Dict[str, WebSocket],
+    member_uid: str,
+    send_group_update: Callable,
+    message: Optional[str] = None,
+) -> None:
+    try:
+        await send_group_update(client_connections[member_uid], member_uid)
+        if message is not None:
+            await _send_operation_result(client_connections[member_uid], True, message)
+    except Exception as e:
+        logger.error(f"Failed to update member {member_uid}: {e}")
+
+
 async def handle_group_operation(
     operation: str,
     client_uid: str,
@@ -181,17 +195,12 @@ async def handle_group_operation(
             )
 
             if success and target_uid in client_connections:
-                try:
-                    # Send group update to the newly invited member
-                    await send_group_update(client_connections[target_uid], target_uid)
-                    # Notify the invited member
-                    await _send_operation_result(
-                        client_connections[target_uid],
-                        True,
-                        f"You have been invited to the group by {client_uid}",
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to update invited member {target_uid}: {e}")
+                await _notify_member(
+                    client_connections,
+                    target_uid,
+                    send_group_update,
+                    f"You have been invited to the group by {client_uid}",
+                )
 
         else:  # remove operation
             success, message = chat_group_manager.remove_client_from_group(
@@ -204,39 +213,32 @@ async def handle_group_operation(
         if success:
             # For removal operation, update the removed member
             if operation != "add-client-to-group" and target_uid in client_connections:
-                try:
-                    await send_group_update(client_connections[target_uid], target_uid)
-                    await _send_operation_result(
-                        client_connections[target_uid],
-                        True,
-                        "You have been removed from the group",
-                    )
-                except Exception as e:
-                    logger.error(f"Failed to update removed member {target_uid}: {e}")
+                await _notify_member(
+                    client_connections,
+                    target_uid,
+                    send_group_update,
+                    "You have been removed from the group",
+                )
 
             # Get new group members after operation
             new_members = chat_group_manager.get_group_members(client_uid)
             all_affected_members.update(new_members)
 
             # Update remaining group members
+            action = (
+                "added to" if operation == "add-client-to-group" else "removed from"
+            )
             for member_uid in all_affected_members:
                 if member_uid in client_connections and member_uid != target_uid:
-                    try:
-                        await send_group_update(
-                            client_connections[member_uid], member_uid
-                        )
-                        if member_uid != client_uid:
-                            await _send_operation_result(
-                                client_connections[member_uid],
-                                True,
-                                (
-                                    f"Member {target_uid} was "
-                                    f"{'added to' if operation == 'add-client-to-group' else 'removed from'} "
-                                    "the group"
-                                ),
-                            )
-                    except Exception as e:
-                        logger.error(f"Failed to update member {member_uid}: {e}")
+                    member_message = None
+                    if member_uid != client_uid:
+                        member_message = f"Member {target_uid} was {action} the group"
+                    await _notify_member(
+                        client_connections,
+                        member_uid,
+                        send_group_update,
+                        member_message,
+                    )
 
 
 async def handle_client_disconnect(
@@ -252,10 +254,10 @@ async def handle_client_disconnect(
     # Send updates to remaining group members
     for member_uid in old_group_members:
         if member_uid != client_uid and member_uid in client_connections:
-            await send_group_update(client_connections[member_uid], member_uid)
-            await _send_operation_result(
-                client_connections[member_uid],
-                True,
+            await _notify_member(
+                client_connections,
+                member_uid,
+                send_group_update,
                 f"Member {client_uid} disconnected",
             )
 
