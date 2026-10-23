@@ -17,14 +17,6 @@ class ChatGroupManager:
         self.client_group_map: Dict[str, str] = {}  # client_uid -> group_id
         self.groups: Dict[str, Group] = {}  # group_id -> Group
 
-    def create_group_for_client(self, client_uid: str) -> str:
-        group_id = f"group_{client_uid}"
-        new_group = Group(group_id=group_id, owner_uid=client_uid, members={client_uid})
-        self.groups[group_id] = new_group
-        self.client_group_map[client_uid] = group_id
-        logger.info(f"Created group {group_id} for client {client_uid}")
-        return group_id
-
     def add_client_to_group(
         self, inviter_uid: str, invitee_uid: str
     ) -> Tuple[bool, str]:
@@ -134,12 +126,6 @@ class ChatGroupManager:
             logger.info(f"Removed empty group {group_id}")
 
         return affected_members
-
-    def cleanup_disconnected_clients(self, connected_clients: Set[str]):
-        """Remove all disconnected clients from groups"""
-        disconnected_clients = set(self.client_group_map.keys()) - connected_clients
-        for client_uid in disconnected_clients:
-            self.remove_client(client_uid)
 
     def get_client_group(self, client_uid: str) -> Optional[Group]:
         """

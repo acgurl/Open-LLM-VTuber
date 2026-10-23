@@ -156,18 +156,6 @@ async def process_group_conversation(
         GroupConversationState.remove_state(state.group_id)
 
 
-def init_group_conversation_state(
-    group_members: List[str], session_emoji: str
-) -> GroupConversationState:
-    """Initialize group conversation state"""
-    return GroupConversationState(
-        conversation_history=[],
-        memory_index={uid: 0 for uid in group_members},
-        group_queue=list(group_members),
-        session_emoji=session_emoji,
-    )
-
-
 def init_group_conversation_contexts(
     client_contexts: Dict[str, ServiceContext],
     group_members: List[str],

@@ -32,26 +32,3 @@ class ASRInterface(metaclass=abc.ABCMeta):
             audio: The numpy array of the audio data to transcribe.
         """
         raise NotImplementedError
-
-    def nparray_to_audio_file(
-        self, audio: np.ndarray, sample_rate: int, file_path: str
-    ) -> None:
-        """Convert a numpy array of audio data to a .wav file.
-
-        Args:
-            audio: The numpy array of audio data.
-            sample_rate: The sample rate of the audio data.
-            file_path: The path to save the .wav file.
-        """
-        import wave
-
-        # Make sure the audio is in the range [-1, 1]
-        audio = np.clip(audio, -1, 1)
-        # Convert the audio to 16-bit PCM
-        audio_integer = (audio * 32767).astype(np.int16)
-
-        with wave.open(file_path, "wb") as wf:
-            wf.setnchannels(1)
-            wf.setsampwidth(2)
-            wf.setframerate(sample_rate)
-            wf.writeframes(audio_integer.tobytes())

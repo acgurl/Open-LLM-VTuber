@@ -1,6 +1,5 @@
 from typing import List, Dict, Callable, Optional, TypedDict, Awaitable, ClassVar
 from dataclasses import dataclass, field
-from pydantic import BaseModel
 
 from ..agent.output_types import Actions, DisplayText
 
@@ -42,15 +41,6 @@ class BroadcastContext:
     broadcast_func: Optional[BroadcastFunc] = None
     group_members: Optional[List[str]] = None
     current_client_uid: Optional[str] = None
-
-
-class ConversationConfig(BaseModel):
-    """Configuration for conversation chain"""
-
-    conf_uid: str = ""
-    history_uid: str = ""
-    client_uid: str = ""
-    character_name: str = "AI"
 
 
 @dataclass

@@ -120,20 +120,3 @@ class I18nMixin(BaseModel):
         if description:
             return description.get_notes(lang_code)
         return None
-
-    @classmethod
-    def get_field_options(cls, field_name: str) -> list | Dict | None:
-        """
-        Retrieves the options for a field, if any are defined.
-
-        Args:
-            field_name: The name of the field.
-
-        Returns:
-            The options for the field, which can be a list or a dictionary, or None if no options are defined.
-        """
-        field = cls.model_fields.get(field_name)
-        if field:
-            if hasattr(field, "options"):
-                return field.options
-        return None

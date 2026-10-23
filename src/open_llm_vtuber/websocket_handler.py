@@ -2,7 +2,6 @@ from typing import Dict, List, Optional, Callable, TypedDict
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
 import json
-from enum import Enum
 import numpy as np
 from loguru import logger
 
@@ -37,22 +36,6 @@ MAX_TEXT_INPUT_CHARS = 4000
 MAX_IMAGES_PER_MESSAGE = 4
 MAX_IMAGE_DATA_CHARS = 8 * 1024 * 1024
 IMAGE_SOURCES = {"camera", "screen", "shared", "clipboard", "upload"}
-
-
-class MessageType(Enum):
-    """Enum for WebSocket message types"""
-
-    GROUP = ["add-client-to-group", "remove-client-from-group"]
-    HISTORY = [
-        "fetch-history-list",
-        "fetch-and-set-history",
-        "create-new-history",
-        "delete-history",
-    ]
-    CONVERSATION = ["mic-audio-end", "text-input", "ai-speak-signal"]
-    CONFIG = ["fetch-configs", "switch-config"]
-    CONTROL = ["interrupt-signal", "audio-play-start"]
-    DATA = ["mic-audio-data"]
 
 
 class WSMessage(TypedDict, total=False):
