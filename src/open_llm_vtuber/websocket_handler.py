@@ -16,13 +16,8 @@ from .message_handler import message_handler
 from .utils.async_utils import cancel_and_wait
 from .utils.stream_audio import prepare_audio_payload
 from .utils.audio import MAX_AUDIO_SAMPLES
-from .chat_history_manager import (
-    create_new_history,
-    get_history,
-    delete_history,
-    get_history_list,
-)
 from .config_manager.utils import scan_config_alts_directory, scan_bg_directory
+from .storage import HistoryNotFoundError
 from .conversations.conversation_handler import (
     handle_conversation_trigger,
     handle_group_interrupt,
@@ -266,6 +261,8 @@ class WebSocketHandler:
             tool_adapter=self.default_context_cache.tool_adapter,
             channels=channels,
             client_uid=client_uid,
+            history_repository=self.default_context_cache.history_repository,
+            user_id=self.default_context_cache.user_id,
         )
         # Each connection needs its own agent state; the LLM client stays shared.
         await session_service_context.init_session_agent(
@@ -468,7 +465,15 @@ class WebSocketHandler:
     ) -> None:
         """Handle request for chat history list"""
         context = self.client_contexts[client_uid]
-        histories = get_history_list(context.character_config.conf_uid)
+        try:
+            histories = (
+                await context.history.list_histories(context.character_config.conf_uid)
+                if context.history is not None
+                else []
+            )
+        except Exception:
+            logger.exception("Failed to list chat histories")
+            histories = []
         await websocket.send_text(
             json.dumps({"type": "history-list", "histories": histories})
         )
@@ -482,23 +487,25 @@ class WebSocketHandler:
             return
 
         context = self.client_contexts[client_uid]
-        # Update history_uid in service context
-        context.history_uid = history_uid
-        context.agent_engine.set_memory_from_history(
-            conf_uid=context.character_config.conf_uid,
-            history_uid=history_uid,
-        )
+        if context.history is None:
+            messages = []
+        else:
+            try:
+                messages = await context.load_history(history_uid)
+            except (HistoryNotFoundError, ValueError):
+                logger.warning(f"History not found for client {client_uid}")
+                messages = []
+            except Exception:
+                logger.exception("Failed to load chat history")
+                messages = []
 
-        messages = [
-            msg
-            for msg in get_history(
-                context.character_config.conf_uid,
-                history_uid,
-            )
-            if msg["role"] != "system"
-        ]
         await websocket.send_text(
-            json.dumps({"type": "history-data", "messages": messages})
+            json.dumps(
+                {
+                    "type": "history-data",
+                    "messages": [msg for msg in messages if msg["role"] != "system"],
+                }
+            )
         )
 
     async def _handle_create_history(
@@ -506,21 +513,25 @@ class WebSocketHandler:
     ) -> None:
         """Handle creation of new chat history"""
         context = self.client_contexts[client_uid]
-        history_uid = create_new_history(context.character_config.conf_uid)
-        if history_uid:
-            context.history_uid = history_uid
-            context.agent_engine.set_memory_from_history(
-                conf_uid=context.character_config.conf_uid,
-                history_uid=history_uid,
+        if context.history is None:
+            logger.warning("History storage is not configured")
+            return
+
+        history_uid = await context.history.create_history(
+            context.character_config.conf_uid
+        )
+        try:
+            await context.load_history(history_uid)
+        except Exception:
+            logger.exception("Failed to reset memory for a new history")
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "new-history-created",
+                    "history_uid": history_uid,
+                }
             )
-            await websocket.send_text(
-                json.dumps(
-                    {
-                        "type": "new-history-created",
-                        "history_uid": history_uid,
-                    }
-                )
-            )
+        )
 
     async def _handle_delete_history(
         self, websocket: WebSocket, client_uid: str, data: dict
@@ -531,9 +542,13 @@ class WebSocketHandler:
             return
 
         context = self.client_contexts[client_uid]
-        success = delete_history(
-            context.character_config.conf_uid,
-            history_uid,
+        success = (
+            await context.history.delete_history(
+                context.character_config.conf_uid,
+                history_uid,
+            )
+            if context.history is not None
+            else False
         )
         await websocket.send_text(
             json.dumps(
@@ -544,7 +559,7 @@ class WebSocketHandler:
                 }
             )
         )
-        if history_uid == context.history_uid:
+        if success and history_uid == context.history_uid:
             context.history_uid = None
 
     async def _handle_audio_data(

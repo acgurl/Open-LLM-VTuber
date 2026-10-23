@@ -14,7 +14,6 @@ from ..output_types import SentenceOutput, DisplayText
 from ..stateless_llm.stateless_llm_interface import StatelessLLMInterface
 from ..stateless_llm.claude_llm import AsyncLLM as ClaudeAsyncLLM
 from ..stateless_llm.openai_compatible_llm import AsyncLLM as OpenAICompatibleAsyncLLM
-from ...chat_history_manager import get_history
 from ..transformers import (
     sentence_divider,
     actions_extractor,
@@ -205,16 +204,18 @@ class BasicMemoryAgent(AgentInterface):
 
         self._memory.append(message_data)
 
-    def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
-        """Load memory from chat history."""
-        messages = get_history(conf_uid, history_uid)
-
+    async def set_memory(
+        self,
+        messages: list[dict],
+        metadata: dict | None = None,
+    ) -> None:
+        """Load memory from already-authorized persisted messages."""
         self._memory = []
         for msg in messages:
-            if msg["role"] == "system":
+            if msg.get("role") == "system":
                 continue
-            role = "user" if msg["role"] == "human" else "assistant"
-            content = msg["content"]
+            role = "user" if msg.get("role") == "human" else "assistant"
+            content = msg.get("content")
             if isinstance(content, str) and content:
                 self._memory.append(
                     {

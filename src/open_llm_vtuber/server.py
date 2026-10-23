@@ -10,6 +10,7 @@ import os
 import shutil
 
 from fastapi import FastAPI
+from loguru import logger
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, Response
 from starlette.staticfiles import StaticFiles as StarletteStaticFiles
@@ -17,6 +18,11 @@ from starlette.staticfiles import StaticFiles as StarletteStaticFiles
 from .routes import init_client_ws_route, init_webtool_routes, init_proxy_route
 from .service_context import ServiceContext
 from .config_manager.utils import Config
+from .storage import (
+    HistoryRepository,
+    create_history_repository,
+    import_legacy_histories,
+)
 
 
 # Create a custom StaticFiles class that adds CORS headers
@@ -78,6 +84,7 @@ class WebSocketServer:
             default_context_cache or ServiceContext()
         )  # Use provided context or initialize a new empty one waiting to be loaded
         # It will be populated during the initialize method call
+        self.history_repository: HistoryRepository | None = None
 
         # Wildcard origins with credentials are both invalid and unsafe; this
         # server does not use cookies, so credentials are disabled.
@@ -88,6 +95,7 @@ class WebSocketServer:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+        self.app.add_event_handler("shutdown", self.close)
 
         @self.app.get("/healthz", include_in_schema=False)
         async def healthz():
@@ -150,7 +158,46 @@ class WebSocketServer:
     async def initialize(self):
         """Asynchronously load the service context from config.
         Calling this function is needed if default_context_cache was not provided to the constructor."""
-        await self.default_context_cache.load_from_config(self.config)
+        storage_config = self.config.system_config.storage
+        repository = create_history_repository(
+            backend=storage_config.backend,
+            sqlite_path=storage_config.sqlite_path,
+        )
+        await repository.initialize()
+        await repository.ensure_user(
+            storage_config.default_user_id,
+            display_name="Local User",
+        )
+
+        if storage_config.import_legacy_history:
+            try:
+                await import_legacy_histories(
+                    repository,
+                    user_id=storage_config.default_user_id,
+                    legacy_dir=storage_config.legacy_history_dir,
+                    backup_dir=storage_config.legacy_backup_dir,
+                )
+            except Exception:
+                logger.exception("Failed to import legacy chat history")
+
+        self.history_repository = repository
+        self.default_context_cache.set_history_storage(
+            repository,
+            storage_config.default_user_id,
+        )
+        try:
+            await self.default_context_cache.load_from_config(self.config)
+        except Exception:
+            await repository.close()
+            self.history_repository = None
+            self.default_context_cache.set_history_storage(None)
+            raise
+
+    async def close(self):
+        """Close shared resources."""
+        if self.history_repository is not None:
+            await self.history_repository.close()
+            self.history_repository = None
 
     @staticmethod
     def clean_cache():

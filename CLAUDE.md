@@ -115,7 +115,7 @@ The codebase uses the missing `_cleanup_failed_connection` method pattern - when
 - **Frontend**: `frontend/` (Git submodule)
 - **Live2D models**: `live2d-models/`
 - **Character definitions**: `characters/`
-- **Chat history**: `chat_history/`
+- **Chat history**: `data/storage/open_llm_vtuber.db` (SQLite; legacy `chat_history/` JSON is imported and moved to `data/storage/legacy_history/` on first start)
 - **Cache**: `cache/` (audio files, temporary data)
 
 ## Development Guidelines

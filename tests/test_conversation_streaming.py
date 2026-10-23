@@ -157,6 +157,7 @@ class SingleStreamTests(unittest.IsolatedAsyncioTestCase):
             translate_engine=None,
             history_uid=None,
             channels=channels,
+            store_history_message=AsyncMock(),
         )
 
         with (
@@ -170,7 +171,6 @@ class SingleStreamTests(unittest.IsolatedAsyncioTestCase):
                 "finalize_conversation_turn",
                 new=AsyncMock(),
             ),
-            patch.object(single_conversation, "store_message") as store_message,
         ):
             full_response = await single_conversation.process_single_conversation(
                 context=context,
@@ -186,7 +186,7 @@ class SingleStreamTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(text_sent[2]["text"], "回答")
         self.assertEqual(text_sent[2]["full_text"], "回答")
-        store_message.assert_not_called()
+        context.store_history_message.assert_not_awaited()
 
 
 if __name__ == "__main__":

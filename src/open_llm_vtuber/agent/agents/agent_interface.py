@@ -42,13 +42,14 @@ class AgentInterface(ABC):
             "that it was interrupted."
         )
 
-    @abstractmethod
-    def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
-        """
-        Load the agent's working memory from chat history
+    async def set_memory(
+        self,
+        messages: list[dict],
+        metadata: dict | None = None,
+    ) -> None:
+        """Load persisted conversation memory for this session.
 
-        Args:
-            conf_uid: str - Configuration ID
-            history_uid: str - History ID
+        Storage is intentionally not accessed here; the session owns the
+        user-scoped history and injects the already-authorized messages.
         """
-        pass
+        return None

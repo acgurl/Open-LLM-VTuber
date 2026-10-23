@@ -68,14 +68,17 @@ def _build_hume_ai_agent(
     _system_prompt: str,
     _live2d_model,
     _tts_preprocessor_config,
-    _kwargs: dict,
+    kwargs: dict,
 ) -> AgentInterface:
     settings = agent_settings.get("hume_ai_agent", {})
+    metadata_writer = kwargs.get("history_metadata_writer")
+    extra = {"metadata_writer": metadata_writer} if metadata_writer else {}
     return HumeAIAgent(
         api_key=settings.get("api_key"),
         host=settings.get("host", "api.hume.ai"),
         config_id=settings.get("config_id"),
         idle_timeout=settings.get("idle_timeout", 15),
+        **extra,
     )
 
 

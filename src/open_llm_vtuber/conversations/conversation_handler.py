@@ -7,7 +7,6 @@ from fastapi import WebSocket
 from loguru import logger
 
 from ..chat_group import ChatGroupManager
-from ..chat_history_manager import store_message
 from ..service_context import ServiceContext
 from ..utils.async_utils import cancel_and_wait
 from .group_conversation import process_group_conversation
@@ -191,17 +190,13 @@ async def handle_individual_interrupt(
             logger.error(f"Error handling interrupt: {e}")
 
         if context.history_uid and heard_response:
-            store_message(
-                conf_uid=context.character_config.conf_uid,
-                history_uid=context.history_uid,
+            await context.store_history_message(
                 role="ai",
                 content=heard_response,
                 name=context.character_config.character_name,
                 avatar=context.character_config.avatar,
             )
-            store_message(
-                conf_uid=context.character_config.conf_uid,
-                history_uid=context.history_uid,
+            await context.store_history_message(
                 role="system",
                 content="[Interrupted by user]",
             )
@@ -251,17 +246,13 @@ async def handle_group_interrupt(
                 try:
                     member_ctx = client_contexts[member_uid]
                     member_ctx.agent_engine.handle_interrupt(heard_response)
-                    store_message(
-                        conf_uid=member_ctx.character_config.conf_uid,
-                        history_uid=member_ctx.history_uid,
+                    await member_ctx.store_history_message(
                         role="ai",
                         content=heard_response,
                         name=context.character_config.character_name,
                         avatar=context.character_config.avatar,
                     )
-                    store_message(
-                        conf_uid=member_ctx.character_config.conf_uid,
-                        history_uid=member_ctx.history_uid,
+                    await member_ctx.store_history_message(
                         role="system",
                         content="[Interrupted by user]",
                     )

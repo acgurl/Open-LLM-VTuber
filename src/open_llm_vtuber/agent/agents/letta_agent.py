@@ -50,10 +50,6 @@ class LettaAgent(AgentInterface):
             )
         )
 
-    def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
-        # The Letta Server automatically stores historical messages, so this part is not needed
-        pass
-
     async def generator_to_async(self, gen):
         for item in gen:
             yield item

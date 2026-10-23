@@ -223,6 +223,7 @@ def _interrupt_context():
         character_config=SimpleNamespace(
             conf_uid="conf", character_name="AI", avatar=""
         ),
+        store_history_message=AsyncMock(),
     )
 
 
@@ -231,24 +232,25 @@ class InterruptHistoryTests(unittest.IsolatedAsyncioTestCase):
         context = _interrupt_context()
         tasks = {"client": None}
 
-        with patch.object(conversation_handler, "store_message") as store:
-            await conversation_handler.handle_individual_interrupt(
-                "client", tasks, context, ""
-            )
+        await conversation_handler.handle_individual_interrupt(
+            "client", tasks, context, ""
+        )
 
-        store.assert_not_called()
+        context.store_history_message.assert_not_awaited()
 
     async def test_partial_individual_interrupt_stores_ai_and_marker(self):
         context = _interrupt_context()
         tasks = {"client": None}
 
-        with patch.object(conversation_handler, "store_message") as store:
-            await conversation_handler.handle_individual_interrupt(
-                "client", tasks, context, "partial answer"
-            )
+        await conversation_handler.handle_individual_interrupt(
+            "client", tasks, context, "partial answer"
+        )
 
         self.assertEqual(
-            [call.kwargs["role"] for call in store.call_args_list],
+            [
+                call.kwargs["role"]
+                for call in context.store_history_message.await_args_list
+            ],
             ["ai", "system"],
         )
 
@@ -259,17 +261,16 @@ class InterruptHistoryTests(unittest.IsolatedAsyncioTestCase):
         manager = Mock()
         manager.get_group_by_id.return_value = SimpleNamespace(members={"client"})
 
-        with patch.object(conversation_handler, "store_message") as store:
-            await conversation_handler.handle_group_interrupt(
-                group_id="group",
-                heard_response="",
-                current_conversation_tasks=tasks,
-                chat_group_manager=manager,
-                client_contexts={"client": context},
-                broadcast_to_group=AsyncMock(),
-            )
+        await conversation_handler.handle_group_interrupt(
+            group_id="group",
+            heard_response="",
+            current_conversation_tasks=tasks,
+            chat_group_manager=manager,
+            client_contexts={"client": context},
+            broadcast_to_group=AsyncMock(),
+        )
 
-        store.assert_not_called()
+        context.store_history_message.assert_not_awaited()
         self.assertTrue(task.cancelled())
 
 

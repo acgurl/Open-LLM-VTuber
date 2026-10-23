@@ -1,0 +1,194 @@
+"""Storage interfaces for conversation history.
+
+All repository methods take ``user_id`` explicitly so a future authentication
+layer can bind a connection to a user without changing the storage contract.
+"""
+
+from abc import ABC, abstractmethod
+import re
+from typing import Literal, TypedDict
+
+DEFAULT_USER_ID = "local"
+MAX_KEY_LENGTH = 128
+
+_USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+
+
+class HistoryMessage(TypedDict, total=False):
+    role: Literal["human", "ai", "system"]
+    timestamp: str
+    content: str
+    name: str
+    avatar: str
+
+
+class HistoryNotFoundError(LookupError):
+    """Raised when a history does not exist for the requested user/character."""
+
+
+def validate_user_id(user_id: str) -> str:
+    if not isinstance(user_id, str) or not _USER_ID_PATTERN.fullmatch(user_id):
+        raise ValueError(
+            "user_id must be 1-64 characters of letters, digits, dot, dash or underscore"
+        )
+    return user_id
+
+
+def validate_key(value: str, name: str) -> str:
+    if (
+        not isinstance(value, str)
+        or not value
+        or value != value.strip()
+        or len(value) > MAX_KEY_LENGTH
+    ):
+        raise ValueError(
+            f"{name} must be a non-empty string up to {MAX_KEY_LENGTH} characters"
+        )
+    return value
+
+
+class HistoryRepository(ABC):
+    """Database-agnostic history storage.
+
+    Implementations must scope every read and write by ``user_id``. The SQLite
+    implementation is the default; other backends only need to implement this
+    interface and be registered in ``storage.factory``.
+    """
+
+    @abstractmethod
+    async def initialize(self) -> None:
+        """Prepare the backend (schema, connection pool, etc.)."""
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Release backend resources."""
+
+    @abstractmethod
+    async def ensure_user(self, user_id: str, display_name: str | None = None) -> None:
+        """Create the user row if it does not exist."""
+
+    @abstractmethod
+    async def create_history(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str | None = None,
+    ) -> str:
+        """Create an empty history and return its id."""
+
+    @abstractmethod
+    async def history_exists(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+    ) -> bool:
+        """Return True only if the history belongs to this user and character."""
+
+    @abstractmethod
+    async def list_histories(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+    ) -> list[dict]:
+        """Return non-empty histories ordered by latest message (newest first)."""
+
+    @abstractmethod
+    async def get_history(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+    ) -> list[HistoryMessage]:
+        """Return all messages in a history, excluding metadata."""
+
+    @abstractmethod
+    async def store_message(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+        role: Literal["human", "ai", "system"],
+        content: str,
+        name: str | None = None,
+        avatar: str | None = None,
+        timestamp: str | None = None,
+    ) -> None:
+        """Append a message to a history."""
+
+    @abstractmethod
+    async def get_metadata(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+    ) -> dict:
+        """Return metadata for a history, or an empty dict."""
+
+    @abstractmethod
+    async def update_metadata(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+        metadata: dict,
+    ) -> bool:
+        """Merge fields into a history's metadata."""
+
+    @abstractmethod
+    async def delete_history(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+    ) -> bool:
+        """Delete a history and its messages."""
+
+    @abstractmethod
+    async def modify_latest_message(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+        role: Literal["human", "ai", "system"],
+        new_content: str,
+    ) -> bool:
+        """Replace the latest message when its role matches."""
+
+    @abstractmethod
+    async def rename_history(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        old_history_uid: str,
+        new_history_uid: str,
+    ) -> bool:
+        """Rename a history id."""
+
+    @abstractmethod
+    async def import_history(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+        messages: list[HistoryMessage],
+        metadata: dict | None = None,
+        created_at: str | None = None,
+        updated_at: str | None = None,
+        legacy_path: str | None = None,
+    ) -> bool:
+        """Bulk-insert a history with original timestamps.
+
+        Returns False when the same history id or legacy path already exists.
+        """

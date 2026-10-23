@@ -27,6 +27,17 @@ system_config:
     # 额外指导 LLM 如何使用工具的提示词
     # tool_guidance_prompt: 'tool_guidance_prompt'
 
+  # 聊天历史存储。默认使用 SQLite；存储层是数据库无关接口，之后可以接入其他数据库。
+  storage:
+    backend: 'sqlite'
+    sqlite_path: 'data/storage/open_llm_vtuber.db'
+    # 当前单用户部署的数据归属；接入登录后会按连接传入真实用户 ID。
+    default_user_id: 'local'
+    # 首次启动时导入 chat_history/*.json，并把原文件移动到备份目录。
+    import_legacy_history: true
+    legacy_history_dir: 'chat_history'
+    legacy_backup_dir: 'data/storage/legacy_history'
+
 # 默认角色的配置
 character_config:
   conf_name: 'mao_pro' # 角色配置文件的名称

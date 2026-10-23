@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Any, Literal
 from loguru import logger
 from pydantic import ValidationError
 from fastapi import WebSocket
@@ -19,6 +19,12 @@ from .mcpp.tool_manager import ToolManager
 from .mcpp.mcp_client import MCPClient
 from .mcpp.tool_executor import ToolExecutor
 from .mcpp.tool_adapter import ToolAdapter
+from .storage import (
+    DEFAULT_USER_ID,
+    HistoryMessage,
+    HistoryRepository,
+    UserHistoryStore,
+)
 from .utils.security import redact_secrets, resolve_existing_file_within
 
 from .asr.asr_factory import ASRFactory
@@ -71,6 +77,9 @@ class ServiceContext:
         self.mcp_prompt: str = ""
 
         self.history_uid: str = ""  # Add history_uid field
+        self.history_repository: HistoryRepository | None = None
+        self.history: UserHistoryStore | None = None
+        self.user_id: str = DEFAULT_USER_ID
 
         self.channels: OutboundChannels | None = None
         self.client_uid: str = None
@@ -207,6 +216,63 @@ class ServiceContext:
                 logger.exception("Failed to close agent engine")
         logger.info("ServiceContext closed.")
 
+    def set_history_storage(
+        self,
+        repository: HistoryRepository | None,
+        user_id: str = DEFAULT_USER_ID,
+    ) -> None:
+        self.history_repository = repository
+        self.user_id = user_id
+        self.history = (
+            UserHistoryStore(repository, user_id) if repository is not None else None
+        )
+
+    async def load_history(self, history_uid: str) -> list[HistoryMessage]:
+        """Load a user-owned history into the agent's working memory."""
+        if self.history is None:
+            raise RuntimeError("History storage is not configured")
+        if not history_uid or not await self.history.history_exists(
+            self.character_config.conf_uid, history_uid
+        ):
+            raise ValueError(f"History not found: {history_uid}")
+
+        messages = await self.history.get_history(
+            self.character_config.conf_uid, history_uid
+        )
+        metadata = await self.history.get_metadata(
+            self.character_config.conf_uid, history_uid
+        )
+        await self.agent_engine.set_memory(messages, metadata)
+        self.history_uid = history_uid
+        return messages
+
+    async def store_history_message(
+        self,
+        role: Literal["human", "ai", "system"],
+        content: str,
+        name: str | None = None,
+        avatar: str | None = None,
+    ) -> None:
+        if self.history is None or not self.history_uid:
+            return
+        await self.history.store_message(
+            self.character_config.conf_uid,
+            self.history_uid,
+            role=role,
+            content=content,
+            name=name,
+            avatar=avatar,
+        )
+
+    async def update_history_metadata(self, metadata: dict) -> bool:
+        if self.history is None or not self.history_uid:
+            return False
+        return await self.history.update_metadata(
+            self.character_config.conf_uid,
+            self.history_uid,
+            metadata,
+        )
+
     async def load_cache(
         self,
         config: Config,
@@ -222,6 +288,8 @@ class ServiceContext:
         tool_adapter: ToolAdapter | None = None,
         channels: OutboundChannels | None = None,
         client_uid: str = None,
+        history_repository: HistoryRepository | None = None,
+        user_id: str = DEFAULT_USER_ID,
     ) -> None:
         """
         Load the ServiceContext with the reference of the provided instances.
@@ -246,6 +314,7 @@ class ServiceContext:
         self.tool_adapter = tool_adapter
         self.channels = channels
         self.client_uid = client_uid
+        self.set_history_storage(history_repository, user_id)
 
         # Initialize session-specific MCP components
         await self._init_mcp_components(
@@ -427,6 +496,7 @@ class ServiceContext:
                 tool_manager=self.tool_manager,
                 tool_executor=self.tool_executor,
                 mcp_prompt_string=self.mcp_prompt,
+                history_metadata_writer=self.update_history_metadata,
             )
 
             logger.debug(f"Agent choice: {agent_config.conversation_agent_choice}")
@@ -587,6 +657,7 @@ class ServiceContext:
             }
         )
         await self.load_from_config(new_config)
+        self.history_uid = None
         logger.debug(f"New config: {self}")
 
     async def _notify_config_switched(

@@ -15,7 +15,6 @@ from .conversation_utils import (
 )
 from .types import OutboundChannels
 from .tts_manager import TTSTaskManager
-from ..chat_history_manager import store_message
 from ..service_context import ServiceContext
 
 
@@ -67,9 +66,7 @@ async def process_single_conversation(
         # Store user message (check if we should skip storing to history)
         skip_history = metadata and metadata.get("skip_history", False)
         if context.history_uid and not skip_history:
-            store_message(
-                conf_uid=context.character_config.conf_uid,
-                history_uid=context.history_uid,
+            await context.store_history_message(
                 role="human",
                 content=input_text,
                 name=context.character_config.human_name,
@@ -100,9 +97,7 @@ async def process_single_conversation(
         )
 
         if context.history_uid and full_response:  # Check full_response before storing
-            store_message(
-                conf_uid=context.character_config.conf_uid,
-                history_uid=context.history_uid,
+            await context.store_history_message(
                 role="ai",
                 content=full_response,
                 name=context.character_config.character_name,

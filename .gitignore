@@ -40,6 +40,9 @@ src/open_llm_vtuber/llm/user_credentials.json
 # Database files
 memory.db
 memory.db.bk
+data/*.db
+data/*.db-*
+data/storage/
 
 # Logs
 server.log

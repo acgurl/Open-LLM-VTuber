@@ -1,6 +1,6 @@
 import asyncio
 import base64
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Awaitable, Callable, Optional
 import json
 import websockets
 from loguru import logger
@@ -9,7 +9,6 @@ from pathlib import Path
 from .agent_interface import AgentInterface
 from ..output_types import AudioOutput, Actions, DisplayText
 from ..input_types import BatchInput
-from ...chat_history_manager import get_metadata, update_metadata
 
 
 class HumeAIAgent(AgentInterface):
@@ -26,6 +25,7 @@ class HumeAIAgent(AgentInterface):
         host: str = "api.hume.ai",
         config_id: Optional[str] = None,
         idle_timeout: int = 15,
+        metadata_writer: Callable[[dict], Awaitable[bool]] | None = None,
     ):
         """
         Initialize Hume AI agent
@@ -46,8 +46,7 @@ class HumeAIAgent(AgentInterface):
         self._connected = False
         self._chat_group_id = None
         self._idle_timer = None
-        self._current_conf_uid = None
-        self._current_history_uid = None
+        self._metadata_writer = metadata_writer
         self._background_tasks: set[asyncio.Task] = set()
 
         # Create cache directory if it doesn't exist
@@ -87,11 +86,12 @@ class HumeAIAgent(AgentInterface):
             if data.get("type") == "chat_metadata":
                 new_chat_group_id = data.get("chat_group_id")
 
-                if not resume_chat_group_id and self._current_history_uid:
-                    update_metadata(
-                        self._current_conf_uid,
-                        self._current_history_uid,
-                        {"resume_id": new_chat_group_id, "agent_type": self.AGENT_TYPE},
+                if not resume_chat_group_id:
+                    await self._write_metadata(
+                        {
+                            "resume_id": new_chat_group_id,
+                            "agent_type": self.AGENT_TYPE,
+                        }
                     )
 
                 self._chat_group_id = new_chat_group_id
@@ -100,6 +100,19 @@ class HumeAIAgent(AgentInterface):
                     f"chat group: {self._chat_group_id}"
                 )
                 break
+
+    async def _write_metadata(self, metadata: dict) -> None:
+        if self._metadata_writer is None:
+            logger.warning(
+                "Hume metadata writer is not configured; resume_id will not persist"
+            )
+            return
+        try:
+            saved = await self._metadata_writer(metadata)
+            if not saved:
+                logger.warning("No active history; Hume metadata was not persisted")
+        except Exception:
+            logger.exception("Failed to persist Hume metadata")
 
     def _spawn(self, coro) -> asyncio.Task:
         task = asyncio.create_task(coro)
@@ -126,18 +139,13 @@ class HumeAIAgent(AgentInterface):
         if not self._connected or not self._ws or self._ws.closed:
             await self.connect(self._chat_group_id)
 
-    def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:
-        """
-        Set chat group ID based on history
-
-        Args:
-            conf_uid: Configuration ID
-            history_uid: History ID
-        """
-        self._current_conf_uid = conf_uid
-        self._current_history_uid = history_uid
-
-        metadata = get_metadata(conf_uid, history_uid)
+    async def set_memory(
+        self,
+        messages: list[dict],
+        metadata: dict | None = None,
+    ) -> None:
+        """Set the Hume chat group from persisted history metadata."""
+        metadata = metadata or {}
 
         agent_type = metadata.get("agent_type")
         if agent_type and agent_type != self.AGENT_TYPE:

@@ -20,7 +20,6 @@ from .types import (
     WebSocketSend,
 )
 from ..service_context import ServiceContext
-from ..chat_history_manager import store_message
 from .tts_manager import TTSTaskManager
 
 
@@ -92,9 +91,7 @@ async def process_group_conversation(
         if not skip_history:
             for member_uid in group_members:
                 member_context = client_contexts[member_uid]
-                store_message(
-                    conf_uid=member_context.character_config.conf_uid,
-                    history_uid=member_context.history_uid,
+                await member_context.store_history_message(
                     role="human",
                     content=input_text,
                     name=human_name,
@@ -286,9 +283,7 @@ async def handle_group_member_turn(
         if not should_skip_history:
             for member_uid in group_members:
                 member_context = client_contexts[member_uid]
-                store_message(
-                    conf_uid=member_context.character_config.conf_uid,
-                    history_uid=member_context.history_uid,
+                await member_context.store_history_message(
                     role="ai",
                     content=full_response,
                     name=context.character_config.character_name,

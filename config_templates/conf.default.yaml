@@ -25,6 +25,19 @@ system_config:
     # Additional guidance for LLM on how to use tools
     # tool_guidance_prompt: 'tool_guidance_prompt'
 
+  # Chat history storage. SQLite is the default backend; the repository
+  # interface is database-agnostic so another backend can be added later.
+  storage:
+    backend: 'sqlite'
+    sqlite_path: 'data/storage/open_llm_vtuber.db'
+    # Existing single-user deployment owner. Authentication will supply
+    # per-connection user ids in a later step.
+    default_user_id: 'local'
+    # Import legacy chat_history/*.json once and move the files to a backup.
+    import_legacy_history: true
+    legacy_history_dir: 'chat_history'
+    legacy_backup_dir: 'data/storage/legacy_history'
+
 # configuration for the default character
 character_config:
   conf_name: 'mao_pro' # The name of character configuration file.

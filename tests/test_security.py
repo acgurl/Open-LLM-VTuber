@@ -9,7 +9,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from open_llm_vtuber.chat_history_manager import (  # noqa: E402
+from open_llm_vtuber.storage.legacy import (  # noqa: E402
     _get_safe_history_path,
     _sanitize_path_component,
 )
