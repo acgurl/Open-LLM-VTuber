@@ -17,7 +17,7 @@ try:
         modify_latest_message,
         rename_history_file,
         store_message,
-        update_metadate,
+        update_metadata,
     )
 except ImportError as exc:
     raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
@@ -70,7 +70,7 @@ class ChatHistoryManagerTests(unittest.TestCase):
         history_uid = create_new_history("conf")
         store_message("conf", history_uid, "ai", "旧回复")
 
-        self.assertTrue(update_metadate("conf", history_uid, {"title": "会话"}))
+        self.assertTrue(update_metadata("conf", history_uid, {"title": "会话"}))
         self.assertEqual(get_metadata("conf", history_uid)["title"], "会话")
 
         self.assertTrue(
