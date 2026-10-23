@@ -1,4 +1,5 @@
 import base64
+import io
 import os
 from pydub import AudioSegment
 from pydub.utils import make_chunks
@@ -17,15 +18,26 @@ _PASSTHROUGH_AUDIO_MIME = {
 
 def _load_audio(audio_path: str) -> tuple[AudioSegment, bytes, str]:
     """Decode audio for volume analysis while keeping its original encoding."""
-    audio = AudioSegment.from_file(audio_path)
     extension = os.path.splitext(audio_path)[1].lower()
     audio_mime = _PASSTHROUGH_AUDIO_MIME.get(extension)
-    if audio_mime:
-        # Ship the engine's own encoding (Edge TTS emits MP3) instead of
-        # inflating it to WAV; base64 WAV frames were stalling playback.
-        with open(audio_path, "rb") as audio_file:
-            return audio, audio_file.read(), audio_mime
-    return audio, audio.export(format="wav").read(), "audio/wav"
+
+    # pydub skips its own file.close() when it decodes a WAV path directly, so
+    # own the handle here and close it deterministically.
+    with open(audio_path, "rb") as audio_file:
+        if audio_mime:
+            # Ship the engine's own encoding (Edge TTS emits MP3) instead of
+            # inflating it to WAV; base64 WAV frames were stalling playback.
+            audio_bytes = audio_file.read()
+            audio_file.seek(0)
+        audio = AudioSegment.from_file(
+            audio_file, format="wav" if extension == ".wav" else None
+        )
+        if not audio_mime:
+            converted = io.BytesIO()
+            audio.export(converted, format="wav")
+            audio_bytes = converted.getvalue()
+
+    return audio, audio_bytes, audio_mime or "audio/wav"
 
 
 def _get_volume_by_chunks(audio: AudioSegment, chunk_length_ms: int) -> list:
