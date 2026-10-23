@@ -17,11 +17,14 @@ class FakeTTSEngine:
     def __init__(self) -> None:
         self.calls = []
         self.fail = False
+        self.return_none = False
 
-    async def async_generate_audio(self, text: str, file_name_no_ext: str) -> str:
+    async def async_generate_audio(self, text: str, file_name_no_ext: str):
         self.calls.append(text)
         if self.fail:
             raise RuntimeError("synthesis failed")
+        if self.return_none:
+            return None
         return f"audio/{file_name_no_ext}.wav"
 
 
@@ -86,6 +89,23 @@ class TTSWebSocketTests(unittest.TestCase):
             error = websocket.receive_json()
 
             self.context.tts_engine.fail = False
+            websocket.send_json({"text": "Hello."})
+            partial = websocket.receive_json()
+            complete = websocket.receive_json()
+
+        self.assertEqual(
+            error, {"status": "error", "message": "Failed to generate audio"}
+        )
+        self.assertEqual(partial["status"], "partial")
+        self.assertEqual(complete, {"status": "complete"})
+
+    def test_reports_none_audio_as_generation_failure(self) -> None:
+        self.context.tts_engine.return_none = True
+        with self.client.websocket_connect("/tts-ws") as websocket:
+            websocket.send_json({"text": "Hello."})
+            error = websocket.receive_json()
+
+            self.context.tts_engine.return_none = False
             websocket.send_json({"text": "Hello."})
             partial = websocket.receive_json()
             complete = websocket.receive_json()

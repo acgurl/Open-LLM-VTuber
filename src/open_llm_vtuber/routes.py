@@ -55,6 +55,13 @@ async def _stream_tts_sentences(websocket: WebSocket, tts_engine, sentences) -> 
         audio_path = await tts_engine.async_generate_audio(
             text=sentence, file_name_no_ext=new_audio_file_stem()
         )
+        if not audio_path:
+            logger.error("TTS engine returned no audio path")
+            await websocket.send_json(
+                {"status": "error", "message": "Failed to generate audio"}
+            )
+            return
+
         logger.info(f"Generated audio for sentence at: {audio_path}")
         await websocket.send_json(
             {
