@@ -98,91 +98,92 @@ class ServiceContext:
 
     # ==== Initializers
 
-    async def _init_mcp_components(self, use_mcpp, enabled_servers):
-        """Initializes MCP components based on configuration, dynamically fetching tool info."""
-        logger.debug(
-            f"Initializing MCP components: use_mcpp={use_mcpp}, enabled_servers={enabled_servers}"
-        )
-
-        # Reset MCP components first
+    def _reset_mcp_components(self) -> None:
         self.mcp_server_registery = None
         self.tool_manager = None
         self.mcp_client = None
         self.tool_executor = None
         self.mcp_prompt = ""
 
+    async def _init_mcp_tools(self, enabled_servers) -> None:
+        try:
+            (
+                mcp_prompt_string,
+                openai_tools,
+                claude_tools,
+                raw_tools_dict,
+            ) = await self.tool_adapter.build_tools(enabled_servers)
+            self.mcp_prompt = mcp_prompt_string
+            logger.info(
+                f"Dynamically generated MCP prompt string (length: {len(self.mcp_prompt)})."
+            )
+            logger.info(
+                f"Dynamically formatted tools - OpenAI: {len(openai_tools)}, "
+                f"Claude: {len(claude_tools)}."
+            )
+            self.tool_manager = ToolManager(
+                formatted_tools_openai=openai_tools,
+                formatted_tools_claude=claude_tools,
+                initial_tools_dict=raw_tools_dict,
+            )
+            logger.info("ToolManager initialized with dynamically fetched tools.")
+        except Exception as e:
+            logger.error(
+                f"Failed during dynamic MCP tool construction: {e}", exc_info=True
+            )
+            self.tool_manager = None
+            self.mcp_prompt = "[Error constructing MCP tools/prompt]"
+
+    def _init_mcp_client(self) -> None:
+        if not self.mcp_server_registery:
+            logger.error(
+                "MCP enabled but ServerRegistry not available. MCPClient not created."
+            )
+            self.mcp_client = None
+            return
+
+        self.mcp_client = MCPClient(
+            self.mcp_server_registery,
+            self.channels.text if self.channels else None,
+            self.client_uid,
+        )
+        logger.info("MCPClient initialized for this session.")
+
+    def _init_tool_executor(self) -> None:
+        if self.mcp_client and self.tool_manager:
+            self.tool_executor = ToolExecutor(self.mcp_client, self.tool_manager)
+            logger.info("ToolExecutor initialized for this session.")
+        else:
+            logger.warning(
+                "MCPClient or ToolManager not available. ToolExecutor not created."
+            )
+            self.tool_executor = None
+
+    async def _init_mcp_components(self, use_mcpp, enabled_servers):
+        """Initializes MCP components based on configuration, dynamically fetching tool info."""
+        logger.debug(
+            f"Initializing MCP components: use_mcpp={use_mcpp}, enabled_servers={enabled_servers}"
+        )
+        self._reset_mcp_components()
+
         if use_mcpp and enabled_servers:
-            # 1. Initialize ServerRegistry
             self.mcp_server_registery = ServerRegistry()
             logger.info("ServerRegistry initialized or referenced.")
 
-            # 2. Use ToolAdapter to get the MCP prompt and tools
             if not self.tool_adapter:
                 logger.error(
                     "ToolAdapter not initialized before calling _init_mcp_components."
                 )
                 self.mcp_prompt = "[Error: ToolAdapter not initialized]"
-                return  # Exit if ToolAdapter is mandatory and not initialized
+                return
 
-            try:
-                (
-                    mcp_prompt_string,
-                    openai_tools,
-                    claude_tools,
-                    raw_tools_dict,
-                ) = await self.tool_adapter.build_tools(enabled_servers)
-                # Store the generated prompt string
-                self.mcp_prompt = mcp_prompt_string
-                logger.info(
-                    f"Dynamically generated MCP prompt string (length: {len(self.mcp_prompt)})."
-                )
-                logger.info(
-                    f"Dynamically formatted tools - OpenAI: {len(openai_tools)}, Claude: {len(claude_tools)}."
-                )
-
-                # 3. Initialize ToolManager with the fetched formatted tools
-                self.tool_manager = ToolManager(
-                    formatted_tools_openai=openai_tools,
-                    formatted_tools_claude=claude_tools,
-                    initial_tools_dict=raw_tools_dict,
-                )
-                logger.info("ToolManager initialized with dynamically fetched tools.")
-
-            except Exception as e:
-                logger.error(
-                    f"Failed during dynamic MCP tool construction: {e}", exc_info=True
-                )
-                # Ensure dependent components are not created if construction fails
-                self.tool_manager = None
-                self.mcp_prompt = "[Error constructing MCP tools/prompt]"
-
-            # 4. Initialize MCPClient
-            if self.mcp_server_registery:
-                self.mcp_client = MCPClient(
-                    self.mcp_server_registery,
-                    self.channels.text if self.channels else None,
-                    self.client_uid,
-                )
-                logger.info("MCPClient initialized for this session.")
-            else:
-                logger.error(
-                    "MCP enabled but ServerRegistry not available. MCPClient not created."
-                )
-                self.mcp_client = None  # Ensure it's None
-
-            # 5. Initialize ToolExecutor
-            if self.mcp_client and self.tool_manager:
-                self.tool_executor = ToolExecutor(self.mcp_client, self.tool_manager)
-                logger.info("ToolExecutor initialized for this session.")
-            else:
-                logger.warning(
-                    "MCPClient or ToolManager not available. ToolExecutor not created."
-                )
-                self.tool_executor = None  # Ensure it's None
-
-        elif use_mcpp and not enabled_servers:
+            await self._init_mcp_tools(enabled_servers)
+            self._init_mcp_client()
+            self._init_tool_executor()
+        elif use_mcpp:
             logger.warning(
-                "use_mcpp is True, but mcp_enabled_servers list is empty. MCP components not initialized."
+                "use_mcpp is True, but mcp_enabled_servers list is empty. "
+                "MCP components not initialized."
             )
         else:
             logger.debug(
