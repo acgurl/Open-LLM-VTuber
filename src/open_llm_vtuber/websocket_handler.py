@@ -254,15 +254,7 @@ class WebSocketHandler:
         )
 
         await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "set-model-and-conf",
-                    "model_info": session_service_context.live2d_model.model_info,
-                    "conf_name": session_service_context.character_config.conf_name,
-                    "conf_uid": session_service_context.character_config.conf_uid,
-                    "client_uid": client_uid,
-                }
-            )
+            json.dumps(session_service_context.model_conf_payload(client_uid))
         )
 
         # Send initial group status
@@ -756,17 +748,7 @@ class WebSocketHandler:
         if not context:
             context = self.default_context_cache
 
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "set-model-and-conf",
-                    "model_info": context.live2d_model.model_info,
-                    "conf_name": context.character_config.conf_name,
-                    "conf_uid": context.character_config.conf_uid,
-                    "client_uid": client_uid,
-                }
-            )
-        )
+        await websocket.send_text(json.dumps(context.model_conf_payload(client_uid)))
 
     async def _handle_heartbeat(
         self, websocket: WebSocket, client_uid: str, data: WSMessage

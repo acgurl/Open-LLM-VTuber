@@ -182,5 +182,31 @@ class HandleConfigSwitchTests(unittest.IsolatedAsyncioTestCase):
         load_from_config.assert_not_awaited()
 
 
+class ModelConfPayloadTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.context = ServiceContext()
+        self.context.live2d_model = SimpleNamespace(model_info={"name": "model"})
+        self.context.character_config = SimpleNamespace(
+            conf_name="Conf", conf_uid="conf-uid"
+        )
+
+    def test_payload_includes_client_uid_when_given(self):
+        self.assertEqual(
+            self.context.model_conf_payload("client"),
+            {
+                "type": "set-model-and-conf",
+                "model_info": {"name": "model"},
+                "conf_name": "Conf",
+                "conf_uid": "conf-uid",
+                "client_uid": "client",
+            },
+        )
+
+    def test_payload_omits_client_uid_by_default(self):
+        payload = self.context.model_conf_payload()
+
+        self.assertNotIn("client_uid", payload)
+
+
 if __name__ == "__main__":
     unittest.main()

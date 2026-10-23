@@ -473,6 +473,18 @@ class ServiceContext:
 
     # ==== utils
 
+    def model_conf_payload(self, client_uid: str | None = None) -> dict:
+        """Build the set-model-and-conf payload for the current character."""
+        payload = {
+            "type": "set-model-and-conf",
+            "model_info": self.live2d_model.model_info,
+            "conf_name": self.character_config.conf_name,
+            "conf_uid": self.character_config.conf_uid,
+        }
+        if client_uid is not None:
+            payload["client_uid"] = client_uid
+        return payload
+
     async def construct_system_prompt(self, persona_prompt: str) -> str:
         """
         Append tool prompts to persona prompt.
@@ -578,16 +590,7 @@ class ServiceContext:
     async def _notify_config_switched(
         self, websocket: WebSocket, config_file_name: str
     ) -> None:
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "set-model-and-conf",
-                    "model_info": self.live2d_model.model_info,
-                    "conf_name": self.character_config.conf_name,
-                    "conf_uid": self.character_config.conf_uid,
-                }
-            )
-        )
+        await websocket.send_text(json.dumps(self.model_conf_payload()))
 
         await websocket.send_text(
             json.dumps(
