@@ -1,12 +1,6 @@
-import os
-import sys
-
 from melo.api import TTS
 
 from .tts_interface import TTSInterface
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
 
 
 class TTSEngine(TTSInterface):
@@ -29,10 +23,6 @@ class TTSEngine(TTSInterface):
 
         self.temp_audio_file = "temp"
         self.file_extension = "wav"
-        self.new_audio_dir = "cache"
-
-        if not os.path.exists(self.new_audio_dir):
-            os.makedirs(self.new_audio_dir)
 
     def generate_audio(self, text, file_name_no_ext=None):
         """

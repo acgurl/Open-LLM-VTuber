@@ -1,14 +1,9 @@
-import os
-import sys
 import threading
 
 import pyttsx3
 from loguru import logger
 
 from .tts_interface import TTSInterface
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
 
 
 # using https://github.com/thevickypedia/py3-tts because pyttsx3 is unmaintained and not working
@@ -19,11 +14,7 @@ class TTSEngine(TTSInterface):
         self.engine = pyttsx3.init()
         self.temp_audio_file = "temp"
         self.file_extension = "aiff"
-        self.new_audio_dir = "cache"
         self.lock = threading.Lock()
-
-        if not os.path.exists(self.new_audio_dir):
-            os.makedirs(self.new_audio_dir)
 
     #! This method (pyttsx3) is not thread safe. It will blow if it's called from multiple threads at the same time.
     def generate_audio(self, text, file_name_no_ext=None):

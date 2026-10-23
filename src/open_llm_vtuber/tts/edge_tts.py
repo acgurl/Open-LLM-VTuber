@@ -1,12 +1,6 @@
-import sys
-import os
-
 import edge_tts
 from loguru import logger
 from .tts_interface import TTSInterface
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
 
 
 # Check out doc at https://github.com/rany2/edge-tts
@@ -19,10 +13,6 @@ class TTSEngine(TTSInterface):
 
         self.temp_audio_file = "temp"
         self.file_extension = "mp3"
-        self.new_audio_dir = "cache"
-
-        if not os.path.exists(self.new_audio_dir):
-            os.makedirs(self.new_audio_dir)
 
     def generate_audio(self, text, file_name_no_ext=None):
         """

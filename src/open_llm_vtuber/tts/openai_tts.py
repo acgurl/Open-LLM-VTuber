@@ -1,16 +1,11 @@
 # src/open_llm_vtuber/tts/openai_tts.py
 import os
-import sys
 from pathlib import Path
 
 from loguru import logger
 from openai import OpenAI  # Use the official OpenAI library
 
 from .tts_interface import TTSInterface
-
-# Add the current directory to sys.path for relative imports if needed
-current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
 
 
 class TTSEngine(TTSInterface):
@@ -46,11 +41,7 @@ class TTSEngine(TTSInterface):
                 f"Unsupported file extension '{self.file_extension}' configured for OpenAI TTS. Defaulting to 'mp3'."
             )
             self.file_extension = "mp3"
-        self.new_audio_dir = "cache"
         self.temp_audio_file = "temp_openai"  # Use a different temp name
-
-        if not os.path.exists(self.new_audio_dir):
-            os.makedirs(self.new_audio_dir)
 
         try:
             # Initialize OpenAI client

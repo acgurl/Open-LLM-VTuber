@@ -15,7 +15,6 @@ class TTSEngine(TTSInterface):
         speed: int = 3,
     ):
         self.api_url = api_url
-        self.new_audio_dir = "cache"
         self.file_extension = "wav"
         self.used_voices = prompt_wav_upload
         self.api_name = api_name
