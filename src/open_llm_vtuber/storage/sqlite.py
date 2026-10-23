@@ -90,6 +90,19 @@ def _load_json(value: str | None) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def _message_from_row(row: sqlite3.Row) -> HistoryMessage:
+    message: HistoryMessage = {
+        "role": row["role"],
+        "timestamp": row["timestamp"],
+        "content": row["content"],
+    }
+    if row["name"] is not None:
+        message["name"] = row["name"]
+    if row["avatar"] is not None:
+        message["avatar"] = row["avatar"]
+    return message
+
+
 def _validate_message(
     message: HistoryMessage,
 ) -> tuple[str, str, str, str | None, str | None]:
@@ -191,7 +204,6 @@ class SQLiteHistoryRepository(HistoryRepository):
     def _ensure_user_for_user_sync(
         self, user_id: str, display_name: str | None
     ) -> None:
-        assert self._conn is not None
         with self._conn:
             self._ensure_user_sync(self._conn, user_id, display_name)
 
@@ -220,7 +232,6 @@ class SQLiteHistoryRepository(HistoryRepository):
         display_name: str | None,
         email: str | None,
     ) -> str:
-        assert self._conn is not None
         now = _now_iso()
         with self._conn:
             row = self._conn.execute(
@@ -254,7 +265,6 @@ class SQLiteHistoryRepository(HistoryRepository):
         return await self._run(self._list_conf_uids_sync, user_id)
 
     def _list_conf_uids_sync(self, user_id: str) -> list[str]:
-        assert self._conn is not None
         rows = self._conn.execute(
             "SELECT DISTINCT conf_uid FROM histories "
             "WHERE user_id = ? ORDER BY conf_uid",
@@ -283,7 +293,6 @@ class SQLiteHistoryRepository(HistoryRepository):
         conf_uid: str,
         history_uid: str | None,
     ) -> str:
-        assert self._conn is not None
         history_uid = history_uid or _new_history_uid()
         now = _now_iso()
         with self._conn:
@@ -313,7 +322,6 @@ class SQLiteHistoryRepository(HistoryRepository):
     def _history_exists_sync(
         self, user_id: str, conf_uid: str, history_uid: str
     ) -> bool:
-        assert self._conn is not None
         row = self._conn.execute(
             "SELECT 1 FROM histories WHERE id = ? AND user_id = ? AND conf_uid = ?",
             (history_uid, user_id, conf_uid),
@@ -326,7 +334,6 @@ class SQLiteHistoryRepository(HistoryRepository):
         return await self._run(self._list_histories_sync, user_id, conf_uid)
 
     def _list_histories_sync(self, user_id: str, conf_uid: str) -> list[dict]:
-        assert self._conn is not None
         rows = self._conn.execute(
             "SELECT h.id, m.role, m.content, m.name, m.avatar, m.timestamp "
             "FROM histories h "
@@ -339,25 +346,14 @@ class SQLiteHistoryRepository(HistoryRepository):
             (user_id, conf_uid),
         ).fetchall()
 
-        histories = []
-        for row in rows:
-            latest_message = {
-                "role": row["role"],
+        return [
+            {
+                "uid": row["id"],
+                "latest_message": _message_from_row(row),
                 "timestamp": row["timestamp"],
-                "content": row["content"],
             }
-            if row["name"] is not None:
-                latest_message["name"] = row["name"]
-            if row["avatar"] is not None:
-                latest_message["avatar"] = row["avatar"]
-            histories.append(
-                {
-                    "uid": row["id"],
-                    "latest_message": latest_message,
-                    "timestamp": row["timestamp"],
-                }
-            )
-        return histories
+            for row in rows
+        ]
 
     async def get_history(
         self,
@@ -374,7 +370,6 @@ class SQLiteHistoryRepository(HistoryRepository):
     def _get_history_sync(
         self, user_id: str, conf_uid: str, history_uid: str
     ) -> list[HistoryMessage]:
-        assert self._conn is not None
         rows = self._conn.execute(
             "SELECT m.role, m.timestamp, m.content, m.name, m.avatar "
             "FROM messages m "
@@ -384,19 +379,7 @@ class SQLiteHistoryRepository(HistoryRepository):
             (history_uid, user_id, conf_uid),
         ).fetchall()
 
-        messages: list[HistoryMessage] = []
-        for row in rows:
-            message: HistoryMessage = {
-                "role": row["role"],
-                "timestamp": row["timestamp"],
-                "content": row["content"],
-            }
-            if row["name"] is not None:
-                message["name"] = row["name"]
-            if row["avatar"] is not None:
-                message["avatar"] = row["avatar"]
-            messages.append(message)
-        return messages
+        return [_message_from_row(row) for row in rows]
 
     async def store_message(
         self,
@@ -438,7 +421,6 @@ class SQLiteHistoryRepository(HistoryRepository):
         avatar: str | None,
         timestamp: str,
     ) -> None:
-        assert self._conn is not None
         with self._conn:
             row = self._conn.execute(
                 "SELECT user_id, conf_uid FROM histories WHERE id = ?",
@@ -480,7 +462,6 @@ class SQLiteHistoryRepository(HistoryRepository):
         return await self._run(self._get_metadata_sync, user_id, conf_uid, history_uid)
 
     def _get_metadata_sync(self, user_id: str, conf_uid: str, history_uid: str) -> dict:
-        assert self._conn is not None
         row = self._conn.execute(
             "SELECT created_at, metadata_json FROM histories "
             "WHERE id = ? AND user_id = ? AND conf_uid = ?",
@@ -521,7 +502,6 @@ class SQLiteHistoryRepository(HistoryRepository):
         history_uid: str,
         metadata: dict,
     ) -> bool:
-        assert self._conn is not None
         with self._conn:
             row = self._conn.execute(
                 "SELECT metadata_json FROM histories "
@@ -556,7 +536,6 @@ class SQLiteHistoryRepository(HistoryRepository):
     def _delete_history_sync(
         self, user_id: str, conf_uid: str, history_uid: str
     ) -> bool:
-        assert self._conn is not None
         with self._conn:
             cursor = self._conn.execute(
                 "DELETE FROM histories WHERE id = ? AND user_id = ? AND conf_uid = ?",
@@ -595,7 +574,6 @@ class SQLiteHistoryRepository(HistoryRepository):
         role: str,
         new_content: str,
     ) -> bool:
-        assert self._conn is not None
         with self._conn:
             row = self._conn.execute(
                 "SELECT m.id, m.role FROM messages m "
@@ -639,7 +617,6 @@ class SQLiteHistoryRepository(HistoryRepository):
         old_history_uid: str,
         new_history_uid: str,
     ) -> bool:
-        assert self._conn is not None
         if old_history_uid == new_history_uid:
             return self._history_exists_sync(user_id, conf_uid, old_history_uid)
 
@@ -708,7 +685,6 @@ class SQLiteHistoryRepository(HistoryRepository):
         updated_at: str,
         legacy_path: str | None,
     ) -> bool:
-        assert self._conn is not None
         with self._conn:
             self._ensure_user_sync(self._conn, user_id)
             try:
