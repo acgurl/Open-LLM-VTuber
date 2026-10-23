@@ -37,7 +37,7 @@ def sentence_divider(
             divider = SentenceDivider(
                 faster_first_response=faster_first_response,
                 segment_method=segment_method,
-                valid_tags=valid_tags or [],
+                valid_tags=valid_tags,
             )
             stream_from_func = func(*args, **kwargs)
 
@@ -180,7 +180,7 @@ def tts_filter(
             *args, **kwargs
         ) -> AsyncIterator[Union[SentenceOutput, Dict[str, Any]]]:  # Yield type hint
             stream = func(*args, **kwargs)
-            config = tts_preprocessor_config or TTSPreprocessorConfig()
+            config = tts_preprocessor_config
 
             async for item in stream:
                 if (
@@ -194,11 +194,21 @@ def tts_filter(
                     else:
                         tts = filter_text(
                             text=display.text,
-                            remove_special_char=config.remove_special_char,
-                            ignore_brackets=config.ignore_brackets,
-                            ignore_parentheses=config.ignore_parentheses,
-                            ignore_asterisks=config.ignore_asterisks,
-                            ignore_angle_brackets=config.ignore_angle_brackets,
+                            remove_special_char=(
+                                config.remove_special_char if config else True
+                            ),
+                            ignore_brackets=(
+                                config.ignore_brackets if config else True
+                            ),
+                            ignore_parentheses=(
+                                config.ignore_parentheses if config else True
+                            ),
+                            ignore_asterisks=(
+                                config.ignore_asterisks if config else True
+                            ),
+                            ignore_angle_brackets=(
+                                config.ignore_angle_brackets if config else True
+                            ),
                         )
 
                     logger.debug(f"[{display.name}] display: {display.text}")
