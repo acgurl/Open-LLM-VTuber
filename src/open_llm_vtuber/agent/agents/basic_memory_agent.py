@@ -349,6 +349,24 @@ class BasicMemoryAgent(AgentInterface):
         except StopAsyncIteration:
             logger.warning(f"{label} finished without final results marker.")
 
+    async def _execute_tool_calls(
+        self,
+        tool_calls: Union[List[ToolCallObject], List[Dict[str, Any]]],
+        *,
+        caller_mode: Literal["Claude", "OpenAI", "Prompt"],
+        label: str,
+        results: List[Dict[str, Any]],
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Run tools, forwarding progress updates and collecting final results."""
+        tool_executor_iterator = self._tool_executor.execute_tools(
+            tool_calls=tool_calls,
+            caller_mode=caller_mode,
+        )
+        async for update in self._drain_tool_executor(
+            tool_executor_iterator, results, label
+        ):
+            yield update
+
     async def _claude_tool_interaction_loop(
         self,
         initial_messages: List[Dict[str, Any]],
@@ -436,12 +454,11 @@ class BasicMemoryAgent(AgentInterface):
                     yield "[Error: ToolExecutor not configured]"
                     return
 
-                tool_executor_iterator = self._tool_executor.execute_tools(
-                    tool_calls=pending_tool_calls,
+                async for update in self._execute_tool_calls(
+                    pending_tool_calls,
                     caller_mode="Claude",
-                )
-                async for update in self._drain_tool_executor(
-                    tool_executor_iterator, tool_results_for_llm, "Tool executor"
+                    label="Tool executor",
+                    results=tool_results_for_llm,
                 ):
                     yield update
 
@@ -566,14 +583,11 @@ class BasicMemoryAgent(AgentInterface):
                 )
                 if parsed_tools:
                     tool_results_for_llm = []
-                    tool_executor_iterator = self._tool_executor.execute_tools(
-                        tool_calls=parsed_tools,
+                    async for update in self._execute_tool_calls(
+                        parsed_tools,
                         caller_mode="Prompt",
-                    )
-                    async for update in self._drain_tool_executor(
-                        tool_executor_iterator,
-                        tool_results_for_llm,
-                        "Prompt mode tool executor",
+                        label="Prompt mode tool executor",
+                        results=tool_results_for_llm,
                     ):
                         yield update
 
@@ -601,12 +615,11 @@ class BasicMemoryAgent(AgentInterface):
                     yield "[Error: ToolExecutor/MCPClient not configured for OpenAI mode]"
                     continue
 
-                tool_executor_iterator = self._tool_executor.execute_tools(
-                    tool_calls=pending_tool_calls,
+                async for update in self._execute_tool_calls(
+                    pending_tool_calls,
                     caller_mode="OpenAI",
-                )
-                async for update in self._drain_tool_executor(
-                    tool_executor_iterator, tool_results_for_llm, "OpenAI tool executor"
+                    label="OpenAI tool executor",
+                    results=tool_results_for_llm,
                 ):
                     yield update
 
