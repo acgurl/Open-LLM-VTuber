@@ -1,6 +1,6 @@
 # Open-LLM-VTuber 部署交接
 
-更新日期：2026-10-21
+更新日期：2026-10-23
 
 ## 1. 现状概览
 
@@ -9,12 +9,13 @@
 | 访问地址 | https://vtuber.acgurl.cn/ （HTTP 200） |
 | 服务器 | 甲骨文凤凰城，Ubuntu 24.04 ARM64，SSH 别名 `oracle` |
 | 部署目录 | `/home/ubuntu/open-llm-vtuber` |
-| 容器 | `open-llm-vtuber`，镜像 `open-llm-vtuber:1.2.1-split-ws-20261022`，`--network host`，`--restart unless-stopped` |
+| 容器 | `open-llm-vtuber`，镜像 `open-llm-vtuber:1.2.1-storage-20261023-r2`，`--network host`，`--restart unless-stopped` |
 | 应用监听 | `127.0.0.1:12393`（FastAPI + WebSocket `/client-ws`，前端由后端静态托管） |
 | 健康检查 | `https://vtuber.acgurl.cn/healthz` → 200 `{"status":"ok"}` |
 | 反向代理 | Caddy，`/etc/caddy/Caddyfile` 第 129-140 行，站点 `vtuber.acgurl.cn, vtuber.acgurl.qzz.io`，`flush_interval -1` 支持 WebSocket |
 | DNS / 优选 | DNSPod 按线路解析到 Cloudflare 优选 IP；Cloudflare SaaS custom hostname 经 `origin.acgurl.qzz.io` 回源；`/opt/cf2dns-sync/sync_cf_bestip.py` + `/etc/cron.d/cf2dns_sync` 每 2 小时同步 |
 | ASR / TTS | Groq `whisper-large-v3-turbo` + Azure Speech（`azure_tts`，japaneast F0，`zh-CN-XiaoyiNeural`） |
+| 历史存储 | SQLite `data/storage/open_llm_vtuber.db`（旧 JSON 迁移到 `data/storage/legacy_history/`） |
 
 ## 2. 模型与角色
 
@@ -45,6 +46,7 @@ models -> /app/models
 data/logs -> /app/logs
 data/cache -> /app/cache
 data/chat_history -> /app/chat_history
+data/storage -> /app/data/storage
 mcp_servers.json -> /app/mcp_servers.json (ro)
 ```
 
@@ -58,12 +60,12 @@ mcp_servers.json -> /app/mcp_servers.json (ro)
 - 实际生效的模型字典是 `conf/model_dict.json`。容器启动脚本会把 `/app/conf/model_dict.json` 软链到 `/app/model_dict.json`，**不要直接 bind mount `/app/model_dict.json`**，否则软链失败、容器重启循环。
 - Hiyori 模型：`live2d-models/hiyori_pro/runtime/hiyori_pro_t11.model3.json`，约 4.8 MB；`model_dict.json` 中 `kScale` 为 0.65（前端会把该值乘 2）。
 - 前端是 `frontend` 子模块，构建产物里已把 WS/base URL 改为同源：`(location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/client-ws"`。修改文件为 `frontend/assets/main-nu7uwxNJ.js`。
-- 当前镜像 `open-llm-vtuber:1.2.1-split-ws-20261022`（2026-10-22 构建，文本/音频双 WebSocket；上一版 `1.2.1-micoff-20261022`、`1.2.1-azure-pool-20261022`、`1.2.1-azure-20261022`、`1.2.1-tts-trim-20261022`、`1.2.1-mcp-http-20261022-r2` 仍保留可回滚）。只有改源码/前端/依赖时才需要重建：
+- 当前镜像 `open-llm-vtuber:1.2.1-storage-20261023-r2`（2026-10-23 构建，SQLite 历史存储；上一版 `1.2.1-frontend-refactor-20261023`、`1.2.1-deploy-20261023-47bf2c7`、`1.2.1-deploy-20261023` 仍保留可回滚）。只有改源码/前端/依赖时才需要重建：
 
 ```bash
 ssh oracle
 cd /home/ubuntu/open-llm-vtuber
-docker build -f dockerfile -t open-llm-vtuber:1.2.1-azure-pool-20261022 .
+docker build -f dockerfile -t open-llm-vtuber:1.2.1-storage-20261023-r2 .
 bash run-container.sh
 ```
 
@@ -152,10 +154,10 @@ docker exec open-llm-vtuber curl -s -F "file=@/tmp/test16.wav" http://127.0.0.1:
 - `src/open_llm_vtuber/websocket_handler.py` 的发送串行化补丁已提交到 `acgurl/Open-LLM-VTuber` main；升级上游时注意保留。
 - Groq ASR 实测中文准确、3.5s 语音约 0.3-0.5s，但静音/噪声会幻觉出 `Thank you.`；浏览器 VAD 可过滤大部分，必要时在 ASR 结果进 LLM 前加最短时长/语气词过滤。Groq 会把音频发往第三方，隐私敏感时切回本地 SenseVoice。
 - Edge TTS 已停用但配置保留；原 `_trim_boundary_silence()` 静音裁剪及三个 Edge 配置项已删除。切换到 Azure 后不再做任何音频后处理。Azure 短句仍可能被服务端补出 0.4–1.0 s 尾音（`mstts:silence Tailing=0` 只能部分压缩），这是当前已知问题；若需严格一致的句间停顿，需要前端无缝调度或重新引入裁剪。
-- `chat_history` 已挂载到宿主机 `data/chat_history`，重建容器不再丢失历史。
-- `.dockerignore` 已追加 `/conf/`、`/data/`，密钥不会打进镜像；但服务器 `conf/conf.yaml` 是唯一真实密钥来源。
+- 历史已改为 SQLite，数据库在宿主机 `data/storage/open_llm_vtuber.db`；`data/chat_history` 仅保留为旧 JSON 迁移入口，首次启动后应清空。重建容器不会丢失历史。
+- `.dockerignore` 已排除 `/conf/`、`/data/`、`/mcp_servers.json`、`/model_dict.json` 等运行时文件，密钥不会打进镜像；服务器 `conf/conf.yaml` 是唯一真实密钥来源。
 - 服务器保留备份 `conf/conf.yaml.bak.deepseek.20261021005452`；换音色前备份为 `conf/conf.yaml.bak.hsiaoyu.20261022060303`、`conf/conf.yaml.bak.xiaoyi.20261022060926`；切 Azure 前备份为 `conf/conf.yaml.bak.azure.20261022064712`；连接池改造前源码备份为 `*.bak.pool.20261022065834`。Azure 源码/部署脚本备份见 `*.bak.azure.20261022*`、`run-container.sh.bak.azure-pool.20261022*`。
-- 当前本地未提交：`.gitmodules`（前端指向 acgurl fork）、未跟踪的 `HANDOFF.md` 与 `conf/`，以及本次 `tts/azure_tts.py`、`tts/pooled_tts.py`、`tts/tts_factory.py`、`tts/tts_interface.py`、`service_context.py`、`config_manager/tts.py`、`tests/test_pooled_tts.py`（已同步服务器并打进 Azure pool 镜像）。其余源码/测试改动已提交并推送到 `origin/main`（最新 `9767676`）。
+- 2026-10-23 工作区已干净，`main` 与 `origin/main` 同步于 `e5555e1`；`HANDOFF.md` 本身仍未跟踪（按惯例保留在服务器/本地交接文档中）。
 - 站点公网可访问并消耗 DeepSeek / 本地服务额度，必要时加访问保护。
 
 ## 8. 可选后续
@@ -202,3 +204,66 @@ docker exec open-llm-vtuber curl -s -F "file=@/tmp/test16.wav" http://127.0.0.1:
 - 部署：镜像不变（`1.2.1-split-ws-20261022`），容器仅重启；后端 `Live2dModel("xiaozhi2")` 已读取新 URL。
 - 验证：新目录 10 个资源全部公网 200；model3/贴图 CF 首次 MISS 后 HIT；全部 JSON 引用完整；`/healthz` 200；日志无 ERROR/Traceback。默认角色仍为 AIRI/Hiyori，小智在角色预设中可选。
 - 回滚：把 `conf/model_dict.json` 的 xiaozhi2 URL 改回 `/live2d-models/xiaozhi2/runtime_v2/xiaozhi2.model3.json`（或恢复上述备份），重启容器。
+
+## 13. 2026-10-23 SQLite 历史存储
+
+### 范围
+
+本次只改存储层，不包含登录/鉴权。运行时仍使用 `system_config.storage.default_user_id: local`，所以所有连接共享 `local` 用户的数据；但仓库、表结构和调用链已经按 `user_id` 作用域设计，下一步接入登录时只需把真实用户 ID 传入 `ServiceContext`。
+
+### 代码结构
+
+- `src/open_llm_vtuber/storage/base.py`：`HistoryRepository` 抽象接口；所有历史读写方法都显式接收 `user_id`，新增数据库实现该接口即可。
+- `src/open_llm_vtuber/storage/sqlite.py`：SQLite 实现，标准库 `sqlite3` + `asyncio.to_thread`，WAL、外键级联、单连接串行化；新增 `users` / `histories` / `messages` / `schema_migrations` 表。
+- `src/open_llm_vtuber/storage/user_store.py`：`UserHistoryStore` 绑定 `user_id`，运行时代码只能通过它读写当前用户的数据。
+- `src/open_llm_vtuber/storage/legacy.py`：旧 `chat_history/<conf_uid>/*.json` 一次性导入，保留原 `history_uid`、时间戳、name/avatar、metadata；导入后移动源文件。
+- `src/open_llm_vtuber/storage/factory.py`：目前只注册 `sqlite`；接入 PostgreSQL/MySQL 时实现 `HistoryRepository` 并在此增加分支。
+- `ServiceContext` 持有 `history_repository`、`history`、`user_id`；新增 `load_history` / `store_history_message` / `update_history_metadata`。
+- `BasicMemoryAgent` 不再直接读文件：`ServiceContext` 取到已授权消息后调用 `set_memory(messages, metadata)`；Hume 的 `resume_id` 通过 `history_metadata_writer` 回调写回当前历史。
+- WebSocket 消息类型和前端字段不变；`fetch-history-list` / `fetch-and-set-history` / `create-new-history` / `delete-history` 改为走用户作用域仓库。
+
+### 配置与路径
+
+```yaml
+system_config:
+  storage:
+    backend: sqlite
+    sqlite_path: data/storage/open_llm_vtuber.db
+    default_user_id: local
+    import_legacy_history: true
+    legacy_history_dir: chat_history
+    legacy_backup_dir: data/storage/legacy_history
+```
+
+- `data/storage` 已作为独立卷挂载到容器 `/app/data/storage`，数据库和旧历史备份不会随容器重建丢失。
+- 首次启动迁移结果：生产 `data/chat_history` 共 141 个 JSON，103 个导入、38 个空历史跳过、0 失败；迁移后 `data/chat_history` 为 0 个 JSON，`data/storage/legacy_history` 保留全部 141 个源文件。
+- 迁移后 DB 基线：103 条历史、347 条消息；浏览器页面自动新建一个空历史后为 104 条（空历史不会出现在 `history-list`）。
+- 迁移前的完整备份：`data/backups/storage-sqlite-20261023-085205/`，含 `chat_history.tar.gz`、`conf.yaml`、`conf_model_dict.json`、`mcp_servers.json`、`source.tar.gz`、`run-container.sh`，以及迁移后的 `open_llm_vtuber.db.after-migration`（103 历史/347 消息，已验证可独立打开）。
+
+### 部署
+
+- 生产镜像：`open-llm-vtuber:1.2.1-storage-20261023-r2`；`run-container.sh` 已切到该镜像并增加 `data/storage:/app/data/storage` 挂载。
+- 相关提交：`01e9608` 存储重构、`8100ad5` CI 使用 uv、`02ed3d9` Docker 构建上下文排除 conf/data、`e5555e1` 进一步排除 MCP 密钥和根 model_dict；`origin/main` HEAD 为 `e5555e1`。
+- `.dockerignore` 现在排除 `/conf/`、`/data/`、`/mcp_servers.json`、`/mcp_servers.json.*`、`/model_dict.json`、`/backup-*.tar.gz`。r2 镜像内已确认不存在这些路径；含旧 MCP 密钥的中间镜像 tag `1.2.1-storage-20261023` 已删除。
+- 服务器源码目录仍不是 git 仓库；本次通过 `git archive HEAD` + tar 解包同步，解包时排除了 `conf`、`characters`、`avatars`、`backgrounds`、`live2d-models`、`models`、`data`、`cache`、`logs`、`chat_history`、`mcp_servers.json`、`model_dict.json`、`frontend`。同步前后 `conf/conf.yaml`、`conf/model_dict.json`、`mcp_servers.json`、根 `model_dict.json`、`run-container.sh` 的 sha256 完全一致。
+
+### 验证
+
+- 本地：`uv run --frozen python -m unittest discover -s tests -v`，175 个用例通过；`ruff check .` 通过。
+- 隔离容器（端口 12394，临时 conf/DB/历史）：41 条 AIRI 历史迁移、列表读取、加载、新建、用户+AI 落库、删除全部通过；文本流正常；Azure TTS 音频走 `/audio-ws`，`backend-synth-complete` 在音频后到达。
+- 生产（12393）：同样完成历史列表/加载/新建/落库/删除和端到端文本/音频测试，测试历史已删除；公网 `wss://vtuber.acgurl.cn/client-ws` 默认 AIRI，`history-list` 返回 41 条；浏览器页面成功连接并自动新建历史；`/healthz`、首页、`assets/main-DS8X0Aex.js` 均 200；日志无 ERROR/WARNING。
+- 容器重启后 DB 仍为 104 条历史/347 条消息，确认 `data/storage` 持久化有效。
+
+### 回滚
+
+1. 恢复 `data/backups/storage-sqlite-20261023-085205/run-container.sh`（或手动把镜像改回 `open-llm-vtuber:1.2.1-frontend-refactor-20261023`，并删除 `data/storage` 挂载行）。
+2. 旧镜像只读 `data/chat_history`；把 `data/backups/storage-sqlite-20261023-085205/chat_history.tar.gz` 解压回 `data/chat_history`。
+3. 执行 `bash run-container.sh`。新 DB 保留在 `data/storage`，不删除；回滚后再升级可继续使用。
+4. 旧镜像 `open-llm-vtuber:1.2.1-frontend-refactor-20261023`、`...-deploy-20261023-47bf2c7`、`...-deploy-20261023` 仍保留。
+
+### 已知限制
+
+- 尚未接入登录，所有连接仍属于 `local` 用户；真正的多用户隔离需要下一步 auth + 连接绑定 `user_id`。
+- SQLite 当前按单进程设计；多 uvicorn worker 需要把 session/群组状态迁到 Redis，存储本身可继续 WAL。
+- 备份 SQLite 时不要只复制主文件：至少一起复制 `-wal`/`-shm`，或使用 `sqlite3.Connection.backup()`（本次部署备份就是用该方式）。
+- 空历史会保留在 DB 中但不会出现在列表；如果长期积累，可后续加定期清理。
