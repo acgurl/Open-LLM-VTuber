@@ -180,8 +180,6 @@ class ServiceContext:
                 )
                 self.tool_executor = None  # Ensure it's None
 
-            logger.info("StreamJSONDetector initialized for this session.")
-
         elif use_mcpp and not enabled_servers:
             logger.warning(
                 "use_mcpp is True, but mcp_enabled_servers list is empty. MCP components not initialized."

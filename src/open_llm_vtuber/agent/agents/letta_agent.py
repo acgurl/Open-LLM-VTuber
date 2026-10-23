@@ -75,7 +75,6 @@ class LettaAgent(AgentInterface):
         async for token in stream:
             if token.message_type == "reasoning_message":
                 # This part is reasoning information and should not be displayed
-                token = token.reasoning
                 continue
             elif token.message_type == "assistant_message":
                 # This part is the result that needs to be displayed, it is the final result
