@@ -1,10 +1,9 @@
-from typing import Type
 from .tts_interface import TTSInterface
 
 
 class TTSFactory:
     @staticmethod
-    def get_tts_engine(engine_type, **kwargs) -> Type[TTSInterface]:
+    def get_tts_engine(engine_type, **kwargs) -> TTSInterface:
         if engine_type == "azure_tts":
             from .azure_tts import TTSEngine as AzureTTSEngine
 

@@ -6,7 +6,9 @@ from loguru import logger
 
 
 class TTSInterface(metaclass=abc.ABCMeta):
-    async def async_generate_audio(self, text: str, file_name_no_ext=None) -> str:
+    async def async_generate_audio(
+        self, text: str, file_name_no_ext=None
+    ) -> str | None:
         """
         Asynchronously generate speech audio file using TTS.
 
@@ -25,7 +27,7 @@ class TTSInterface(metaclass=abc.ABCMeta):
         return await asyncio.to_thread(self.generate_audio, text, file_name_no_ext)
 
     @abc.abstractmethod
-    def generate_audio(self, text: str, file_name_no_ext=None) -> str:
+    def generate_audio(self, text: str, file_name_no_ext=None) -> str | None:
         """
         Generate speech audio file using TTS.
         text: str
@@ -74,8 +76,7 @@ class TTSInterface(metaclass=abc.ABCMeta):
         str: the path to the generated cache file
         """
         cache_dir = "cache"
-        if not os.path.exists(cache_dir):
-            os.makedirs(cache_dir)
+        os.makedirs(cache_dir, exist_ok=True)
 
         if file_name_no_ext is None:
             file_name_no_ext = "temp"

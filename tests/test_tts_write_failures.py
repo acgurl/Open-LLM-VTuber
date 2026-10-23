@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 try:
     from open_llm_vtuber.tts import minimax_tts
     from open_llm_vtuber.tts.minimax_tts import TTSEngine as MinimaxTTSEngine
+    from open_llm_vtuber.tts.siliconflow_tts import SiliconFlowTTS
 except ImportError as exc:
     raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
 
@@ -66,6 +67,22 @@ class MinimaxWriteTests(unittest.TestCase):
 
             self.assertIsNone(result)
             self.assertFalse(path.exists())
+
+
+class SiliconFlowFailureTests(unittest.TestCase):
+    def test_missing_api_url_returns_none(self):
+        engine = SiliconFlowTTS.__new__(SiliconFlowTTS)
+        engine.api_url = None
+        engine.response_format = "mp3"
+        engine.sample_rate = 32000
+        engine.stream = False
+        engine.speed = 1.0
+        engine.gain = 0
+        engine.default_model = "model"
+        engine.default_voice = "voice"
+        engine.api_key = "key"
+
+        self.assertIsNone(engine.generate_audio("hi"))
 
 
 if __name__ == "__main__":
