@@ -74,7 +74,8 @@ class CameraController {
       video.srcObject = stream;
       video.muted = true;
       video.playsInline = true;
-      await video.play();
+      // 不等 play()：后台标签页/自动播放策略下它可能一直不 resolve，抓帧侧按 readyState 兜底
+      void video.play().catch(() => {});
       this.captureVideo = video;
       stream.getVideoTracks()[0]?.addEventListener('ended', () => this.stop());
       useCamera.getState().setStream(stream);
