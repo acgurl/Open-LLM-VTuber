@@ -3,13 +3,37 @@ import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 try:
+    from open_llm_vtuber.live import bilibili_live
     from open_llm_vtuber.live.bilibili_live import BiliBiliLivePlatform
 except ImportError as exc:
     raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+
+
+class _FakeLiveClient:
+    instances = []
+
+    def __init__(self, room_id, session=None):
+        self.room_id = room_id
+        self.session = session
+        self.stopped = False
+        _FakeLiveClient.instances.append(self)
+
+    def set_handler(self, _handler):
+        pass
+
+    def start(self):
+        pass
+
+    async def join(self):
+        pass
+
+    async def stop_and_close(self):
+        self.stopped = True
 
 
 class IncomingMessageHandlerTests(unittest.IsolatedAsyncioTestCase):
@@ -53,6 +77,35 @@ class IncomingMessageHandlerTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(received, ["hi"])
         self.assertEqual(platform._background_tasks, set())
+
+    async def test_connects_to_every_configured_room(self):
+        _FakeLiveClient.instances.clear()
+        platform = BiliBiliLivePlatform.__new__(BiliBiliLivePlatform)
+        platform._room_ids = [1, 2]
+        platform._sessdata = ""
+        platform._session = None
+        platform._clients = []
+        platform._running = False
+        platform._message_handlers = []
+        platform._background_tasks = set()
+        platform._connected = False
+        platform._websocket = None
+        platform._init_session = Mock()
+        platform.connect = AsyncMock(return_value=True)
+        platform.start_receiving = AsyncMock()
+
+        with patch.object(
+            bilibili_live,
+            "blivedm",
+            SimpleNamespace(BLiveClient=_FakeLiveClient),
+            create=True,
+        ):
+            await platform.run()
+
+        self.assertEqual(
+            [client.room_id for client in _FakeLiveClient.instances], [1, 2]
+        )
+        self.assertTrue(all(client.stopped for client in _FakeLiveClient.instances))
 
 
 if __name__ == "__main__":

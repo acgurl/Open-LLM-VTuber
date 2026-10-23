@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import http.cookies
 import inspect
-import random
 import traceback
 import json
 from typing import Callable, Dict, Any, List, Optional
@@ -56,7 +55,7 @@ class BiliBiliLivePlatform(LivePlatformInterface):
         self._room_ids = room_ids
         self._sessdata = sessdata
         self._session: Optional[aiohttp.ClientSession] = None
-        self._client: Optional[blivedm.BLiveClient] = None
+        self._clients: List[blivedm.BLiveClient] = []
         self._websocket: Optional[websockets.WebSocketClientProtocol] = None
         self._connected = False
         self._running = False
@@ -130,11 +129,12 @@ class BiliBiliLivePlatform(LivePlatformInterface):
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-        # Stop BiliBili client if running
-        if self._client:
+        # Stop BiliBili clients if running
+        clients = self._clients
+        self._clients = []
+        for client in clients:
             try:
-                await self._client.stop_and_close()
-                self._client = None
+                await client.stop_and_close()
             except Exception as e:
                 logger.warning(f"Error while stopping BiliBili client: {e}")
 
@@ -336,30 +336,34 @@ class BiliBiliLivePlatform(LivePlatformInterface):
             # Start background task for receiving messages from the proxy
             receive_task = asyncio.create_task(self.start_receiving())
 
-            # Randomly select a room ID if multiple are provided
-            room_id = random.choice(self._room_ids)
+            # Create one client per configured room
+            clients = []
+            for room_id in self._room_ids:
+                client = blivedm.BLiveClient(room_id, session=self._session)
+                client.set_handler(self.VtuberHandler(self))
+                client.start()
+                clients.append(client)
+                logger.info(f"Connected to BiliBili Live room {room_id}")
 
-            # Create and start the BiliBili Live client
-            self._client = blivedm.BLiveClient(room_id, session=self._session)
-            handler = self.VtuberHandler(self)
-            self._client.set_handler(handler)
-            self._client.start()
-
-            logger.info(f"Connected to BiliBili Live room {room_id}")
+            self._clients = clients
 
             # Wait until stopped
             try:
-                await self._client.join()
+                await asyncio.gather(*(client.join() for client in clients))
             finally:
-                await self._client.stop_and_close()
+                for client in clients:
+                    try:
+                        await client.stop_and_close()
+                    except Exception as e:
+                        logger.warning(f"Error while stopping BiliBili client: {e}")
+                self._clients = []
 
-            # Clean up receive task if necessary
-            if not receive_task.done():
-                receive_task.cancel()
-                try:
-                    await receive_task
-                except asyncio.CancelledError:
-                    pass
+                if not receive_task.done():
+                    receive_task.cancel()
+                    try:
+                        await receive_task
+                    except asyncio.CancelledError:
+                        pass
 
         except KeyboardInterrupt:
             logger.info("Received keyboard interrupt, shutting down")
