@@ -14,15 +14,19 @@ class DeepLXTranslate(TranslateInterface):
 
     # translate v2 endpoint from DeepLX
     def translate(self, text: str) -> str:
+        response_text = None
         try:
             data = {"text": [text], "target_lang": self.target_lang}
             post_data = json.dumps(data)
-            req = httpx.post(url=self.api_endpoint, data=post_data).text
-            res = json.loads(req)["translations"]
+            response_text = httpx.post(
+                url=self.api_endpoint, data=post_data, timeout=10.0
+            ).text
+            res = json.loads(response_text)["translations"]
             res = " ".join([d["text"] for d in res])
         except Exception as e:
             logger.critical(f"Error translating text '{text}'. Error message: {e}")
-            logger.critical(f"Response: {req}")
+            if response_text is not None:
+                logger.critical(f"Response: {response_text}")
             raise e
 
         return res

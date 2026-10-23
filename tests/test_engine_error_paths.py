@@ -1,3 +1,4 @@
+import inspect
 import sys
 import unittest
 from pathlib import Path
@@ -11,6 +12,7 @@ try:
         AsyncLLMWithTemplate,
     )
     from open_llm_vtuber.tts.cartesia_tts import TTSEngine as CartesiaTTSEngine
+    from open_llm_vtuber.tts.gpt_sovits_tts import TTSEngine as GPTSoVITSTTSEngine
 except ImportError as exc:
     raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
 
@@ -21,6 +23,17 @@ class CartesiaFailureTests(unittest.TestCase):
         engine.client = None
 
         self.assertIsNone(engine.generate_audio("hello"))
+
+
+class GPTSoVITSDefaultsTests(unittest.TestCase):
+    def test_streaming_mode_default_is_boolean_string(self):
+        default = (
+            inspect.signature(GPTSoVITSTTSEngine.__init__)
+            .parameters["streaming_mode"]
+            .default
+        )
+
+        self.assertEqual(default, "true")
 
 
 class TemplateLLMErrorTests(unittest.IsolatedAsyncioTestCase):

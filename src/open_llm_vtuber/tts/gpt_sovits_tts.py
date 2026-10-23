@@ -19,7 +19,7 @@ class TTSEngine(TTSInterface):
         text_split_method: str = "cut5",
         batch_size: str = "1",
         media_type: str = "wav",
-        streaming_mode: str = "ture",
+        streaming_mode: str = "true",
     ):
         self.api_url = api_url
         self.text_lang = text_lang
