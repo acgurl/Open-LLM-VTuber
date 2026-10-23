@@ -1,14 +1,9 @@
-import sys
-import os
 from xml.sax.saxutils import escape, quoteattr
 
 import azure.cognitiveservices.speech as speechsdk
 from loguru import logger
 
 from .pooled_tts import PooledTTSEngine
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(current_dir)
 
 
 class TTSEngine(PooledTTSEngine):

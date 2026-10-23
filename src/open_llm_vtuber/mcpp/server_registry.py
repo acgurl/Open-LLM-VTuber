@@ -43,8 +43,7 @@ class ServerRegistry:
 
     def _detect_runtime(self, target: str) -> bool:
         """Check if a runtime is available in the system PATH."""
-        founded = shutil.which(target)
-        return True if founded else False
+        return bool(shutil.which(target))
 
     def load_servers(self) -> None:
         """Load servers from the config file."""
@@ -54,83 +53,92 @@ class ServerRegistry:
             return
 
         for server_name, server_details in servers_config.items():
-            if not isinstance(server_details, dict):
-                logger.warning(
-                    f"MCPSR: Invalid server details for '{server_name}'. Ignoring."
-                )
-                continue
+            server = self._parse_server(server_name, server_details)
+            if server is not None:
+                self.servers[server_name] = server
 
-            url = server_details.get("url")
-            if url is not None:
-                parsed = urlparse(url) if isinstance(url, str) else None
-                if (
-                    parsed is None
-                    or parsed.scheme not in ("http", "https")
-                    or not parsed.netloc
-                ):
-                    logger.warning(
-                        f"MCPSR: Invalid HTTP url for '{server_name}'. Ignoring."
-                    )
-                    continue
-
-                headers = server_details.get("headers")
-                if headers is not None and (
-                    not isinstance(headers, dict)
-                    or not all(
-                        isinstance(key, str) and isinstance(value, str)
-                        for key, value in headers.items()
-                    )
-                ):
-                    logger.warning(
-                        f"MCPSR: Invalid HTTP headers for '{server_name}'. Ignoring."
-                    )
-                    continue
-
-                self.servers[server_name] = MCPServer(
-                    name=server_name,
-                    url=url,
-                    headers=headers,
-                    timeout=server_details.get("timeout", None),
-                )
-                logger.debug(f"MCPSR: Loaded HTTP server: '{server_name}' ({url}).")
-                continue
-
-            if "command" not in server_details or "args" not in server_details:
-                logger.warning(
-                    f"MCPSR: Invalid server details for '{server_name}'. Ignoring."
-                )
-                continue
-
-            command = server_details["command"]
-            if command == "npx":
-                if not self.npx_available:
-                    logger.warning(
-                        f"MCPSR: npx is not available. Cannot load server '{server_name}'."
-                    )
-                    continue
-            elif command == "uvx":
-                if not self.uvx_available:
-                    logger.warning(
-                        f"MCPSR: uvx is not available. Cannot load server '{server_name}'."
-                    )
-                    continue
-
-            elif command == "node":
-                if not self.node_available:
-                    logger.warning(
-                        f"MCPSR: node is not available. Cannot load server '{server_name}'."
-                    )
-                    continue
-
-            self.servers[server_name] = MCPServer(
-                name=server_name,
-                command=command,
-                args=server_details["args"],
-                env=server_details.get("env", None),
-                cwd=server_details.get("cwd", None),
-                timeout=server_details.get("timeout", None),
+    def _parse_server(
+        self, server_name: str, server_details: Any
+    ) -> Optional[MCPServer]:
+        if not isinstance(server_details, dict):
+            logger.warning(
+                f"MCPSR: Invalid server details for '{server_name}'. Ignoring."
             )
-            logger.debug(f"MCPSR: Loaded server: '{server_name}'.")
+            return None
+
+        if server_details.get("url") is not None:
+            return self._parse_http_server(server_name, server_details)
+        return self._parse_stdio_server(server_name, server_details)
+
+    def _parse_http_server(
+        self, server_name: str, server_details: Dict[str, Any]
+    ) -> Optional[MCPServer]:
+        url = server_details.get("url")
+        if not self._is_valid_http_url(url):
+            logger.warning(f"MCPSR: Invalid HTTP url for '{server_name}'. Ignoring.")
+            return None
+
+        headers = server_details.get("headers")
+        if headers is not None and not self._is_valid_headers(headers):
+            logger.warning(
+                f"MCPSR: Invalid HTTP headers for '{server_name}'. Ignoring."
+            )
+            return None
+
+        logger.debug(f"MCPSR: Loaded HTTP server: '{server_name}' ({url}).")
+        return MCPServer(
+            name=server_name,
+            url=url,
+            headers=headers,
+            timeout=server_details.get("timeout", None),
+        )
+
+    def _parse_stdio_server(
+        self, server_name: str, server_details: Dict[str, Any]
+    ) -> Optional[MCPServer]:
+        if "command" not in server_details or "args" not in server_details:
+            logger.warning(
+                f"MCPSR: Invalid server details for '{server_name}'. Ignoring."
+            )
+            return None
+
+        command = server_details["command"]
+        missing_runtime = (
+            (command == "npx" and not self.npx_available)
+            or (command == "uvx" and not self.uvx_available)
+            or (command == "node" and not self.node_available)
+        )
+        if missing_runtime:
+            logger.warning(
+                f"MCPSR: {command} is not available. Cannot load server '{server_name}'."
+            )
+            return None
+
+        logger.debug(f"MCPSR: Loaded server: '{server_name}'.")
+        return MCPServer(
+            name=server_name,
+            command=command,
+            args=server_details["args"],
+            env=server_details.get("env", None),
+            cwd=server_details.get("cwd", None),
+            timeout=server_details.get("timeout", None),
+        )
+
+    @staticmethod
+    def _is_valid_http_url(url: Any) -> bool:
+        parsed = urlparse(url) if isinstance(url, str) else None
+        return bool(
+            parsed
+            and parsed.scheme in ("http", "https")
+            and parsed.netloc
+        )
+
+    @staticmethod
+    def _is_valid_headers(headers: Any) -> bool:
+        return isinstance(headers, dict) and all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in headers.items()
+        )
 
     def remove_server(self, server_name: str) -> None:
         """Remove a server from the available servers."""

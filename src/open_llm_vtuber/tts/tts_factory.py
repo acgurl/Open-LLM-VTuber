@@ -9,12 +9,12 @@ class TTSFactory:
             from .azure_tts import TTSEngine as AzureTTSEngine
 
             return AzureTTSEngine(
-                kwargs.get("api_key"),
-                kwargs.get("region"),
-                kwargs.get("voice"),
-                kwargs.get("pitch"),
-                kwargs.get("rate"),
-                kwargs.get("tailing_silence_ms", 0),
+                api_key=kwargs.get("api_key"),
+                region=kwargs.get("region"),
+                voice=kwargs.get("voice"),
+                pitch=kwargs.get("pitch"),
+                rate=kwargs.get("rate"),
+                tailing_silence_ms=kwargs.get("tailing_silence_ms", 0),
             )
         elif engine_type == "bark_tts":
             from .bark_tts import TTSEngine as BarkTTSEngine

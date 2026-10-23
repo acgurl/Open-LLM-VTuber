@@ -15,6 +15,19 @@ _PASSTHROUGH_AUDIO_MIME = {
 }
 
 
+def _load_audio(audio_path: str) -> tuple[AudioSegment, bytes, str]:
+    """Decode audio for volume analysis while keeping its original encoding."""
+    audio = AudioSegment.from_file(audio_path)
+    extension = os.path.splitext(audio_path)[1].lower()
+    audio_mime = _PASSTHROUGH_AUDIO_MIME.get(extension)
+    if audio_mime:
+        # Ship the engine's own encoding (Edge TTS emits MP3) instead of
+        # inflating it to WAV; base64 WAV frames were stalling playback.
+        with open(audio_path, "rb") as audio_file:
+            return audio, audio_file.read(), audio_mime
+    return audio, audio.export(format="wav").read(), "audio/wav"
+
+
 def _get_volume_by_chunks(audio: AudioSegment, chunk_length_ms: int) -> list:
     """
     Calculate the normalized volume (RMS) for each chunk of the audio.
@@ -58,40 +71,21 @@ def prepare_audio_payload(
     if isinstance(display_text, DisplayText):
         display_text = display_text.to_dict()
 
-    if not audio_path:
-        # Return payload for silent display
-        return {
-            "type": "audio",
-            "audio": None,
-            "audio_mime": None,
-            "volumes": [],
-            "slice_length": chunk_length_ms,
-            "display_text": display_text,
-            "actions": actions.to_dict() if actions else None,
-            "forwarded": forwarded,
-            "streamed": streamed,
-        }
+    audio_base64 = None
+    audio_mime = None
+    volumes = []
 
-    try:
-        audio = AudioSegment.from_file(audio_path)
-        extension = os.path.splitext(audio_path)[1].lower()
-        audio_mime = _PASSTHROUGH_AUDIO_MIME.get(extension)
-        if audio_mime:
-            # Ship the engine's own encoding (Edge TTS emits MP3) instead of
-            # inflating it to WAV; base64 WAV frames were stalling playback.
-            with open(audio_path, "rb") as audio_file:
-                audio_bytes = audio_file.read()
-        else:
-            audio_mime = "audio/wav"
-            audio_bytes = audio.export(format="wav").read()
-    except Exception as e:
-        raise ValueError(
-            f"Error loading or converting generated audio file to wav file '{audio_path}': {e}"
-        )
-    audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
-    volumes = _get_volume_by_chunks(audio, chunk_length_ms)
+    if audio_path:
+        try:
+            audio, audio_bytes, audio_mime = _load_audio(audio_path)
+        except Exception as e:
+            raise ValueError(
+                f"Error loading generated audio file '{audio_path}': {e}"
+            )
+        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8")
+        volumes = _get_volume_by_chunks(audio, chunk_length_ms)
 
-    payload = {
+    return {
         "type": "audio",
         "audio": audio_base64,
         "audio_mime": audio_mime,
@@ -102,8 +96,6 @@ def prepare_audio_payload(
         "forwarded": forwarded,
         "streamed": streamed,
     }
-
-    return payload
 
 
 # Example usage:
