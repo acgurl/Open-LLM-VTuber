@@ -262,7 +262,7 @@ class WebSocketHandler:
             vad_engine=self.default_context_cache.vad_engine,
             agent_engine=self.default_context_cache.agent_engine,
             translate_engine=self.default_context_cache.translate_engine,
-            mcp_server_registery=self.default_context_cache.mcp_server_registery,
+            mcp_server_registry=self.default_context_cache.mcp_server_registry,
             tool_adapter=self.default_context_cache.tool_adapter,
             channels=channels,
             client_uid=client_uid,

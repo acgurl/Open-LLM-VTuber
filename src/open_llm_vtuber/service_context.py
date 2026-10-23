@@ -58,7 +58,7 @@ class ServiceContext:
         self.vad_engine: VADInterface | None = None
         self.translate_engine: TranslateInterface | None = None
 
-        self.mcp_server_registery: ServerRegistry | None = None
+        self.mcp_server_registry: ServerRegistry | None = None
         self.tool_adapter: ToolAdapter | None = None
         self.tool_manager: ToolManager | None = None
         self.mcp_client: MCPClient | None = None
@@ -99,7 +99,7 @@ class ServiceContext:
     # ==== Initializers
 
     def _reset_mcp_components(self) -> None:
-        self.mcp_server_registery = None
+        self.mcp_server_registry = None
         self.tool_manager = None
         self.mcp_client = None
         self.tool_executor = None
@@ -135,7 +135,7 @@ class ServiceContext:
             self.mcp_prompt = "[Error constructing MCP tools/prompt]"
 
     def _init_mcp_client(self) -> None:
-        if not self.mcp_server_registery:
+        if not self.mcp_server_registry:
             logger.error(
                 "MCP enabled but ServerRegistry not available. MCPClient not created."
             )
@@ -143,7 +143,7 @@ class ServiceContext:
             return
 
         self.mcp_client = MCPClient(
-            self.mcp_server_registery,
+            self.mcp_server_registry,
             self.channels.text if self.channels else None,
             self.client_uid,
         )
@@ -167,7 +167,7 @@ class ServiceContext:
         self._reset_mcp_components()
 
         if use_mcpp and enabled_servers:
-            self.mcp_server_registery = ServerRegistry()
+            self.mcp_server_registry = ServerRegistry()
             logger.info("ServerRegistry initialized or referenced.")
 
             if not self.tool_adapter:
@@ -218,7 +218,7 @@ class ServiceContext:
         vad_engine: VADInterface,
         agent_engine: AgentInterface,
         translate_engine: TranslateInterface | None,
-        mcp_server_registery: ServerRegistry | None = None,
+        mcp_server_registry: ServerRegistry | None = None,
         tool_adapter: ToolAdapter | None = None,
         channels: OutboundChannels | None = None,
         client_uid: str = None,
@@ -242,7 +242,7 @@ class ServiceContext:
         self.agent_engine = agent_engine
         self.translate_engine = translate_engine
         # Load potentially shared components by reference
-        self.mcp_server_registery = mcp_server_registery
+        self.mcp_server_registry = mcp_server_registry
         self.tool_adapter = tool_adapter
         self.channels = channels
         self.client_uid = client_uid
@@ -315,13 +315,13 @@ class ServiceContext:
             not self.tool_adapter
             and config.character_config.agent_config.agent_settings.basic_memory_agent.use_mcpp
         ):
-            if not self.mcp_server_registery:
+            if not self.mcp_server_registry:
                 logger.info(
                     "Initializing shared ServerRegistry within load_from_config."
                 )
-                self.mcp_server_registery = ServerRegistry()
+                self.mcp_server_registry = ServerRegistry()
             logger.info("Initializing shared ToolAdapter within load_from_config.")
-            self.tool_adapter = ToolAdapter(server_registery=self.mcp_server_registery)
+            self.tool_adapter = ToolAdapter(server_registry=self.mcp_server_registry)
 
         # Initialize MCP Components before initializing Agent
         await self._init_mcp_components(

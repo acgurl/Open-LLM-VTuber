@@ -11,9 +11,9 @@ from .server_registry import ServerRegistry
 class ToolAdapter:
     """Dynamically fetches tool information from enabled MCP servers and formats it."""
 
-    def __init__(self, server_registery: Optional[ServerRegistry] = None) -> None:
+    def __init__(self, server_registry: Optional[ServerRegistry] = None) -> None:
         """Initialize with an ServerRegistry."""
-        self.server_registery = server_registery or ServerRegistry()
+        self.server_registry = server_registry or ServerRegistry()
 
     async def get_server_and_tool_info(
         self, enabled_servers: List[str]
@@ -31,9 +31,9 @@ class ToolAdapter:
         logger.debug(f"MC: Fetching tool info for enabled servers: {enabled_servers}")
 
         # Use a single client instance for efficiency
-        async with MCPClient(self.server_registery) as client:
+        async with MCPClient(self.server_registry) as client:
             for server_name in enabled_servers:
-                if server_name not in self.server_registery.servers:
+                if server_name not in self.server_registry.servers:
                     logger.warning(
                         f"MC: Enabled server '{server_name}' not found in Server Manager. Skipping."
                     )

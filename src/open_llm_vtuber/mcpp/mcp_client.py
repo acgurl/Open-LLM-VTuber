@@ -27,7 +27,7 @@ class MCPClient:
 
     def __init__(
         self,
-        server_registery: ServerRegistry,
+        server_registry: ServerRegistry,
         send_text: Callable = None,
         client_uid: str = None,
     ) -> None:
@@ -38,8 +38,8 @@ class MCPClient:
         self._send_text: Callable = send_text
         self._client_uid: str = client_uid
 
-        if isinstance(server_registery, ServerRegistry):
-            self.server_registery = server_registery
+        if isinstance(server_registry, ServerRegistry):
+            self.server_registry = server_registry
         else:
             raise TypeError(
                 "MCPC: Invalid server manager. Must be an instance of ServerRegistry."
@@ -47,7 +47,7 @@ class MCPClient:
         logger.info("MCPC: Initialized MCPClient instance.")
 
     def _get_server(self, server_name: str) -> MCPServer:
-        server = self.server_registery.get_server(server_name)
+        server = self.server_registry.get_server(server_name)
         if not server:
             raise ValueError(
                 f"MCPC: Server '{server_name}' not found in available servers."
@@ -250,8 +250,8 @@ class MCPClient:
 # if __name__ == "__main__":
 #     # Test the MCPClient.
 #     async def main():
-#         server_registery = ServerRegistry()
-#         async with MCPClient(server_registery) as client:
+#         server_registry = ServerRegistry()
+#         async with MCPClient(server_registry) as client:
 #             # Assuming 'example' server and 'example_tool' exist
 #             # The old call used: await client.call_tool("example_tool", {"arg1": "value1"})
 #             # The new call needs server name:
