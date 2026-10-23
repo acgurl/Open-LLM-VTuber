@@ -63,14 +63,20 @@ export function InputBar() {
     });
   };
 
-  const submit = () => {
+  const submit = async () => {
     const value = text.trim();
     if (!value && images.length === 0) return;
     if (value.length > LIMITS.textInputChars) {
       toast(t('input.tooLong'), 'error');
       return;
     }
-    sendText(value, images.map((i) => i.payload));
+    let payload = images.map((i) => i.payload);
+    // 实况开着且没手动附图时，文字轮次也带一帧（对齐老前端）
+    if (payload.length === 0 && camera.isLive) {
+      const frame = await camera.grabImage().catch(() => null);
+      if (frame) payload = [frame];
+    }
+    sendText(value, payload);
     images.forEach((i) => URL.revokeObjectURL(i.preview));
     setImages([]);
     setText('');
@@ -79,7 +85,7 @@ export function InputBar() {
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      submit();
+      void submit();
     }
   };
 
@@ -193,7 +199,7 @@ export function InputBar() {
             title={t('input.send')}
             aria-label={t('input.send')}
             disabled={sendDisabled || (!text.trim() && images.length === 0)}
-            onClick={submit}
+            onClick={() => void submit()}
           >
             <SendIcon />
           </button>

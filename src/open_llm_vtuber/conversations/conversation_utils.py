@@ -104,6 +104,24 @@ class TextDeltaBuffer:
 
 
 # Convert class methods to standalone functions
+def _to_image_data(img: Dict[str, Any]) -> ImageData:
+    """Wire payload -> ImageData.
+
+    The WebSocket contract sends raw base64 in `data` (BACKEND_API.md), while
+    agents hand the value to OpenAI-style `image_url` blocks, which need a data
+    URL. Older clients already send a full data URL, so keep those untouched.
+    """
+    data = img["data"]
+    mime_type = img["mime_type"]
+    if isinstance(data, str) and not data.startswith(("data:", "http://", "https://")):
+        data = f"data:{mime_type};base64,{data}"
+    return ImageData(
+        source=ImageSource(img["source"]),
+        data=data,
+        mime_type=mime_type,
+    )
+
+
 def create_batch_input(
     input_text: str,
     images: Optional[List[Dict[str, Any]]],
@@ -115,16 +133,7 @@ def create_batch_input(
         texts=[
             TextData(source=TextSource.INPUT, content=input_text, from_name=from_name)
         ],
-        images=[
-            ImageData(
-                source=ImageSource(img["source"]),
-                data=img["data"],
-                mime_type=img["mime_type"],
-            )
-            for img in (images or [])
-        ]
-        if images
-        else None,
+        images=[_to_image_data(img) for img in images] if images else None,
         metadata=metadata,
     )
 
