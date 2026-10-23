@@ -83,25 +83,32 @@ class AuthManager:
             payload["name"] = identity.display_name
         return self._signer.dumps(payload)
 
-    def session_cookie_kwargs(self, value: str) -> dict[str, Any]:
-        return {
-            "key": self.config.session_cookie_name,
-            "value": value,
-            "max_age": self.session_max_age,
+    def _cookie_kwargs(
+        self,
+        name: str,
+        value: str | None = None,
+        max_age: int | None = None,
+    ) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "key": name,
             "httponly": True,
             "secure": self.config.cookie_secure,
             "samesite": "lax",
             "path": "/",
         }
+        if value is not None:
+            kwargs["value"] = value
+        if max_age is not None:
+            kwargs["max_age"] = max_age
+        return kwargs
+
+    def session_cookie_kwargs(self, value: str) -> dict[str, Any]:
+        return self._cookie_kwargs(
+            self.config.session_cookie_name, value, self.session_max_age
+        )
 
     def session_cookie_delete_kwargs(self) -> dict[str, Any]:
-        return {
-            "key": self.config.session_cookie_name,
-            "path": "/",
-            "httponly": True,
-            "secure": self.config.cookie_secure,
-            "samesite": "lax",
-        }
+        return self._cookie_kwargs(self.config.session_cookie_name)
 
     def issue_state(self, *, state: str, nonce: str, next_path: str) -> str:
         if self._signer is None:
@@ -134,24 +141,12 @@ class AuthManager:
         return payload
 
     def state_cookie_kwargs(self, value: str) -> dict[str, Any]:
-        return {
-            "key": self.config.state_cookie_name,
-            "value": value,
-            "max_age": self.config.state_max_age_seconds,
-            "httponly": True,
-            "secure": self.config.cookie_secure,
-            "samesite": "lax",
-            "path": "/",
-        }
+        return self._cookie_kwargs(
+            self.config.state_cookie_name, value, self.config.state_max_age_seconds
+        )
 
     def state_cookie_delete_kwargs(self) -> dict[str, Any]:
-        return {
-            "key": self.config.state_cookie_name,
-            "path": "/",
-            "httponly": True,
-            "secure": self.config.cookie_secure,
-            "samesite": "lax",
-        }
+        return self._cookie_kwargs(self.config.state_cookie_name)
 
     def new_state(self) -> str:
         return secrets.token_urlsafe(32)
