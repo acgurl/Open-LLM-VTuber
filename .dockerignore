@@ -2,6 +2,11 @@
 /conf/
 /data/
 /conf.yaml
+/conf.yaml.backup
+/mcp_servers.json
+/mcp_servers.json.*
+/model_dict.json
+/backup-*.tar.gz
 # Avatars
 # avatars/*
 # Backgrounds
