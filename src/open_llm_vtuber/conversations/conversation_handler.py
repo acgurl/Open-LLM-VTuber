@@ -259,10 +259,11 @@ async def handle_group_interrupt(
                 except Exception as e:
                     logger.error(f"Error handling interrupt for {member_uid}: {e}")
 
-    await broadcast_to_group(
-        list(group.members),
-        {
-            "type": "interrupt-signal",
-            "text": "conversation-interrupted",
-        },
-    )
+    if group:
+        await broadcast_to_group(
+            list(group.members),
+            {
+                "type": "interrupt-signal",
+                "text": "conversation-interrupted",
+            },
+        )

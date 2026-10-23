@@ -274,6 +274,28 @@ class InterruptHistoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(task.cancelled())
 
 
+class GroupInterruptMissingGroupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_group_skips_broadcast(self):
+        task = asyncio.create_task(asyncio.Event().wait())
+        tasks = {"group": task}
+        manager = Mock()
+        manager.get_group_by_id.return_value = None
+        broadcast = AsyncMock()
+
+        await conversation_handler.handle_group_interrupt(
+            group_id="group",
+            heard_response="",
+            current_conversation_tasks=tasks,
+            chat_group_manager=manager,
+            client_contexts={},
+            broadcast_to_group=broadcast,
+        )
+
+        self.assertTrue(task.cancelled())
+        self.assertNotIn("group", tasks)
+        broadcast.assert_not_awaited()
+
+
 class ConnectionCleanupTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.handler = WebSocketHandler(default_context_cache=Mock())
