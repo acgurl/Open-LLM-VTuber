@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 try:
     from open_llm_vtuber.agent.agents.basic_memory_agent import BasicMemoryAgent
     from open_llm_vtuber.mcpp.json_detector import StreamJSONDetector
+    from open_llm_vtuber.mcpp.types import ToolCallFunctionObject, ToolCallObject
 except ImportError as exc:
     raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
 
@@ -96,6 +97,32 @@ class ToolLoopStateTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(self.added, [("A", "assistant"), ("B", "assistant")])
 
+    async def test_openai_native_tool_round_feeds_results_back(self):
+        agent = self.agent
+        agent.prompt_mode_flag = False
+        agent._mcp_prompt_string = ""
+        agent._json_detector = StreamJSONDetector()
+        agent._tool_manager = object()
+        llm = _NativeToolLLM()
+        agent._llm = llm
+
+        _ = [
+            item
+            async for item in agent._openai_tool_interaction_loop(
+                [{"role": "user", "content": "hi"}], []
+            )
+        ]
+
+        self.assertFalse(agent.prompt_mode_flag)
+        self.assertEqual(self.added, [("done", "assistant")])
+        second_round = llm.messages[1]
+        self.assertEqual(second_round[-2]["role"], "assistant")
+        self.assertEqual(
+            second_round[-2]["tool_calls"][0]["function"]["arguments"],
+            '{"q": "x"}',
+        )
+        self.assertEqual(second_round[-1], {"content": "ok"})
+
     async def test_switches_to_prompt_mode_without_tool_manager_disable(self):
         agent = self.agent
         agent.prompt_mode_flag = False
@@ -122,6 +149,34 @@ class ToolLoopStateTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(agent._json_detector.completed_jsons, [])
         self.assertNotIn("tool", agent._json_detector.buffer)
+
+
+class _NativeToolLLM:
+    def __init__(self):
+        self.calls = 0
+        self.messages = []
+
+    def chat_completion(self, messages, _system, tools=None):
+        self.calls += 1
+        self.messages.append([dict(message) for message in messages])
+        if self.calls == 1:
+
+            async def tool_round():
+                yield [
+                    ToolCallObject(
+                        id="call-1",
+                        function=ToolCallFunctionObject(
+                            name="tool", arguments='{"q": "x"}'
+                        ),
+                    )
+                ]
+
+            return tool_round()
+
+        async def text_round():
+            yield "done"
+
+        return text_round()
 
 
 class _PromptModeLLM:
