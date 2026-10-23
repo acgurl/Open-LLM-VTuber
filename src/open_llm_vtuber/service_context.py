@@ -472,7 +472,7 @@ class ServiceContext:
         """Build the set-model-and-conf payload for the current character."""
         payload = {
             "type": "set-model-and-conf",
-            "model_info": self.live2d_model.model_info,
+            "model_info": self.live2d_model.model_info if self.live2d_model else {},
             "conf_name": self.character_config.conf_name,
             "conf_uid": self.character_config.conf_uid,
         }
@@ -497,6 +497,12 @@ class ServiceContext:
                 prompt_name == "group_conversation_prompt"
                 or prompt_name == "proactive_speak_prompt"
             ):
+                continue
+
+            if prompt_name == "live2d_expression_prompt" and self.live2d_model is None:
+                logger.warning(
+                    "Live2D model is unavailable; skipping the expression prompt"
+                )
                 continue
 
             prompt_content = prompt_loader.load_util(prompt_file)
