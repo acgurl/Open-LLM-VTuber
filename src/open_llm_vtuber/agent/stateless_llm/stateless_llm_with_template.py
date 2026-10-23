@@ -4,8 +4,8 @@ compatible endpoints for language generation where the language model is not
 trained using a ChatML format.
 """
 
-import requests
 import json
+import httpx
 from jinja2 import Template
 from loguru import logger
 from typing import AsyncIterator, List, Dict, Any
@@ -138,7 +138,6 @@ class AsyncLLMWithTemplate(StatelessLLMInterface):
         """
         logger.debug(f"Sending {len(messages)} messages to {self.model}")
         bos_token = "<|begin_of_text|>"
-        stream = None
         try:
             # If system prompt is provided, add it to the messages
             messages_with_system: List[Dict[str, Any]] = messages
@@ -157,11 +156,17 @@ class AsyncLLMWithTemplate(StatelessLLMInterface):
                 "temperature": self.temperature,
                 "prompt": prompt,
             }
-            with requests.post(
-                self.completion_url, headers=self.prompt_headers, json=data, stream=True
-            ) as response:
-                for line in response.iter_lines():
-                    if line:
+            async with httpx.AsyncClient(timeout=None) as client:
+                async with client.stream(
+                    "POST",
+                    self.completion_url,
+                    headers=self.prompt_headers,
+                    json=data,
+                ) as response:
+                    response.raise_for_status()
+                    async for line in response.aiter_lines():
+                        if not line:
+                            continue
                         line = self._clean_raw_bytes(line)
                         next_token = self._process_line(line)
                         if next_token:
@@ -176,18 +181,13 @@ class AsyncLLMWithTemplate(StatelessLLMInterface):
             logger.info(f"temperature: {self.temperature}")
             yield "Error calling the chat endpoint: Error occurred while generating response. See the logs for details."
         finally:
-            # make sure the stream is properly closed
-            # so when interrupted, no more tokens will being generated.
-            if stream:
-                logger.debug("Chat completion finished.")
-                await stream.close()
-                logger.debug("Stream closed.")
+            logger.debug("Chat completion finished.")
 
     def _clean_raw_bytes(self, line):
-        line = line.decode("utf-8")
+        if isinstance(line, bytes):
+            line = line.decode("utf-8")
         line = line.removeprefix("data: ")
-        line = json.loads(line)
-        return line
+        return json.loads(line)
 
     def _process_line(self, line):
         if not (("stop" in line) and (line["stop"])):
