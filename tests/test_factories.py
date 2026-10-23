@@ -54,9 +54,14 @@ class FactoryRegistryTests(unittest.TestCase):
         )
         self.assertTrue(choices <= set(_TRANSLATOR_BUILDERS))
 
-    def test_tts_registry_covers_config_choices(self):
+    def test_tts_registry_matches_config_choices(self):
         choices = _literal_values(TTSConfig.model_fields["tts_model"].annotation)
-        self.assertTrue(choices <= set(_TTS_ENGINE_BUILDERS))
+        self.assertEqual(choices, set(_TTS_ENGINE_BUILDERS))
+
+    def test_pyttsx3_tts_needs_no_extra_config(self):
+        config = TTSConfig(tts_model="pyttsx3_tts")
+
+        self.assertEqual(config.tts_model, "pyttsx3_tts")
 
     def test_azure_tts_builder_preserves_argument_mapping(self):
         with patch("open_llm_vtuber.tts.azure_tts.TTSEngine") as engine:

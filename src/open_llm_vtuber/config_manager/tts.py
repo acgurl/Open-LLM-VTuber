@@ -696,6 +696,7 @@ class TTSConfig(I18nMixin):
         "azure_tts",
         "bark_tts",
         "edge_tts",
+        "pyttsx3_tts",
         "cosyvoice_tts",
         "cosyvoice2_tts",
         "melo_tts",
