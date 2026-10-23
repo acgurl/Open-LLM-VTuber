@@ -19,6 +19,7 @@ class ProxyMessageQueue:
         self._forward_func = None
         self._running = False
         self._forward_tasks: set[asyncio.Task] = set()
+        self._wake_event = asyncio.Event()
 
     def initialize(self, forward_func: Callable[[Dict, Optional[str]], Any]):
         """
@@ -94,17 +95,17 @@ class ProxyMessageQueue:
             self._consumer_task = asyncio.create_task(self._consume_loop())
             logger.debug("Started message consumer task")
 
+        self._wake_event.set()
+
     async def _consume_loop(self):
         """Background task that consumes messages based on conversation state"""
         try:
             while self._running:
-                # Wait a short time to prevent CPU hogging
-                await asyncio.sleep(0.1)
+                await self._wake_event.wait()
+                self._wake_event.clear()
 
-                # Try to consume a message if appropriate
                 async with self.lock:
                     if not self._conversation_active and self.has_pending_messages():
-                        # Get next message
                         queue_item = self.message_queue.popleft()
                         message = queue_item["message"]
                         sender_id = queue_item["sender_id"]
@@ -119,18 +120,8 @@ class ProxyMessageQueue:
                         # Forward the message outside the lock to prevent deadlocks
                         self._spawn_forward(message, sender_id)
 
-                # If queue is empty and we've been idle for a while, we can pause the consumer
-                if not self.has_pending_messages() and not self._conversation_active:
-                    await asyncio.sleep(1)  # Wait a bit longer before deciding to stop
-                    if (
-                        not self.has_pending_messages()
-                        and not self._conversation_active
-                    ):
-                        logger.debug(
-                            "No more pending messages and no active conversation, pausing consumer"
-                        )
-                        break
-
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
             logger.error(f"Error in message consumer loop: {e}")
         finally:
@@ -161,6 +152,7 @@ class ProxyMessageQueue:
     def stop(self):
         """Stop the consumer task and any in-flight forwards."""
         self._running = False
+        self._wake_event.clear()
         if self._consumer_task and not self._consumer_task.done():
             self._consumer_task.cancel()
         for task in list(self._forward_tasks):
@@ -171,4 +163,5 @@ class ProxyMessageQueue:
     def clear(self):
         """Clear all pending messages"""
         self.message_queue.clear()
+        self._wake_event.clear()
         logger.info("Message queue cleared")

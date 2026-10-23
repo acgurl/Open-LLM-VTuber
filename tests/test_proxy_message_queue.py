@@ -34,6 +34,29 @@ class ProxyMessageQueueTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(queue._forward_tasks, set())
         queue.stop()
 
+    async def test_waits_for_conversation_to_finish_before_forwarding(self):
+        queue = ProxyMessageQueue()
+        calls = []
+
+        async def forward(message, _sender_id):
+            calls.append(message["text"])
+
+        queue.initialize(forward)
+        queue.conversation_active = True
+        queue.queue_message({"type": "text-input", "text": "hi"}, "client")
+
+        await asyncio.sleep(0.05)
+        self.assertEqual(calls, [])
+
+        queue.conversation_active = False
+        for _ in range(20):
+            if calls:
+                break
+            await asyncio.sleep(0.02)
+
+        self.assertEqual(calls, ["hi", "hi"])
+        queue.stop()
+
     async def test_stop_cancels_in_flight_forward(self):
         queue = ProxyMessageQueue()
         started = asyncio.Event()
