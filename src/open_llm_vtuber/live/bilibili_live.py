@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import asyncio
 import http.cookies
+import inspect
 import random
 import traceback
 import json
@@ -28,6 +31,7 @@ except ImportError as e:
     logger.warning(f"blivedm import failed: {e}")
     logger.warning("BiliBili live functionality will not be available.")
     BLIVEDM_AVAILABLE = False
+    BaseHandler = object
 
 
 class BiliBiliLivePlatform(LivePlatformInterface):
@@ -255,7 +259,9 @@ class BiliBiliLivePlatform(LivePlatformInterface):
         # Process the message with all registered handlers
         for handler in self._message_handlers:
             try:
-                await asyncio.to_thread(handler, message)
+                result = await asyncio.to_thread(handler, message)
+                if inspect.isawaitable(result):
+                    await result
             except Exception as e:
                 logger.error(f"Error in message handler: {e}")
 
