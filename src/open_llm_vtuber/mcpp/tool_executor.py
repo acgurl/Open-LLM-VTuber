@@ -152,6 +152,61 @@ class ToolExecutor:
                 logger.warning("Skipping invalid tool structure in prompt mode JSON")
         return parsed_tools
 
+    @staticmethod
+    def _tool_status(
+        tool_id: str,
+        tool_name: str,
+        status: str,
+        content: str,
+        **extra: Any,
+    ) -> Dict[str, Any]:
+        update = {
+            "type": "tool_call_status",
+            "tool_id": tool_id,
+            "tool_name": tool_name,
+            "status": status,
+            "content": content,
+            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z",
+        }
+        update.update(extra)
+        return update
+
+    @staticmethod
+    def _split_image_content(
+        caller_mode: str,
+        text_content: str,
+        content_items: List[Dict[str, Any]],
+    ) -> tuple[str, Any]:
+        """Return the status text and the LLM-facing content."""
+        image_items = [
+            item for item in content_items or [] if item.get("type") == "image"
+        ]
+        if not image_items:
+            return text_content, text_content
+
+        status_content = (
+            f"{text_content}\n[Tool returned {len(image_items)} image(s)]".strip()
+        )
+        if caller_mode != "Claude":
+            return status_content, status_content
+
+        claude_blocks = []
+        if text_content:
+            claude_blocks.append({"type": "text", "text": text_content})
+        for item in content_items:
+            if item.get("type") == "image" and "data" in item and "mimeType" in item:
+                claude_blocks.append(
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": item["mimeType"],
+                            "data": item["data"],
+                        },
+                    }
+                )
+        return status_content, claude_blocks if claude_blocks else ""
+
     async def execute_tools(
         self,
         tool_calls: Union[List[Dict[str, Any]], List[ToolCallObject]],
@@ -177,42 +232,33 @@ class ToolExecutor:
                 logger.warning(
                     f"Skipping tool call due to parsing error: {result_content}"
                 )
-                status_update = {
-                    "type": "tool_call_status",
-                    "tool_id": tool_id
-                    or f"parse_error_{datetime.datetime.now(datetime.timezone.utc).isoformat()}",
-                    "tool_name": tool_name or "Unknown Tool",
-                    "status": "error",
-                    "content": result_content,
-                    "timestamp": datetime.datetime.now(
-                        datetime.timezone.utc
-                    ).isoformat()
-                    + "Z",
-                }
-                yield status_update
-                # Even on parse error, we might need to format a result for the LLM
-                # Use dummy values or the error message
+                parse_error_id = tool_id or (
+                    f"parse_error_"
+                    f"{datetime.datetime.now(datetime.timezone.utc).isoformat()}"
+                )
+                yield self._tool_status(
+                    parse_error_id,
+                    tool_name or "Unknown Tool",
+                    "error",
+                    result_content,
+                )
                 formatted_result = self.format_tool_result(
                     caller_mode,
-                    tool_id
-                    or f"parse_error_{datetime.datetime.now(datetime.timezone.utc).isoformat()}",
+                    parse_error_id,
                     result_content,
-                    True,  # is_error
+                    True,
                 )
                 if formatted_result:
                     tool_results_for_llm.append(formatted_result)
-                continue  # Skip execution logic for this call
+                continue
 
             # Yield 'running' status before execution
-            yield {
-                "type": "tool_call_status",
-                "tool_id": tool_id,
-                "tool_name": tool_name,
-                "status": "running",
-                "content": f"Input: {json.dumps(tool_input)}",
-                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                + "Z",
-            }
+            yield self._tool_status(
+                tool_id,
+                tool_name,
+                "running",
+                f"Input: {json.dumps(tool_input)}",
+            )
 
             # Execute the tool
             (
@@ -222,71 +268,26 @@ class ToolExecutor:
                 content_items,
             ) = await self.run_single_tool(tool_name, tool_id, tool_input)
 
-            # Determine content for status update and LLM result format
-            status_content = text_content  # Default to text content
-            llm_formatted_content = text_content  # Default to text content for LLM
+            status_content, llm_formatted_content = self._split_image_content(
+                caller_mode, text_content, content_items
+            )
 
-            if content_items:
-                image_items = [
-                    item for item in content_items if item.get("type") == "image"
-                ]
-                if image_items:
-                    num_images = len(image_items)
-                    status_content = (
-                        f"{text_content}\n[Tool returned {num_images} image(s)]".strip()
-                    )
-
-                    if caller_mode == "Claude":
-                        # Format for Claude: list of blocks
-                        claude_blocks = []
-                        if text_content:
-                            claude_blocks.append({"type": "text", "text": text_content})
-                        for item in content_items:
-                            if (
-                                item.get("type") == "image"
-                                and "data" in item
-                                and "mimeType" in item
-                            ):
-                                claude_blocks.append(
-                                    {
-                                        "type": "image",
-                                        "source": {
-                                            "type": "base64",
-                                            "media_type": item["mimeType"],
-                                            "data": item["data"],
-                                        },
-                                    }
-                                )
-                            # Add other non-text types here
-                        llm_formatted_content = (
-                            claude_blocks if claude_blocks else ""
-                        )  # Use blocks or empty string
-                    elif caller_mode in ["OpenAI", "Prompt"]:
-                        llm_formatted_content = status_content
-
-            # Prepare and yield tool call status update
-            status_update = {
-                "type": "tool_call_status",
-                "tool_id": tool_id,
-                "tool_name": tool_name,
-                "status": "error" if is_error else "completed",
-                "content": status_content
-                if not is_error
-                else f"Error: {text_content}",  # Use descriptive content or error message
-                "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
-                + "Z",
-            }
-
-            # For stagehand_navigate tool, include browser view links if available
+            extra = {}
             if tool_name == "stagehand_navigate" and not is_error:
                 live_view_data = metadata.get("liveViewData", {})
                 if live_view_data:
                     logger.info(
                         f"Found live view data for stagehand_navigate: {live_view_data}"
                     )
-                    status_update["browser_view"] = live_view_data
+                    extra["browser_view"] = live_view_data
 
-            yield status_update
+            yield self._tool_status(
+                tool_id,
+                tool_name,
+                "error" if is_error else "completed",
+                status_content if not is_error else f"Error: {text_content}",
+                **extra,
+            )
 
             # Format result for LLM and add to list
             formatted_result = self.format_tool_result(
