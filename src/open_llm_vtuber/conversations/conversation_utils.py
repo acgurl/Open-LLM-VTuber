@@ -281,7 +281,7 @@ async def handle_audio_output(
             prepare_audio_payload,
             audio_path=audio_path,
             display_text=display_text,
-            actions=actions.to_dict() if actions else None,
+            actions=actions,
         )
         await channels.audio(json.dumps(audio_payload))
     return full_response
