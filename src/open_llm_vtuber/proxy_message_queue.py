@@ -18,6 +18,7 @@ class ProxyMessageQueue:
         self._consumer_task = None
         self._forward_func = None
         self._running = False
+        self._forward_tasks: set[asyncio.Task] = set()
 
     def initialize(self, forward_func: Callable[[Dict, Optional[str]], Any]):
         """
@@ -77,6 +78,11 @@ class ProxyMessageQueue:
         """
         return len(self.message_queue) > 0
 
+    def _spawn_forward(self, message: Dict, sender_id: Optional[str]) -> None:
+        task = asyncio.create_task(self._forward_message(message, sender_id))
+        self._forward_tasks.add(task)
+        task.add_done_callback(self._forward_tasks.discard)
+
     def _ensure_consumer_running(self):
         """Ensure the consumer task is running if needed"""
         if not self._forward_func:
@@ -111,7 +117,7 @@ class ProxyMessageQueue:
                         self._conversation_active = True
 
                         # Forward the message outside the lock to prevent deadlocks
-                        asyncio.create_task(self._forward_message(message, sender_id))
+                        self._spawn_forward(message, sender_id)
 
                 # If queue is empty and we've been idle for a while, we can pause the consumer
                 if not self.has_pending_messages() and not self._conversation_active:
@@ -153,10 +159,14 @@ class ProxyMessageQueue:
             self._conversation_active = False
 
     def stop(self):
-        """Stop the consumer task"""
+        """Stop the consumer task and any in-flight forwards."""
         self._running = False
         if self._consumer_task and not self._consumer_task.done():
             self._consumer_task.cancel()
+        for task in list(self._forward_tasks):
+            if not task.done():
+                task.cancel()
+        self._forward_tasks.clear()
 
     def clear(self):
         """Clear all pending messages"""

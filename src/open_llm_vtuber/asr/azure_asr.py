@@ -1,5 +1,5 @@
 import os
-from typing import Callable
+from typing import Callable, List, Optional
 import numpy as np
 from loguru import logger
 import azure.cognitiveservices.speech as speechsdk
@@ -14,11 +14,15 @@ CACHE_DIR = "cache"
 class VoiceRecognition(ASRInterface):
     def __init__(
         self,
-        subscription_key=os.getenv("AZURE_API_Key"),
-        region=os.getenv("AZURE_REGION"),
-        languages=["en-US", "zh-CN"],
+        subscription_key: Optional[str] = None,
+        region: Optional[str] = None,
+        languages: Optional[List[str]] = None,
         callback: Callable = logger.info,
     ):
+        subscription_key = subscription_key or os.getenv("AZURE_API_Key")
+        region = region or os.getenv("AZURE_REGION")
+        languages = languages or ["en-US", "zh-CN"]
+
         if not subscription_key or not region:
             raise ValueError(
                 "Azure Speech Services requires both subscription_key and region. "

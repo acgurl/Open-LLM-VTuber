@@ -48,6 +48,7 @@ class HumeAIAgent(AgentInterface):
         self._idle_timer = None
         self._current_conf_uid = None
         self._current_history_uid = None
+        self._background_tasks: set[asyncio.Task] = set()
 
         # Create cache directory if it doesn't exist
         self.cache_dir = Path("./cache")
@@ -100,6 +101,12 @@ class HumeAIAgent(AgentInterface):
                 )
                 break
 
+    def _spawn(self, coro) -> asyncio.Task:
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
+
     def _reset_idle_timer(self):
         """Reset the idle timer"""
         if self._idle_timer:
@@ -151,7 +158,7 @@ class HumeAIAgent(AgentInterface):
 
         # Force reconnection on next chat
         if self._ws:
-            asyncio.create_task(self._ws.close())
+            self._spawn(self._ws.close())
             self._connected = False
 
     async def chat(self, batch_input: BatchInput) -> AsyncIterator[AudioOutput]:
@@ -200,9 +207,8 @@ class HumeAIAgent(AgentInterface):
                             audio_data = base64.b64decode(response_data["data"])
                             cache_file = self.cache_dir / f"evi_audio_{msg_id}.wav"
 
-                            with open(cache_file, "wb") as f:
-                                f.write(audio_data)
-                                logger.debug(f"Saved audio to cache file: {cache_file}")
+                            await asyncio.to_thread(cache_file.write_bytes, audio_data)
+                            logger.debug(f"Saved audio to cache file: {cache_file}")
 
                             # Create AudioOutput with DisplayText
                             yield AudioOutput(
@@ -240,17 +246,30 @@ class HumeAIAgent(AgentInterface):
         """Handle user interruption (not implemented for Hume AI)"""
         pass
 
-    def __del__(self):
-        """Cleanup WebSocket connection and cache files"""
+    async def close(self) -> None:
+        """Release the WebSocket and any background tasks."""
         if self._idle_timer:
             self._idle_timer.cancel()
-
+        for task in list(self._background_tasks):
+            task.cancel()
+        self._background_tasks.clear()
         if self._ws:
-            self._ws.close()
+            await self._ws.close()
+            self._ws = None
+        self._connected = False
 
-        # Clean up cache files
+    def __del__(self):
+        """Cleanup cache files."""
+        idle_timer = getattr(self, "_idle_timer", None)
+        if idle_timer:
+            idle_timer.cancel()
+
+        cache_dir = getattr(self, "cache_dir", None)
+        if cache_dir is None:
+            return
+
         try:
-            for file in self.cache_dir.glob("evi_audio_*.wav"):
+            for file in cache_dir.glob("evi_audio_*.wav"):
                 file.unlink()
         except Exception as e:
             logger.error(f"Error cleaning up cache files: {e}")

@@ -62,6 +62,7 @@ class BiliBiliLivePlatform(LivePlatformInterface):
         self._running = False
         self._message_handlers: List[Callable[[Dict[str, Any]], None]] = []
         self._conversation_active = False
+        self._background_tasks: set[asyncio.Task] = set()
 
     @property
     def is_connected(self) -> bool:
@@ -110,11 +111,21 @@ class BiliBiliLivePlatform(LivePlatformInterface):
             logger.error(f"Failed to connect to proxy: {e}")
             return False
 
+    def _spawn(self, coro) -> asyncio.Task:
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        task.add_done_callback(self._background_tasks.discard)
+        return task
+
     async def disconnect(self) -> None:
         """
         Disconnect from the proxy server and stop the BiliBili client.
         """
         self._running = False
+        for task in list(self._background_tasks):
+            if not task.done():
+                task.cancel()
+        self._background_tasks.clear()
 
         # Stop BiliBili client if running
         if self._client:
@@ -285,7 +296,7 @@ class BiliBiliLivePlatform(LivePlatformInterface):
                 message: The danmaku message
             """
             logger.debug(f"[Room {client.room_id}] {message.uname}: {message.msg}")
-            asyncio.create_task(self.platform._handle_danmaku(message.msg))
+            self.platform._spawn(self.platform._handle_danmaku(message.msg))
 
         def _on_heartbeat(
             self, client: blivedm.BLiveClient, message: web_models.HeartbeatMessage

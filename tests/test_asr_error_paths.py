@@ -1,3 +1,4 @@
+import inspect
 import sys
 import unittest
 from pathlib import Path
@@ -39,6 +40,22 @@ class SherpaModelPathTests(unittest.TestCase):
 
         with self.assertRaises(FileNotFoundError):
             self.engine._create_recognizer()
+
+
+class AzureConfigTests(unittest.TestCase):
+    def test_languages_default_is_not_a_mutable_argument(self):
+        default = inspect.signature(AzureASR.__init__).parameters["languages"].default
+
+        self.assertIsNone(default)
+
+    def test_default_languages_are_applied(self):
+        with patch.object(
+            azure_asr.speechsdk, "SpeechConfig", return_value=Mock()
+        ) as speech_config:
+            engine = AzureASR("key", "region")
+
+        speech_config.assert_called_once_with(subscription="key", region="region")
+        engine.speech_config.set_property.assert_called_once()
 
 
 class AzureTranscribeTests(unittest.IsolatedAsyncioTestCase):
