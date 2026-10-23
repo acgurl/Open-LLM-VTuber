@@ -1,6 +1,31 @@
+from typing import Callable, Dict
+
 from .deeplx import DeepLXTranslate
 from .tencent import TencentTranslate
 from .translate_interface import TranslateInterface
+
+
+def _build_deeplx(config: dict) -> TranslateInterface:
+    return DeepLXTranslate(
+        api_endpoint=config.get("deeplx_api_endpoint"),
+        target_lang=config.get("deeplx_target_lang"),
+    )
+
+
+def _build_tencent(config: dict) -> TranslateInterface:
+    return TencentTranslate(
+        secret_id=config.get("secret_id"),
+        secret_key=config.get("secret_key"),
+        region=config.get("region"),
+        source_lang=config.get("source_lang"),
+        target_lang=config.get("target_lang"),
+    )
+
+
+_TRANSLATOR_BUILDERS: Dict[str, Callable[[dict], TranslateInterface]] = {
+    "deeplx": _build_deeplx,
+    "tencent": _build_tencent,
+}
 
 
 class TranslateFactory:
@@ -8,19 +33,9 @@ class TranslateFactory:
     def get_translator(
         translate_provider: str, translate_provider_config: dict
     ) -> TranslateInterface:
-        translate_provider = translate_provider.lower()
-        if translate_provider == "deeplx":
-            return DeepLXTranslate(
-                api_endpoint=translate_provider_config.get("deeplx_api_endpoint"),
-                target_lang=translate_provider_config.get("deeplx_target_lang"),
-            )
-        elif translate_provider == "tencent":
-            return TencentTranslate(
-                secret_id=translate_provider_config.get("secret_id"),
-                secret_key=translate_provider_config.get("secret_key"),
-                region=translate_provider_config.get("region"),
-                source_lang=translate_provider_config.get("source_lang"),
-                target_lang=translate_provider_config.get("target_lang"),
-            )
-        else:
-            raise ValueError(f"Unsupported translate provider: {translate_provider}")
+        provider = translate_provider.lower()
+        try:
+            builder = _TRANSLATOR_BUILDERS[provider]
+        except KeyError:
+            raise ValueError(f"Unsupported translate provider: {provider}") from None
+        return builder(translate_provider_config)
