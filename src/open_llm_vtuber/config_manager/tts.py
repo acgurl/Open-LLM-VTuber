@@ -165,8 +165,8 @@ class EdgeTTSConfig(I18nMixin):
     }
 
 
-class CosyvoiceTTSConfig(I18nMixin):
-    """Configuration for Cosyvoice TTS."""
+class CosyvoiceBaseConfig(I18nMixin):
+    """Shared configuration for CosyVoice Gradio clients."""
 
     client_url: str = Field(..., alias="client_url")
     mode_checkbox_group: str = Field(..., alias="mode_checkbox_group")
@@ -199,41 +199,20 @@ class CosyvoiceTTSConfig(I18nMixin):
     }
 
 
-class Cosyvoice2TTSConfig(I18nMixin):
+class CosyvoiceTTSConfig(CosyvoiceBaseConfig):
+    """Configuration for Cosyvoice TTS."""
+
+
+class Cosyvoice2TTSConfig(CosyvoiceBaseConfig):
     """Configuration for Cosyvoice2 TTS."""
 
-    client_url: str = Field(..., alias="client_url")
-    mode_checkbox_group: str = Field(..., alias="mode_checkbox_group")
-    sft_dropdown: str = Field(..., alias="sft_dropdown")
-    prompt_text: str = Field(..., alias="prompt_text")
-    prompt_wav_upload_url: str = Field(..., alias="prompt_wav_upload_url")
-    prompt_wav_record_url: str = Field(..., alias="prompt_wav_record_url")
-    instruct_text: str = Field(..., alias="instruct_text")
     stream: bool = Field(..., alias="stream")
-    seed: int = Field(..., alias="seed")
     speed: float = Field(..., alias="speed")
-    api_name: str = Field(..., alias="api_name")
 
     DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
-        "client_url": Description(
-            en="URL of the CosyVoice Gradio web UI", zh="CosyVoice Gradio Web UI 的 URL"
-        ),
-        "mode_checkbox_group": Description(
-            en="Mode checkbox group value", zh="模式复选框组值"
-        ),
-        "sft_dropdown": Description(en="SFT dropdown value", zh="SFT 下拉框值"),
-        "prompt_text": Description(en="Prompt text", zh="提示文本"),
-        "prompt_wav_upload_url": Description(
-            en="URL for prompt WAV file upload", zh="提示音频文件上传 URL"
-        ),
-        "prompt_wav_record_url": Description(
-            en="URL for prompt WAV file recording", zh="提示音频文件录制 URL"
-        ),
-        "instruct_text": Description(en="Instruction text", zh="指令文本"),
+        **CosyvoiceBaseConfig.DESCRIPTIONS,
         "stream": Description(en="Streaming inference", zh="流式推理"),
-        "seed": Description(en="Random seed", zh="随机种子"),
         "speed": Description(en="Speech speed multiplier", zh="语速倍数"),
-        "api_name": Description(en="API endpoint name", zh="API 端点名称"),
     }
 
 
