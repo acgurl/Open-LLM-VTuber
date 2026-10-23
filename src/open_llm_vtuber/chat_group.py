@@ -146,6 +146,20 @@ class ChatGroupManager:
         return self.groups.get(group_id)
 
 
+async def _send_operation_result(
+    websocket: WebSocket, success: bool, message: str
+) -> None:
+    await websocket.send_text(
+        json.dumps(
+            {
+                "type": "group-operation-result",
+                "success": success,
+                "message": message,
+            }
+        )
+    )
+
+
 async def handle_group_operation(
     operation: str,
     client_uid: str,
@@ -171,14 +185,10 @@ async def handle_group_operation(
                     # Send group update to the newly invited member
                     await send_group_update(client_connections[target_uid], target_uid)
                     # Notify the invited member
-                    await client_connections[target_uid].send_text(
-                        json.dumps(
-                            {
-                                "type": "group-operation-result",
-                                "success": True,
-                                "message": f"You have been invited to the group by {client_uid}",
-                            }
-                        )
+                    await _send_operation_result(
+                        client_connections[target_uid],
+                        True,
+                        f"You have been invited to the group by {client_uid}",
                     )
                 except Exception as e:
                     logger.error(f"Failed to update invited member {target_uid}: {e}")
@@ -189,29 +199,17 @@ async def handle_group_operation(
             )
 
         # Send operation result to the initiator
-        await client_connections[client_uid].send_text(
-            json.dumps(
-                {
-                    "type": "group-operation-result",
-                    "success": success,
-                    "message": message,
-                }
-            )
-        )
+        await _send_operation_result(client_connections[client_uid], success, message)
 
         if success:
             # For removal operation, update the removed member
             if operation != "add-client-to-group" and target_uid in client_connections:
                 try:
                     await send_group_update(client_connections[target_uid], target_uid)
-                    await client_connections[target_uid].send_text(
-                        json.dumps(
-                            {
-                                "type": "group-operation-result",
-                                "success": True,
-                                "message": "You have been removed from the group",
-                            }
-                        )
+                    await _send_operation_result(
+                        client_connections[target_uid],
+                        True,
+                        "You have been removed from the group",
                     )
                 except Exception as e:
                     logger.error(f"Failed to update removed member {target_uid}: {e}")
@@ -228,18 +226,14 @@ async def handle_group_operation(
                             client_connections[member_uid], member_uid
                         )
                         if member_uid != client_uid:
-                            await client_connections[member_uid].send_text(
-                                json.dumps(
-                                    {
-                                        "type": "group-operation-result",
-                                        "success": True,
-                                        "message": (
-                                            f"Member {target_uid} was "
-                                            f"{'added to' if operation == 'add-client-to-group' else 'removed from'} "
-                                            "the group"
-                                        ),
-                                    }
-                                )
+                            await _send_operation_result(
+                                client_connections[member_uid],
+                                True,
+                                (
+                                    f"Member {target_uid} was "
+                                    f"{'added to' if operation == 'add-client-to-group' else 'removed from'} "
+                                    "the group"
+                                ),
                             )
                     except Exception as e:
                         logger.error(f"Failed to update member {member_uid}: {e}")
@@ -259,14 +253,10 @@ async def handle_client_disconnect(
     for member_uid in old_group_members:
         if member_uid != client_uid and member_uid in client_connections:
             await send_group_update(client_connections[member_uid], member_uid)
-            await client_connections[member_uid].send_text(
-                json.dumps(
-                    {
-                        "type": "group-operation-result",
-                        "success": True,
-                        "message": f"Member {client_uid} disconnected",
-                    }
-                )
+            await _send_operation_result(
+                client_connections[member_uid],
+                True,
+                f"Member {client_uid} disconnected",
             )
 
 
