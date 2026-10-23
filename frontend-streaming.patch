@@ -3135,6 +3135,33 @@ index c77387a..48174ed 100644
      "rxjs": "^7.8.1",
      "zustand": "^5.0.3"
    },
+diff --git a/src/renderer/WebSDK/src/lappmodel.ts b/src/renderer/WebSDK/src/lappmodel.ts
+index 00ab2c2..b15c0a6 100644
+--- a/src/renderer/WebSDK/src/lappmodel.ts
++++ b/src/renderer/WebSDK/src/lappmodel.ts
+@@ -613,19 +613,12 @@ export class LAppModel extends CubismUserModel {
+ 
+     // Lip sync settings
+     if (this._lipsync) {
+-      let value = 0.0;
+       this._wavFileHandler.update(deltaTimeSeconds);
+-      value = this._wavFileHandler.getRms();
+-      value = Math.min(1.0, value * 1.5);
+-
+-      const lipSyncWeight = 4.0;
++      // The full gain is configured per model via model_dict.lipSyncGain.
++      const value = Math.min(1.0, this._wavFileHandler.getRms());
+ 
+       for (let i = 0; i < this._lipSyncIds.getSize(); ++i) {
+-        this._model.addParameterValueById(
+-          this._lipSyncIds.at(i),
+-          value,
+-          lipSyncWeight
+-        );
++        this._model.addParameterValueById(this._lipSyncIds.at(i), value);
+       }
+     }
+ 
 diff --git a/src/renderer/WebSDK/src/lappwavfilehandler.ts b/src/renderer/WebSDK/src/lappwavfilehandler.ts
 index c68c155..6ce246b 100644
 --- a/src/renderer/WebSDK/src/lappwavfilehandler.ts
