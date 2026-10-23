@@ -63,6 +63,26 @@ class PayloadDeliveryTests(unittest.IsolatedAsyncioTestCase):
         manager.clear()
         await asyncio.sleep(0)
 
+    async def test_cancelled_sender_releases_in_flight_payload(self):
+        manager = TTSTaskManager()
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def blocked_send(_message: str) -> None:
+            started.set()
+            await release.wait()
+
+        manager._sender_task = asyncio.create_task(
+            manager._process_payload_queue(blocked_send)
+        )
+        await manager._payload_queue.put(({"type": "audio"}, 0))
+        await started.wait()
+
+        manager._sender_task.cancel()
+        await manager._sender_task
+
+        await asyncio.wait_for(manager._payload_queue.join(), timeout=1.0)
+
     async def test_empty_text_keeps_sequence_with_spoken_payloads(self):
         manager = TTSTaskManager()
         audio_sent = []

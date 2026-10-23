@@ -100,9 +100,11 @@ class TTSTaskManager:
         buffered_payloads: Dict[int, Dict] = {}
 
         while True:
+            in_flight = False
             try:
                 # Get payload from queue
                 payload, sequence_number = await self._payload_queue.get()
+                in_flight = True
                 buffered_payloads[sequence_number] = payload
 
                 # Send payloads in order
@@ -118,8 +120,11 @@ class TTSTaskManager:
                     )
 
                 self._payload_queue.task_done()
+                in_flight = False
 
             except asyncio.CancelledError:
+                if in_flight:
+                    self._payload_queue.task_done()
                 break
 
     async def _send_silent_payload(
