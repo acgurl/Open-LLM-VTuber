@@ -363,6 +363,7 @@ class BasicMemoryAgent(AgentInterface):
             stream = self._llm.chat_completion(messages, self._system, tools=tools)
             pending_tool_calls.clear()
             current_assistant_message_content.clear()
+            current_turn_text = ""
 
             async for event in stream:
                 if event["type"] == "text_delta":
@@ -550,6 +551,8 @@ class BasicMemoryAgent(AgentInterface):
 
             if detected_prompt_json:
                 logger.info("Processing tools detected via prompt mode JSON.")
+                if self._json_detector:
+                    self._json_detector.reset()
                 self._add_message(current_turn_text, "assistant")
 
                 if not self._tool_executor:
