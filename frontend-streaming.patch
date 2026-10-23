@@ -3347,28 +3347,30 @@ index 7c05861..8537482 100644
                onInterrupt={handleInterrupt}
              />
 diff --git a/src/renderer/src/components/sidebar/chat-history-panel.tsx b/src/renderer/src/components/sidebar/chat-history-panel.tsx
-index 89e7035..a0f4a21 100644
+index 89e7035..9ae05eb 100644
 --- a/src/renderer/src/components/sidebar/chat-history-panel.tsx
 +++ b/src/renderer/src/components/sidebar/chat-history-panel.tsx
-@@ -5,7 +5,6 @@
+@@ -5,8 +5,7 @@
  /* eslint-disable import/order */
  /* eslint-disable import/no-extraneous-dependencies */
  /* eslint-disable react/require-default-props */
 -import React, { useEffect } from 'react';
- import { Box, Spinner, Flex, Text, Icon } from '@chakra-ui/react';
+-import { Box, Spinner, Flex, Text, Icon } from '@chakra-ui/react';
++import { Box, Spinner, Text, Icon } from '@chakra-ui/react';
  import { sidebarStyles, chatPanelStyles } from './sidebar-styles';
  import { MainContainer, ChatContainer, MessageList as ChatMessageList, Message as ChatMessage, Avatar as ChatAvatar } from '@chatscope/chat-ui-kit-react';
-@@ -14,16 +13,82 @@ import { useChatHistory } from '@/context/chat-history-context';
+ import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
+@@ -14,16 +13,78 @@ import { useChatHistory } from '@/context/chat-history-context';
  import { Global } from '@emotion/react';
  import { useConfig } from '@/context/character-config-context';
  import { useWebSocket } from '@/context/websocket-context';
--import { FaTools, FaCheck, FaTimes } from 'react-icons/fa';
 +import { useLive2DConfig } from '@/context/live2d-config-context';
-+import { FaTools, FaCheck, FaTimes, FaChevronRight } from 'react-icons/fa';
+ import { FaTools, FaCheck, FaTimes } from 'react-icons/fa';
  import { useTranslation } from 'react-i18next';
 +import type { Message } from '@/services/websocket-service';
 +import { MarkdownContent } from './markdown-content';
 +import { RichMessageContent } from './rich-message-content';
++import { CollapsibleBlock } from './collapsible-block';
 +
 +function formatToolContent(content: string): string {
 +  if (!content) return '';
@@ -3392,9 +3394,12 @@ index 89e7035..a0f4a21 100644
 +  const content = formatToolContent(message.content);
 +
 +  return (
-+    <Box as="details" className="llm-tool-block" pl="44px" my="1" width="100%">
-+      <Box as="summary" className="llm-collapsible-summary">
-+        <Flex align="center" gap="8px">
++    <CollapsibleBlock
++      className="llm-tool-block"
++      summaryGap="8px"
++      containerProps={{ pl: '44px', my: '1', width: '100%' }}
++      summary={(
++        <>
 +          <Icon as={FaTools} {...sidebarStyles.toolCallIndicator.icon} />
 +          <Text {...sidebarStyles.toolCallIndicator.text}>{statusText}</Text>
 +          {running && (
@@ -3410,25 +3415,17 @@ index 89e7035..a0f4a21 100644
 +          {failed && (
 +            <Icon as={FaTimes} {...sidebarStyles.toolCallIndicator.errorIcon} />
 +          )}
-+          <Icon
-+            as={FaChevronRight}
-+            boxSize="10px"
-+            color="whiteAlpha.500"
-+            ml="auto"
-+            className="llm-chevron"
-+          />
-+        </Flex>
-+      </Box>
-+      <Box className="llm-collapsible-body">
-+        {content ? (
-+          <MarkdownContent content={content} />
-+        ) : (
-+          <Text fontSize="xs" color="whiteAlpha.500">
-+            {running ? '等待工具返回...' : '暂无详情'}
-+          </Text>
-+        )}
-+      </Box>
-+    </Box>
++        </>
++      )}
++    >
++      {content ? (
++        <MarkdownContent content={content} />
++      ) : (
++        <Text fontSize="xs" color="whiteAlpha.500">
++          {running ? '等待工具返回...' : '暂无详情'}
++        </Text>
++      )}
++    </CollapsibleBlock>
 +  );
 +}
  
@@ -3445,7 +3442,7 @@ index 89e7035..a0f4a21 100644
  
    const validMessages = messages.filter((msg) => msg.content || // Keep messages with content
       (msg.type === 'tool_call_status' && msg.status === 'running') || // Keep running tools
-@@ -32,11 +97,7 @@ function ChatHistoryPanel(): JSX.Element {
+@@ -32,11 +93,7 @@ function ChatHistoryPanel(): JSX.Element {
    );
  
    return (
@@ -3458,7 +3455,7 @@ index 89e7035..a0f4a21 100644
        <Global styles={chatPanelStyles} />
        <MainContainer>
          <ChatContainer>
-@@ -54,48 +115,10 @@ function ChatHistoryPanel(): JSX.Element {
+@@ -54,48 +111,10 @@ function ChatHistoryPanel(): JSX.Element {
                </Box>
              ) : (
                validMessages.map((msg) => {
@@ -3510,7 +3507,7 @@ index 89e7035..a0f4a21 100644
                  return (
                    <ChatMessage
                      key={msg.id}
-@@ -133,6 +156,13 @@ function ChatHistoryPanel(): JSX.Element {
+@@ -133,6 +152,13 @@ function ChatHistoryPanel(): JSX.Element {
                          userName[0].toUpperCase()
                        )}
                      </ChatAvatar>
@@ -3524,6 +3521,53 @@ index 89e7035..a0f4a21 100644
                    </ChatMessage>
                  );
                })
+diff --git a/src/renderer/src/components/sidebar/collapsible-block.tsx b/src/renderer/src/components/sidebar/collapsible-block.tsx
+new file mode 100644
+index 0000000..6be71ae
+--- /dev/null
++++ b/src/renderer/src/components/sidebar/collapsible-block.tsx
+@@ -0,0 +1,41 @@
++import type { ReactNode } from 'react';
++import {
++  Box, Flex, Icon, type BoxProps,
++} from '@chakra-ui/react';
++import { FaChevronRight } from 'react-icons/fa';
++
++interface CollapsibleBlockProps {
++  className: string;
++  summary: ReactNode;
++  summaryGap?: string;
++  containerProps?: BoxProps;
++  children: ReactNode;
++}
++
++export function CollapsibleBlock({
++  className,
++  summary,
++  summaryGap = '6px',
++  containerProps,
++  children,
++}: CollapsibleBlockProps) {
++  return (
++    <Box as="details" className={className} {...containerProps}>
++      <Box as="summary" className="llm-collapsible-summary">
++        <Flex align="center" gap={summaryGap}>
++          {summary}
++          <Icon
++            as={FaChevronRight}
++            boxSize="10px"
++            color="whiteAlpha.500"
++            ml="auto"
++            className="llm-chevron"
++          />
++        </Flex>
++      </Box>
++      <Box className="llm-collapsible-body">
++        {children}
++      </Box>
++    </Box>
++  );
++}
 diff --git a/src/renderer/src/components/sidebar/markdown-content.tsx b/src/renderer/src/components/sidebar/markdown-content.tsx
 new file mode 100644
 index 0000000..229d9eb
@@ -3560,16 +3604,16 @@ index 0000000..229d9eb
 +MarkdownContent.displayName = 'MarkdownContent';
 diff --git a/src/renderer/src/components/sidebar/rich-message-content.tsx b/src/renderer/src/components/sidebar/rich-message-content.tsx
 new file mode 100644
-index 0000000..6cec30b
+index 0000000..18e8598
 --- /dev/null
 +++ b/src/renderer/src/components/sidebar/rich-message-content.tsx
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,115 @@
 +import { useMemo } from 'react';
 +import {
 +  Box, Flex, Icon, Spinner, Text,
 +} from '@chakra-ui/react';
 +import {
-+  FaBrain, FaChevronRight, FaRunning, FaSmile,
++  FaBrain, FaRunning, FaSmile,
 +} from 'react-icons/fa';
 +import type { ModelInfo } from '@/context/live2d-config-context';
 +import {
@@ -3578,6 +3622,7 @@ index 0000000..6cec30b
 +  type ThinkBlock as ThinkBlockData,
 +} from '@/utils/rich-text';
 +import { MarkdownContent } from './markdown-content';
++import { CollapsibleBlock } from './collapsible-block';
 +
 +interface RichMessageContentProps {
 +  content: string;
@@ -3587,33 +3632,26 @@ index 0000000..6cec30b
 +
 +function ThinkBlock({ block }: { block: ThinkBlockData }) {
 +  return (
-+    <Box as="details" className="llm-think-block">
-+      <Box as="summary" className="llm-collapsible-summary">
-+        <Flex align="center" gap="6px">
++    <CollapsibleBlock
++      className="llm-think-block"
++      summary={(
++        <>
 +          <Icon as={FaBrain} boxSize="12px" color="purple.300" />
 +          <Text as="span" fontSize="xs" color="whiteAlpha.700">
 +            {block.closed ? '思考过程' : '思考中...'}
 +          </Text>
 +          {!block.closed && <Spinner size="xs" color="purple.300" />}
-+          <Icon
-+            as={FaChevronRight}
-+            boxSize="10px"
-+            color="whiteAlpha.500"
-+            ml="auto"
-+            className="llm-chevron"
-+          />
-+        </Flex>
-+      </Box>
-+      <Box className="llm-collapsible-body">
-+        {block.text.trim() ? (
-+          <MarkdownContent content={block.text} />
-+        ) : (
-+          <Text fontSize="xs" color="whiteAlpha.500">
-+            （空）
-+          </Text>
-+        )}
-+      </Box>
-+    </Box>
++        </>
++      )}
++    >
++      {block.text.trim() ? (
++        <MarkdownContent content={block.text} />
++      ) : (
++        <Text fontSize="xs" color="whiteAlpha.500">
++          （空）
++        </Text>
++      )}
++    </CollapsibleBlock>
 +  );
 +}
 +
@@ -3686,10 +3724,27 @@ index 0000000..6cec30b
 +  );
 +}
 diff --git a/src/renderer/src/components/sidebar/sidebar-styles.tsx b/src/renderer/src/components/sidebar/sidebar-styles.tsx
-index 8631d1b..6ef810a 100644
+index 8631d1b..2fb8226 100644
 --- a/src/renderer/src/components/sidebar/sidebar-styles.tsx
 +++ b/src/renderer/src/components/sidebar/sidebar-styles.tsx
-@@ -558,4 +558,158 @@ export const chatPanelStyles = css`
+@@ -443,16 +443,6 @@ export const sidebarStyles = {
+ 
+   // Add styles for the Tool Call Indicator
+   toolCallIndicator: {
+-    container: {
+-      pl: '44px', // Indent to align with message content (avatar width + gap)
+-      my: '1', // Reduced vertical margin (e.g., 4px if theme space 1 = 4px)
+-      gap: 2,
+-      width: '100%',
+-      minHeight: '24px', // Ensure minimum height
+-      display: 'flex', // Ensure display is flex
+-      alignItems: 'center', // Keep vertical alignment
+-      justifyContent: 'center', // Center items horizontally
+-    },
+     icon: {
+       color: 'blue.300',
+       boxSize: '14px',
+@@ -558,4 +548,158 @@ export const chatPanelStyles = css`
      visibility: visible !important;
      opacity: 1 !important;
    }
@@ -3941,14 +3996,14 @@ index c5497ac..6f42d83 100644
  
    const [modelInfo, setModelInfoState] = useLocalStorage<ModelInfo | undefined>(
 diff --git a/src/renderer/src/context/vad-context.tsx b/src/renderer/src/context/vad-context.tsx
-index f38a4e6..8d925c7 100644
+index f38a4e6..0a298ec 100644
 --- a/src/renderer/src/context/vad-context.tsx
 +++ b/src/renderer/src/context/vad-context.tsx
 @@ -1,9 +1,9 @@
  /* eslint-disable no-use-before-define */
  import {
 -  createContext, useContext, useRef, useCallback, useEffect, useReducer, useMemo,
-+  createContext, useContext, useRef, useCallback, useEffect, useReducer, useMemo, useState,
++  createContext, useContext, useRef, useCallback, useEffect, useMemo, useState,
  } from 'react';
  import { useTranslation } from 'react-i18next';
 -import { MicVAD } from '@ricky0123/vad-web';
@@ -3956,17 +4011,16 @@ index f38a4e6..8d925c7 100644
  import { useInterrupt } from '@/components/canvas/live2d';
  import { audioTaskQueue } from '@/utils/task-queue';
  import { useSendAudio } from '@/hooks/utils/use-send-audio';
-@@ -38,6 +38,9 @@ interface VADState {
+@@ -38,24 +38,18 @@ interface VADState {
    /** Microphone active state */
    micOn: boolean;
  
+-  /** Set microphone state */
+-  setMicOn: (value: boolean) => void;
 +  /** Microphone is being initialized */
 +  micStarting: boolean;
-+
-   /** Set microphone state */
-   setMicOn: (value: boolean) => void;
  
-@@ -45,7 +48,7 @@ interface VADState {
+   /** Set Auto stop mic state */
    setAutoStopMic: (value: boolean) => void;
  
    /** Start microphone and VAD */
@@ -3975,20 +4029,135 @@ index f38a4e6..8d925c7 100644
  
    /** Stop microphone and VAD */
    stopMic: () => void;
-@@ -111,7 +114,11 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+ 
+-  /** Previous speech probability value */
+-  previousTriggeredProbability: number;
+-
+-  /** Set previous speech probability */
+-  setPreviousTriggeredProbability: (value: number) => void;
+-
+   /** VAD settings configuration */
+   settings: VADSettings;
+ 
+@@ -84,6 +78,9 @@ const DEFAULT_VAD_SETTINGS: VADSettings = {
+   redemptionFrames: 35,
+ };
+ 
++const MIC_START_TIMEOUT_MS = 20000;
++const MIC_RESTART_DELAY_MS = 100;
++
+ const DEFAULT_VAD_STATE = {
+   micOn: false,
+   autoStopMic: false,
+@@ -107,16 +104,19 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+   const { t } = useTranslation();
+   // Refs for VAD instance and state
+   const vadRef = useRef<MicVAD | null>(null);
+-  const previousTriggeredProbabilityRef = useRef(0);
    const previousAiStateRef = useRef<AiState>('idle');
  
    // Persistent state management
 -  const [micOn, setMicOn] = useLocalStorage('micOn', DEFAULT_VAD_STATE.micOn);
+-  const autoStopMicRef = useRef(true);
 +  const [micOn, setMicOn] = useState(DEFAULT_VAD_STATE.micOn);
 +  const [micStarting, setMicStarting] = useState(false);
 +  const micOnRef = useRef(false);
 +  const micStartingRef = useRef(false);
 +  const startAttemptRef = useRef(0);
-   const autoStopMicRef = useRef(true);
    const [autoStopMic, setAutoStopMicState] = useLocalStorage(
      'autoStopMic',
-@@ -275,7 +282,8 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+     DEFAULT_VAD_STATE.autoStopMic,
+   );
++  const autoStopMicRef = useRef(autoStopMic);
+   const [settings, setSettings] = useLocalStorage<VADSettings>(
+     'vadSettings',
+     DEFAULT_VAD_SETTINGS,
+@@ -125,15 +125,12 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+     'autoStartMicOn',
+     DEFAULT_VAD_STATE.autoStartMicOn,
+   );
+-  const autoStartMicRef = useRef(false);
++  const autoStartMicRef = useRef(autoStartMicOn);
+   const [autoStartMicOnConvEnd, setAutoStartMicOnConvEndState] = useLocalStorage(
+     'autoStartMicOnConvEnd',
+     DEFAULT_VAD_STATE.autoStartMicOnConvEnd,
+   );
+-  const autoStartMicOnConvEndRef = useRef(false);
+-
+-  // Force update mechanism for ref updates
+-  const [, forceUpdate] = useReducer((x) => x + 1, 0);
++  const autoStartMicOnConvEndRef = useRef(autoStartMicOnConvEnd);
+ 
+   // External hooks and contexts
+   const { interrupt } = useInterrupt();
+@@ -173,23 +170,15 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+ 
+   useEffect(() => {
+     autoStopMicRef.current = autoStopMic;
+-  }, []);
++  }, [autoStopMic]);
+ 
+   useEffect(() => {
+     autoStartMicRef.current = autoStartMicOn;
+-  }, []);
++  }, [autoStartMicOn]);
+ 
+   useEffect(() => {
+     autoStartMicOnConvEndRef.current = autoStartMicOnConvEnd;
+-  }, []);
+-
+-  /**
+-   * Update previous triggered probability and force re-render
+-   */
+-  const setPreviousTriggeredProbability = useCallback((value: number) => {
+-    previousTriggeredProbabilityRef.current = value;
+-    forceUpdate();
+-  }, []);
++  }, [autoStartMicOnConvEnd]);
+ 
+   /**
+    * Handle speech start event (initial detection)
+@@ -216,15 +205,6 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+     setAiStateRef.current('listening');
+   }, []);
+ 
+-  /**
+-   * Handle frame processing event
+-   */
+-  const handleFrameProcessed = useCallback((probs: { isSpeech: number }) => {
+-    if (probs.isSpeech > previousTriggeredProbabilityRef.current) {
+-      setPreviousTriggeredProbability(probs.isSpeech);
+-    }
+-  }, []);
+-
+   /**
+    * Handle speech end event
+    */
+@@ -239,7 +219,6 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+       console.log('Auto stop mic is OFF, keeping mic active');
+     }
+ 
+-    setPreviousTriggeredProbability(0);
+     sendAudioPartitionRef.current(audio);
+     isProcessingRef.current = false;
+     setAiStateRef.current("thinking-speaking");
+@@ -251,7 +230,6 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+   const handleVADMisfire = useCallback(() => {
+     if (!isProcessingRef.current) return;
+     console.log('VAD misfire detected');
+-    setPreviousTriggeredProbability(0);
+     isProcessingRef.current = false;
+ 
+     // Restore previous AI state and show helpful misfire message
+@@ -268,14 +246,15 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+       stopMic();
+       setTimeout(() => {
+         startMic();
+-      }, 100);
++      }, MIC_RESTART_DELAY_MS);
+     }
+   }, []);
+ 
    /**
     * Initialize new VAD instance
     */
@@ -3998,7 +4167,12 @@ index f38a4e6..8d925c7 100644
      const newVAD = await MicVAD.new({
        model: "v5",
        preSpeechPadFrames: 20,
-@@ -291,38 +299,126 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+@@ -286,49 +265,135 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+       onnxWASMBasePath: './libs/',
+       onSpeechStart: handleSpeechStart,
+       onSpeechRealStart: handleSpeechRealStart,
+-      onFrameProcessed: handleFrameProcessed,
+       onSpeechEnd: handleSpeechEnd,
        onVADMisfire: handleVADMisfire,
      });
  
@@ -4071,7 +4245,7 @@ index f38a4e6..8d925c7 100644
 +      const timeoutError = new Error('microphone start timed out');
 +      timeoutError.name = 'TimeoutError';
 +      const timeout = new Promise<never>((_, reject) => {
-+        timeoutId = window.setTimeout(() => reject(timeoutError), 20000);
++        timeoutId = window.setTimeout(() => reject(timeoutError), MIC_START_TIMEOUT_MS);
 +      });
 +
 +      let instance = vadRef.current;
@@ -4083,13 +4257,13 @@ index f38a4e6..8d925c7 100644
          console.log('Starting VAD');
 -        vadRef.current.start();
 +        await Promise.race([instance.start(), timeout]);
-+      }
+       }
 +
 +      if (!instance || startAttemptRef.current !== attempt) {
 +        instance?.destroy();
 +        if (vadRef.current === instance) vadRef.current = null;
 +        return false;
-       }
++      }
 +      micOnRef.current = true;
        setMicOn(true);
 +      return true;
@@ -4133,17 +4307,57 @@ index f38a4e6..8d925c7 100644
      if (vadRef.current) {
        vadRef.current.pause();
        vadRef.current.destroy();
-@@ -362,6 +458,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+       vadRef.current = null;
+       console.log('VAD stopped and destroyed successfully');
+-      setPreviousTriggeredProbability(0);
+     } else {
+       console.log('VAD instance not found');
+     }
+@@ -342,41 +407,40 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+   const setAutoStopMic = useCallback((value: boolean) => {
+     autoStopMicRef.current = value;
+     setAutoStopMicState(value);
+-    forceUpdate();
+   }, []);
+ 
+   const setAutoStartMicOn = useCallback((value: boolean) => {
+     autoStartMicRef.current = value;
+     setAutoStartMicOnState(value);
+-    forceUpdate();
+   }, []);
+ 
+   const setAutoStartMicOnConvEnd = useCallback((value: boolean) => {
+     autoStartMicOnConvEndRef.current = value;
+     setAutoStartMicOnConvEndState(value);
+-    forceUpdate();
+   }, []);
+ 
+   // Memoized context value
+   const contextValue = useMemo(
      () => ({
-       autoStopMic: autoStopMicRef.current,
+-      autoStopMic: autoStopMicRef.current,
++      autoStopMic,
        micOn,
+-      setMicOn,
 +      micStarting,
-       setMicOn,
        setAutoStopMic,
        startMic,
-@@ -377,6 +474,7 @@ export function VADProvider({ children }: { children: React.ReactNode }) {
+       stopMic,
+-      previousTriggeredProbability: previousTriggeredProbabilityRef.current,
+-      setPreviousTriggeredProbability,
+       settings,
+       updateSettings,
+-      autoStartMicOn: autoStartMicRef.current,
++      autoStartMicOn,
+       setAutoStartMicOn,
+-      autoStartMicOnConvEnd: autoStartMicOnConvEndRef.current,
++      autoStartMicOnConvEnd,
+       setAutoStartMicOnConvEnd,
      }),
      [
++      autoStopMic,
++      autoStartMicOn,
++      autoStartMicOnConvEnd,
        micOn,
 +      micStarting,
        startMic,
@@ -4190,7 +4404,7 @@ index 34865fa..6f1bc4b 100644
    };
  };
 diff --git a/src/renderer/src/hooks/utils/use-audio-task.ts b/src/renderer/src/hooks/utils/use-audio-task.ts
-index 27cba68..5e38e0c 100644
+index 27cba68..3c3b229 100644
 --- a/src/renderer/src/hooks/utils/use-audio-task.ts
 +++ b/src/renderer/src/hooks/utils/use-audio-task.ts
 @@ -1,7 +1,7 @@
@@ -4202,13 +4416,16 @@ index 27cba68..5e38e0c 100644
  import { useTranslation } from 'react-i18next';
  import { useAiState } from '@/context/ai-state-context';
  import { useSubtitle } from '@/context/subtitle-context';
-@@ -10,33 +10,38 @@ import { audioTaskQueue } from '@/utils/task-queue';
+@@ -10,21 +10,119 @@ import { audioTaskQueue } from '@/utils/task-queue';
  import { audioManager } from '@/utils/audio-manager';
  import { toaster } from '@/components/ui/toaster';
  import { useWebSocket } from '@/context/websocket-context';
 +import { useLive2DConfig } from '@/context/live2d-config-context';
  import { DisplayText } from '@/services/websocket-service';
 +import { toPlainSubtitle, toSubtitleAtProgress, toSubtitleLineFromPlain } from '@/utils/rich-text';
++import {
++  installLipSyncDriver, resolveLipSyncGain, type Live2DModel,
++} from '@/utils/lip-sync';
  import { useLive2DExpression } from '@/hooks/canvas/use-live2d-expression';
  import * as LAppDefine from '../../../WebSDK/src/lappdefine';
  
@@ -4222,16 +4439,108 @@ index 27cba68..5e38e0c 100644
    sliceLength: number
    displayText?: DisplayText | null
    expressions?: string[] | number[] | null
+-  speaker_uid?: string
 +  motions?: { group: string; index?: number }[] | null
-   speaker_uid?: string
    forwarded?: boolean
 +  streamed?: boolean
++}
++
++interface SubtitleTicker {
++  start: () => void;
++  stop: () => void;
++  showProgress: (ratio: number) => void;
++}
++
++const SUBTITLE_TICK_MS = 80;
++
++function applyLive2DReactions(
++  model: Live2DModel,
++  expressions: AudioTaskOptions['expressions'],
++  motions: AudioTaskOptions['motions'],
++  setExpression: (value: string | number, adapter: any, logMessage?: string) => void,
++): void {
++  const lappAdapter = (window as any).getLAppAdapter?.();
++  if (lappAdapter && expressions?.[0] !== undefined) {
++    setExpression(
++      expressions[0],
++      lappAdapter,
++      `Set expression to: ${expressions[0]}`,
++    );
++  }
++
++  if (motions && motions.length > 0) {
++    console.log('Starting motion:', motions[0]);
++    if (motions[0].index !== undefined && motions[0].index !== null) {
++      model.startMotion(
++        motions[0].group,
++        motions[0].index,
++        LAppDefine.PriorityNormal,
++      );
++    } else {
++      model.startRandomMotion(
++        motions[0].group,
++        LAppDefine.PriorityNormal,
++      );
++    }
++  } else if (LAppDefine && LAppDefine.PriorityNormal) {
++    console.log("Starting random 'Talk' motion");
++    model.startRandomMotion(
++      "Talk",
++      LAppDefine.PriorityNormal,
++    );
++  } else {
++    console.warn("LAppDefine.PriorityNormal not found - cannot start talk motion");
++  }
++}
++
++function showSubtitleLine(
++  plainSubtitle: string,
++  updateSubtitle: (text: string) => void,
++): void {
++  const line = toSubtitleLineFromPlain(plainSubtitle);
++  if (line) updateSubtitle(line);
++}
++
++function createSubtitleTicker(
++  plainSubtitle: string,
++  audio: HTMLAudioElement,
++  updateSubtitle: (text: string) => void,
++  isInterrupted: () => boolean,
++): SubtitleTicker {
++  let timer: number | undefined;
++
++  const showProgress = (ratio: number) => {
++    if (!plainSubtitle) return;
++    const line = toSubtitleAtProgress(plainSubtitle, ratio);
++    if (line) updateSubtitle(line);
++  };
++
++  const stop = () => {
++    if (timer !== undefined) {
++      window.clearInterval(timer);
++      timer = undefined;
++    }
++  };
++
++  const start = () => {
++    stop();
++    showProgress(audio.currentTime / audio.duration || 0);
++    timer = window.setInterval(() => {
++      if (!audioManager.hasCurrentAudio() || isInterrupted()) {
++        stop();
++        return;
++      }
++      const { duration } = audio;
++      if (!duration || !Number.isFinite(duration)) return;
++      showProgress(audio.currentTime / duration);
++    }, SUBTITLE_TICK_MS);
++  };
++
++  return { start, stop, showProgress };
  }
  
-+const DEFAULT_LIP_SYNC_GAIN = 0.2;
-+
  /**
-  * Custom hook for handling audio playback tasks with Live2D lip sync
+@@ -32,11 +130,12 @@ interface AudioTaskOptions {
   */
  export const useAudioTask = () => {
    const { t } = useTranslation();
@@ -4245,7 +4554,26 @@ index 27cba68..5e38e0c 100644
  
    // State refs to avoid stale closures
    const stateRef = useRef({
-@@ -80,33 +85,55 @@ export const useAudioTask = () => {
+@@ -65,158 +164,174 @@ export const useAudioTask = () => {
+   /**
+    * Handle audio playback with Live2D lip sync
+    */
+-  const handleAudioPlayback = (options: AudioTaskOptions): Promise<void> => new Promise((resolve) => {
++  const handleAudioPlayback = useCallback((options: AudioTaskOptions): Promise<void> => new Promise((resolve) => {
+     const {
+-      aiState: currentAiState,
+       setSubtitleText: updateSubtitle,
+       appendResponse: appendText,
+       appendAIMessage: appendAI,
+     } = stateRef.current;
+ 
++    const isInterrupted = () => stateRef.current.aiState === 'interrupted';
++
+     // Skip if already interrupted
+-    if (currentAiState === 'interrupted') {
++    if (isInterrupted()) {
+       console.warn('Audio playback blocked by interruption state.');
+       resolve();
        return;
      }
  
@@ -4265,11 +4593,7 @@ index 27cba68..5e38e0c 100644
 +    const plainSubtitle = displayText
 +      ? toPlainSubtitle(displayText.text, modelInfo)
 +      : '';
-+
-+    const showFullSubtitle = () => {
-+      const line = toSubtitleLineFromPlain(plainSubtitle);
-+      if (line) updateSubtitle(line);
-+    };
++    const showFullSubtitle = () => showSubtitleLine(plainSubtitle, updateSubtitle);
  
      // Update display text
      if (displayText) {
@@ -4299,211 +4623,162 @@ index 27cba68..5e38e0c 100644
        }
      }
  
++    if (!audioBase64) {
++      showFullSubtitle();
++      resolve();
++      return;
++    }
++
      try {
-       // Process audio if available
-       if (audioBase64) {
+-      // Process audio if available
+-      if (audioBase64) {
 -        const audioDataUrl = `data:audio/wav;base64,${audioBase64}`;
-+        const audioDataUrl = `data:${audioMime || 'audio/wav'};base64,${audioBase64}`;
+-
+-        // Get Live2D manager and model
+-        const live2dManager = (window as any).getLive2DManager?.();
+-        if (!live2dManager) {
+-          console.error('Live2D manager not found');
+-          resolve();
+-          return;
+-        }
++      const audioDataUrl = `data:${audioMime || 'audio/wav'};base64,${audioBase64}`;
  
-         // Get Live2D manager and model
-         const live2dManager = (window as any).getLive2DManager?.();
-         if (!live2dManager) {
-           console.error('Live2D manager not found');
-+          showFullSubtitle();
-           resolve();
-           return;
-         }
-@@ -114,6 +141,7 @@ export const useAudioTask = () => {
-         const model = live2dManager.getModel(0);
-         if (!model) {
-           console.error('Live2D model not found at index 0');
-+          showFullSubtitle();
-           resolve();
-           return;
-         }
-@@ -135,8 +163,22 @@ export const useAudioTask = () => {
-           );
-         }
+-        const model = live2dManager.getModel(0);
+-        if (!model) {
+-          console.error('Live2D model not found at index 0');
+-          resolve();
+-          return;
+-        }
+-        console.log('Found model for audio playback');
++      // Get Live2D manager and model
++      const live2dManager = (window as any).getLive2DManager?.();
++      if (!live2dManager) {
++        console.error('Live2D manager not found');
++        showFullSubtitle();
++        resolve();
++        return;
++      }
+ 
+-        if (!model._wavFileHandler) {
+-          console.warn('Model does not have _wavFileHandler for lip sync');
+-        } else {
+-          console.log('Model has _wavFileHandler available');
+-        }
++      const model = live2dManager.getModel(0);
++      if (!model) {
++        console.error('Live2D model not found at index 0');
++        showFullSubtitle();
++        resolve();
++        return;
++      }
++      console.log('Found model for audio playback');
+ 
+-        // Set expression if available
+-        const lappAdapter = (window as any).getLAppAdapter?.();
+-        if (lappAdapter && expressions?.[0] !== undefined) {
+-          setExpression(
+-            expressions[0],
+-            lappAdapter,
+-            `Set expression to: ${expressions[0]}`,
+-          );
+-        }
++      if (!model._wavFileHandler) {
++        console.warn('Model does not have _wavFileHandler for lip sync');
++      } else {
++        console.log('Model has _wavFileHandler available');
++      }
++
++      applyLive2DReactions(model, expressions, motions, setExpression);
  
 -        // Start talk motion
 -        if (LAppDefine && LAppDefine.PriorityNormal) {
-+        // Start configured motion, falling back to the generic talk motion
-+        if (motions && motions.length > 0) {
-+          console.log('Starting motion:', motions[0]);
-+          if (motions[0].index !== undefined && motions[0].index !== null) {
-+            model.startMotion(
-+              motions[0].group,
-+              motions[0].index,
-+              LAppDefine.PriorityNormal,
-+            );
-+          } else {
-+            model.startRandomMotion(
-+              motions[0].group,
-+              LAppDefine.PriorityNormal,
-+            );
-+          }
-+        } else if (LAppDefine && LAppDefine.PriorityNormal) {
-           console.log("Starting random 'Talk' motion");
-           model.startRandomMotion(
-             "Talk",
-@@ -152,8 +194,117 @@ export const useAudioTask = () => {
-         // Register with global audio manager IMMEDIATELY after creating audio
-         audioManager.setCurrentAudio(audio, model);
-         let isFinished = false;
-+        let playbackStarted = false;
-+        let subtitleTimer: number | undefined;
+-          console.log("Starting random 'Talk' motion");
+-          model.startRandomMotion(
+-            "Talk",
+-            LAppDefine.PriorityNormal,
+-          );
+-        } else {
+-          console.warn("LAppDefine.PriorityNormal not found - cannot start talk motion");
++      // Setup audio element
++      const audio = new Audio(audioDataUrl);
 +
-+        // The backend ships a per-slice RMS envelope with every audio payload.
-+        // Driving the mouth from it keeps lip sync independent of the async WAV
-+        // decode, which can otherwise leave a later sentence without a waveform.
-+        const hasVolumeSchedule = Array.isArray(volumes)
-+          && volumes.length > 0
-+          && sliceLength > 0;
-+        const configuredGain = modelInfo?.lipSyncGain;
-+        const lipSyncGain = typeof configuredGain === 'number'
-+          && Number.isFinite(configuredGain)
-+          && configuredGain >= 0
-+          ? configuredGain
-+          : DEFAULT_LIP_SYNC_GAIN;
-+        const wavHandler = model._wavFileHandler;
-+        if (wavHandler) {
-+          wavHandler._ownerModel = model;
-+          wavHandler._syncAudio = audio;
-+          wavHandler._volumes = hasVolumeSchedule ? volumes : null;
-+          wavHandler._sliceLength = sliceLength;
-+          wavHandler._lipSyncGain = lipSyncGain;
++      // Register with global audio manager IMMEDIATELY after creating audio
++      audioManager.setCurrentAudio(audio, model);
++      let isFinished = false;
++      let playbackStarted = false;
 +
-+          if (!wavHandler._initialized) {
-+            console.log('Applying audio-driven lip sync');
-+            wavHandler._initialized = true;
++      const { wavHandler, hasVolumeSchedule } = installLipSyncDriver({
++        model,
++        audio,
++        volumes,
++        sliceLength,
++        lipSyncGain: resolveLipSyncGain(modelInfo),
++        getCurrentAudio: () => audioManager.getCurrentAudio(),
++      });
++      const subtitleTicker = createSubtitleTicker(
++        plainSubtitle,
++        audio,
++        updateSubtitle,
++        isInterrupted,
++      );
 +
-+            const originalUpdate = wavHandler.update.bind(wavHandler);
-+            wavHandler.update = function (deltaTimeSeconds: number) {
-+              const activeAudio = audioManager.getCurrentAudio();
-+              const isActive = !!activeAudio
-+                && activeAudio === this._syncAudio
-+                && !activeAudio.paused
-+                && !activeAudio.ended
-+                && activeAudio.currentTime > 0;
-+
-+              if (!isActive) {
-+                this._lastRms = 0;
-+                return false;
-+              }
-+
-+              // Idle/Talk motions also animate the mouth parameter. Clear their
-+              // value while speaking so only the audio amplitude drives the mouth.
-+              const ownerModel = this._ownerModel;
-+              const lipSyncIds = ownerModel?._lipSyncIds;
-+              if (lipSyncIds && ownerModel?._model) {
-+                for (let i = 0; i < lipSyncIds.getSize(); i++) {
-+                  ownerModel._model.setParameterValueById(lipSyncIds.at(i), 0);
-+                }
-+              }
-+
-+              if (this._volumes && this._sliceLength > 0) {
-+                const position = (activeAudio.currentTime * 1000) / this._sliceLength;
-+                const lower = Math.floor(position);
-+                if (lower >= this._volumes.length) {
-+                  this._lastRms = 0;
-+                  return true;
-+                }
-+                const fraction = position - lower;
-+                const v0 = this._volumes[lower] ?? 0;
-+                const v1 = this._volumes[Math.min(lower + 1, this._volumes.length - 1)] ?? v0;
-+                const volume = v0 + (v1 - v0) * fraction;
-+                this._lastRms = volume * (this._lipSyncGain ?? DEFAULT_LIP_SYNC_GAIN);
-+                return true;
-+              }
-+
-+              // Fallback for payloads without a volume schedule. Anchor the PCM
-+              // cursor to the audio clock rather than the handler's own timer.
-+              this._userTimeSeconds = Math.max(0, activeAudio.currentTime - deltaTimeSeconds);
-+              const samplingRate = this._wavFileInfo?._samplingRate ?? 0;
-+              if (samplingRate > 0) {
-+                const goalOffset = Math.floor(this._userTimeSeconds * samplingRate);
-+                if (goalOffset <= this._sampleOffset) {
-+                  return false;
-+                }
-+              }
-+              return originalUpdate(deltaTimeSeconds);
-+            };
-+          }
-+        }
-+
-+        // Reveal the subtitle at the speech pace of the audio segment.
-+        const showSubtitleProgress = (ratio: number) => {
-+          if (!plainSubtitle) return;
-+          const line = toSubtitleAtProgress(plainSubtitle, ratio);
-+          if (line) updateSubtitle(line);
-+        };
-+
-+        const stopSubtitleTicker = () => {
-+          if (subtitleTimer !== undefined) {
-+            window.clearInterval(subtitleTimer);
-+            subtitleTimer = undefined;
-+          }
-+        };
-+
-+        const startSubtitleTicker = () => {
-+          stopSubtitleTicker();
-+          showSubtitleProgress(audio.currentTime / audio.duration || 0);
-+          subtitleTimer = window.setInterval(() => {
-+            if (!audioManager.hasCurrentAudio() || stateRef.current.aiState === 'interrupted') {
-+              stopSubtitleTicker();
-+              return;
-+            }
-+            const { duration } = audio;
-+            if (!duration || !Number.isFinite(duration)) return;
-+            showSubtitleProgress(audio.currentTime / duration);
-+          }, 80);
-+        };
++      const cleanup = () => {
++        subtitleTicker.stop();
++        audioManager.clearCurrentAudio(audio);
++        if (!isFinished) {
++          isFinished = true;
++          resolve();
+         }
++      };
  
-         const cleanup = () => {
-+          stopSubtitleTicker();
-           audioManager.clearCurrentAudio(audio);
-           if (!isFinished) {
-             isFinished = true;
-@@ -161,10 +312,12 @@ export const useAudioTask = () => {
-           }
-         };
+-        // Setup audio element
+-        const audio = new Audio(audioDataUrl);
+-        
+-        // Register with global audio manager IMMEDIATELY after creating audio
+-        audioManager.setCurrentAudio(audio, model);
+-        let isFinished = false;
+-
+-        const cleanup = () => {
+-          audioManager.clearCurrentAudio(audio);
+-          if (!isFinished) {
+-            isFinished = true;
+-            resolve();
+-          }
+-        };
++      audio.addEventListener('playing', subtitleTicker.start);
  
 -        // Enhance lip sync sensitivity
 -        const lipSyncScale = 2.0;
-+        audio.addEventListener('playing', startSubtitleTicker);
-+
-+        audio.addEventListener('canplaythrough', async () => {
-+          if (playbackStarted) return;
-+          playbackStarted = true;
++      audio.addEventListener('canplaythrough', async () => {
++        if (playbackStarted) return;
++        playbackStarted = true;
  
 -        audio.addEventListener('canplaythrough', () => {
-           // Check for interruption before playback
-           if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
-             console.warn('Audio playback cancelled due to interruption or audio was stopped');
-@@ -172,37 +325,31 @@ export const useAudioTask = () => {
+-          // Check for interruption before playback
+-          if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
+-            console.warn('Audio playback cancelled due to interruption or audio was stopped');
++        // Check for interruption before playback
++        if (isInterrupted() || !audioManager.hasCurrentAudio()) {
++          console.warn('Audio playback cancelled due to interruption or audio was stopped');
++          cleanup();
++          return;
++        }
++
++        // Without a volume envelope, fall back to decoding the WAV and driving
++        // the cursor from the audio clock.
++        if (wavHandler && !hasVolumeSchedule && (!audioMime || audioMime === 'audio/wav')) {
++          const loaded = await wavHandler.start(audioDataUrl);
++          if (isInterrupted() || !audioManager.hasCurrentAudio()) {
++            console.warn('Audio playback cancelled while loading lip sync data');
+             cleanup();
              return;
            }
- 
-+          // Without a volume envelope, fall back to decoding the WAV and driving
-+          // the cursor from the audio clock.
-+          if (wavHandler && !hasVolumeSchedule && (!audioMime || audioMime === 'audio/wav')) {
-+            const loaded = await wavHandler.start(audioDataUrl);
-+            if (stateRef.current.aiState === 'interrupted' || !audioManager.hasCurrentAudio()) {
-+              console.warn('Audio playback cancelled while loading lip sync data');
-+              cleanup();
-+              return;
-+            }
-+            if (!loaded) {
-+              console.warn('Lip sync WAV failed to load; playing audio without lip sync');
-+              wavHandler._syncAudio = null;
-+            }
-+          }
-+
-           console.log('Starting audio playback with lip sync');
-           audio.play().catch((err) => {
-             console.error("Audio play error:", err);
-             cleanup();
-           });
+-
+-          console.log('Starting audio playback with lip sync');
+-          audio.play().catch((err) => {
+-            console.error("Audio play error:", err);
+-            cleanup();
+-          });
 -
 -          // Setup lip sync
 -          if (model._wavFileHandler) {
@@ -4525,32 +4800,54 @@ index 27cba68..5e38e0c 100644
 -            } else {
 -              console.warn('WavFileHandler start skipped - audio was stopped');
 -            }
--          }
-         });
++          if (!loaded) {
++            console.warn('Lip sync WAV failed to load; playing audio without lip sync');
++            wavHandler._syncAudio = null;
+           }
+-        });
++        }
  
-         audio.addEventListener('ended', () => {
-           console.log("Audio playback completed");
-+          showSubtitleProgress(1);
+-        audio.addEventListener('ended', () => {
+-          console.log("Audio playback completed");
++        console.log('Starting audio playback with lip sync');
++        audio.play().catch((err) => {
++          console.error("Audio play error:", err);
            cleanup();
          });
++      });
  
-@@ -213,10 +360,12 @@ export const useAudioTask = () => {
+-        audio.addEventListener('error', (error) => {
+-          console.error("Audio playback error:", error);
+-          cleanup();
+-        });
++      audio.addEventListener('ended', () => {
++        console.log("Audio playback completed");
++        subtitleTicker.showProgress(1);
++        cleanup();
++      });
  
-         audio.load();
-       } else {
-+        showFullSubtitle();
-         resolve();
-       }
+-        audio.load();
+-      } else {
+-        resolve();
+-      }
++      audio.addEventListener('error', (error) => {
++        console.error("Audio playback error:", error);
++        cleanup();
++      });
++
++      audio.load();
      } catch (error) {
        console.error('Audio playback setup error:', error);
 +      showFullSubtitle();
        toaster.create({
          title: `${t('error.audioPlayback')}: ${error}`,
          type: "error",
-@@ -226,26 +375,6 @@ export const useAudioTask = () => {
+@@ -224,32 +339,12 @@ export const useAudioTask = () => {
+       });
+       resolve();
      }
-   });
- 
+-  });
+-
 -  // Handle backend synthesis completion
 -  useEffect(() => {
 -    let isMounted = true;
@@ -4570,19 +4867,40 @@ index 27cba68..5e38e0c 100644
 -      isMounted = false;
 -    };
 -  }, [backendSynthComplete, sendMessage, setBackendSynthComplete, stopCurrentAudioAndLipSync]);
--
++  }), [modelInfo, sendMessage, setExpression, t]);
+ 
    /**
     * Add a new audio task to the queue
     */
+-  const addAudioTask = async (options: AudioTaskOptions) => {
++  const addAudioTask = useCallback(async (options: AudioTaskOptions) => {
+     const { aiState: currentState } = stateRef.current;
+ 
+     if (currentState === 'interrupted') {
+@@ -259,11 +354,10 @@ export const useAudioTask = () => {
+ 
+     console.log(`Adding audio task ${options.displayText?.text} to queue`);
+     audioTaskQueue.addTask(() => handleAudioPlayback(options));
+-  };
++  }, [handleAudioPlayback]);
+ 
+   return {
+     addAudioTask,
+-    appendResponse,
+     stopCurrentAudioAndLipSync,
+   };
+ };
 diff --git a/src/renderer/src/hooks/utils/use-mic-toggle.ts b/src/renderer/src/hooks/utils/use-mic-toggle.ts
-index e7773b1..1048c70 100644
+index e7773b1..8eae34f 100644
 --- a/src/renderer/src/hooks/utils/use-mic-toggle.ts
 +++ b/src/renderer/src/hooks/utils/use-mic-toggle.ts
-@@ -1,8 +1,13 @@
+@@ -1,8 +1,15 @@
 +import { useTranslation } from 'react-i18next';
  import { useVAD } from '@/context/vad-context';
  import { useAiState } from '@/context/ai-state-context';
 +import { toaster } from '@/components/ui/toaster';
++
++const MIC_START_HINT_DELAY_MS = 1200;
  
  export function useMicToggle() {
 -  const { startMic, stopMic, micOn } = useVAD();
@@ -4593,7 +4911,7 @@ index e7773b1..1048c70 100644
    const { aiState, setAiState } = useAiState();
  
    const handleMicToggle = async (): Promise<void> => {
-@@ -11,13 +16,35 @@ export function useMicToggle() {
+@@ -11,13 +18,35 @@ export function useMicToggle() {
        if (aiState === 'listening') {
          setAiState('idle');
        }
@@ -4611,7 +4929,7 @@ index e7773b1..1048c70 100644
 +          type: 'info',
 +          duration: 4000,
 +        });
-+      }, 1200);
++      }, MIC_START_HINT_DELAY_MS);
 +      const started = await startMic();
 +      window.clearTimeout(hintTimer);
 +      if (started) {
@@ -4689,10 +5007,27 @@ index 6102f75..99c2667 100644
      "audioPlayback": "音频播放错误",
      "enterValidUuid": "请输入有效的UUID",
 diff --git a/src/renderer/src/services/websocket-handler.tsx b/src/renderer/src/services/websocket-handler.tsx
-index 5283617..e912bd6 100644
+index 5283617..35c86ae 100644
 --- a/src/renderer/src/services/websocket-handler.tsx
 +++ b/src/renderer/src/services/websocket-handler.tsx
-@@ -30,8 +30,8 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -22,6 +22,16 @@ import { useGroup } from '@/context/group-context';
+ import { useInterrupt } from '@/hooks/utils/use-interrupt';
+ import { useBrowser } from '@/context/browser-context';
+ 
++function resolveModelInfo(
++  modelInfo: ModelInfo | undefined,
++  baseUrl: string,
++): ModelInfo | undefined {
++  if (!modelInfo || modelInfo.url.startsWith('http')) {
++    return modelInfo;
++  }
++  return { ...modelInfo, url: baseUrl + modelInfo.url };
++}
++
+ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+   const { t } = useTranslation();
+   const [wsState, setWsState] = useState<string>('CLOSED');
+@@ -30,17 +40,20 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
    const { aiState, setAiState, backendSynthComplete, setBackendSynthComplete } = useAiState();
    const { setModelInfo } = useLive2DConfig();
    const { setSubtitleText } = useSubtitle();
@@ -4703,7 +5038,19 @@ index 5283617..e912bd6 100644
    const bgUrlContext = useBgUrl();
    const { confUid, setConfName, setConfUid, setConfigFiles } = useConfig();
    const [pendingModelInfo, setPendingModelInfo] = useState<ModelInfo | undefined>(undefined);
-@@ -70,6 +70,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+   const { setSelfUid, setGroupMembers, setIsOwner } = useGroup();
+   const { startMic, stopMic, autoStartMicOnConvEnd } = useVAD();
+   const autoStartMicOnConvEndRef = useRef(autoStartMicOnConvEnd);
++  const aiStateRef = useRef(aiState);
+   const { interrupt } = useInterrupt();
+   const { setBrowserViewData } = useBrowser();
+ 
++  aiStateRef.current = aiState;
++
+   useEffect(() => {
+     autoStartMicOnConvEndRef.current = autoStartMicOnConvEnd;
+   }, [autoStartMicOnConvEnd]);
+@@ -70,6 +83,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
          setAiState('thinking-speaking');
          audioTaskQueue.clearQueue();
          clearResponse();
@@ -4711,61 +5058,282 @@ index 5283617..e912bd6 100644
          break;
        case 'conversation-chain-end':
          audioTaskQueue.addTask(() => new Promise<void>((resolve) => {
-@@ -110,6 +111,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -91,6 +105,120 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+     }
+   }, [setAiState, clearResponse, setForceNewMessage, startMic, stopMic]);
+ 
++  const handleSetModelAndConf = useCallback((message: MessageEvent) => {
++    setAiState('loading');
++    if (message.conf_name) {
++      setConfName(message.conf_name);
++    }
++    if (message.conf_uid) {
++      setConfUid(message.conf_uid);
++      console.log('confUid', message.conf_uid);
++    }
++    if (message.client_uid) {
++      setSelfUid(message.client_uid);
++      wsService.connectAudio(message.client_uid);
++    }
++    setPendingModelInfo(resolveModelInfo(message.model_info, baseUrl));
++    setAiState('idle');
++  }, [baseUrl, setAiState, setConfName, setConfUid, setPendingModelInfo, setSelfUid]);
++
++  const handleTextDelta = useCallback((message: MessageEvent) => {
++    const state = aiStateRef.current;
++    if (state === 'interrupted' || state === 'listening') {
++      return;
++    }
++    if (message.text) {
++      appendAIMessage(message.text, message.name, message.avatar);
++    }
++  }, [appendAIMessage]);
++
++  const handleConfigSwitched = useCallback(() => {
++    setAiState('idle');
++    setSubtitleText(t('notification.characterLoaded'));
++
++    toaster.create({
++      title: t('notification.characterSwitched'),
++      type: 'success',
++      duration: 2000,
++    });
++
++    wsService.sendMessage({ type: 'fetch-history-list' });
++    wsService.sendMessage({ type: 'create-new-history' });
++  }, [setAiState, setSubtitleText, t]);
++
++  const handleAudioMessage = useCallback((message: MessageEvent) => {
++    if (aiStateRef.current === 'interrupted') {
++      console.log('Audio playback intercepted. Sentence:', message.display_text?.text);
++      return;
++    }
++    console.log("actions", message.actions);
++    addAudioTask({
++      audioBase64: message.audio || '',
++      audioMime: message.audio_mime || undefined,
++      volumes: message.volumes || [],
++      sliceLength: message.slice_length || 0,
++      displayText: message.display_text || null,
++      expressions: message.actions?.expressions || null,
++      motions: message.actions?.motions || null,
++      forwarded: message.forwarded || false,
++      streamed: message.streamed || false,
++    });
++  }, [addAudioTask]);
++
++  const handleHistoryList = useCallback((message: MessageEvent) => {
++    if (!message.histories) {
++      return;
++    }
++    setHistoryList(message.histories);
++    if (message.histories.length > 0) {
++      setCurrentHistoryUid(message.histories[0].uid);
++    }
++  }, [setHistoryList, setCurrentHistoryUid]);
++
++  const handleNewHistoryCreated = useCallback((message: MessageEvent) => {
++    setAiState('idle');
++    setSubtitleText(t('notification.newConversation'));
++    if (!message.history_uid) {
++      return;
++    }
++    setCurrentHistoryUid(message.history_uid);
++    setMessages([]);
++    const newHistory: HistoryInfo = {
++      uid: message.history_uid,
++      latest_message: null,
++      timestamp: new Date().toISOString(),
++    };
++    setHistoryList((prev: HistoryInfo[]) => [newHistory, ...prev]);
++    toaster.create({
++      title: t('notification.newChatHistory'),
++      type: 'success',
++      duration: 2000,
++    });
++  }, [setAiState, setSubtitleText, t, setCurrentHistoryUid, setMessages, setHistoryList]);
++
++  const handleToolCallStatus = useCallback((message: MessageEvent) => {
++    if (!message.tool_id || !message.tool_name || !message.status) {
++      console.warn('Received incomplete tool_call_status message:', message);
++      return;
++    }
++    if (message.browser_view) {
++      console.log('Browser view data received:', message.browser_view);
++      setBrowserViewData(message.browser_view);
++    }
++
++    appendOrUpdateToolCallMessage({
++      id: message.tool_id,
++      type: 'tool_call_status',
++      role: 'ai',
++      tool_id: message.tool_id,
++      tool_name: message.tool_name,
++      name: message.name,
++      status: message.status as ('running' | 'completed' | 'error'),
++      content: message.content || '',
++      timestamp: message.timestamp || new Date().toISOString(),
++    });
++  }, [appendOrUpdateToolCallMessage, setBrowserViewData]);
++
+   const handleWebSocketMessage = useCallback((message: MessageEvent) => {
+     console.log('Received message from server:', message);
+     switch (message.type) {
+@@ -100,52 +228,23 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
          }
-         if (message.client_uid) {
-           setSelfUid(message.client_uid);
-+          wsService.connectAudio(message.client_uid);
-         }
-         setPendingModelInfo(message.model_info);
-         // setModelInfo(message.model_info);
-@@ -127,6 +129,14 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+         break;
+       case 'set-model-and-conf':
+-        setAiState('loading');
+-        if (message.conf_name) {
+-          setConfName(message.conf_name);
+-        }
+-        if (message.conf_uid) {
+-          setConfUid(message.conf_uid);
+-          console.log('confUid', message.conf_uid);
+-        }
+-        if (message.client_uid) {
+-          setSelfUid(message.client_uid);
+-        }
+-        setPendingModelInfo(message.model_info);
+-        // setModelInfo(message.model_info);
+-        // We don't know when the confRef in live2d-config-context will be updated, so we set a delay here for convenience
+-        if (message.model_info && !message.model_info.url.startsWith("http")) {
+-          const modelUrl = baseUrl + message.model_info.url;
+-          // eslint-disable-next-line no-param-reassign
+-          message.model_info.url = modelUrl;
+-        }
+-
+-        setAiState('idle');
++        handleSetModelAndConf(message);
+         break;
+       case 'full-text':
+         if (message.text) {
            setSubtitleText(message.text);
          }
          break;
 +      case 'text-delta':
-+        if (aiState === 'interrupted' || aiState === 'listening') {
-+          break;
-+        }
-+        if (message.text) {
-+          appendAIMessage(message.text, message.name, message.avatar);
-+        }
++        handleTextDelta(message);
 +        break;
        case 'config-files':
          if (message.configs) {
            setConfigFiles(message.configs);
-@@ -153,17 +163,20 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+         }
+         break;
+       case 'config-switched':
+-        setAiState('idle');
+-        setSubtitleText(t('notification.characterLoaded'));
+-
+-        toaster.create({
+-          title: t('notification.characterSwitched'),
+-          type: 'success',
+-          duration: 2000,
+-        });
+-
+-        // setModelInfo(undefined);
+-
+-        wsService.sendMessage({ type: 'fetch-history-list' });
+-        wsService.sendMessage({ type: 'create-new-history' });
++        handleConfigSwitched();
+         break;
+       case 'background-files':
+         if (message.files) {
+@@ -153,19 +252,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
          }
          break;
        case 'audio':
 -        if (aiState === 'interrupted' || aiState === 'listening') {
-+        if (aiState === 'interrupted') {
-           console.log('Audio playback intercepted. Sentence:', message.display_text?.text);
-         } else {
-           console.log("actions", message.actions);
-           addAudioTask({
-             audioBase64: message.audio || '',
-+            audioMime: message.audio_mime || undefined,
-             volumes: message.volumes || [],
-             sliceLength: message.slice_length || 0,
-             displayText: message.display_text || null,
-             expressions: message.actions?.expressions || null,
-+            motions: message.actions?.motions || null,
-             forwarded: message.forwarded || false,
-+            streamed: message.streamed || false,
-           });
-         }
+-          console.log('Audio playback intercepted. Sentence:', message.display_text?.text);
+-        } else {
+-          console.log("actions", message.actions);
+-          addAudioTask({
+-            audioBase64: message.audio || '',
+-            volumes: message.volumes || [],
+-            sliceLength: message.slice_length || 0,
+-            displayText: message.display_text || null,
+-            expressions: message.actions?.expressions || null,
+-            forwarded: message.forwarded || false,
+-          });
+-        }
++        handleAudioMessage(message);
          break;
-@@ -289,7 +302,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+       case 'history-data':
+         if (message.messages) {
+@@ -178,24 +265,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+         });
+         break;
+       case 'new-history-created':
+-        setAiState('idle');
+-        setSubtitleText(t('notification.newConversation'));
+-        // No need to open mic here
+-        if (message.history_uid) {
+-          setCurrentHistoryUid(message.history_uid);
+-          setMessages([]);
+-          const newHistory: HistoryInfo = {
+-            uid: message.history_uid,
+-            latest_message: null,
+-            timestamp: new Date().toISOString(),
+-          };
+-          setHistoryList((prev: HistoryInfo[]) => [newHistory, ...prev]);
+-          toaster.create({
+-            title: t('notification.newChatHistory'),
+-            type: 'success',
+-            duration: 2000,
+-          });
+-        }
++        handleNewHistoryCreated(message);
+         break;
+       case 'history-deleted':
+         toaster.create({
+@@ -207,12 +277,7 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+         });
+         break;
+       case 'history-list':
+-        if (message.histories) {
+-          setHistoryList(message.histories);
+-          if (message.histories.length > 0) {
+-            setCurrentHistoryUid(message.histories[0].uid);
+-          }
+-        }
++        handleHistoryList(message);
+         break;
+       case 'user-input-transcription':
+         console.log('user-input-transcription: ', message.text);
+@@ -264,32 +329,12 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+         interrupt(false); // do not send interrupt signal to server
+         break;
+       case 'tool_call_status':
+-        if (message.tool_id && message.tool_name && message.status) {
+-          // If there's browser view data included, store it in the browser context
+-          if (message.browser_view) {
+-            console.log('Browser view data received:', message.browser_view);
+-            setBrowserViewData(message.browser_view);
+-          }
+-
+-          appendOrUpdateToolCallMessage({
+-            id: message.tool_id,
+-            type: 'tool_call_status',
+-            role: 'ai',
+-            tool_id: message.tool_id,
+-            tool_name: message.tool_name,
+-            name: message.name,
+-            status: message.status as ('running' | 'completed' | 'error'),
+-            content: message.content || '',
+-            timestamp: message.timestamp || new Date().toISOString(),
+-          });
+-        } else {
+-          console.warn('Received incomplete tool_call_status message:', message);
+-        }
++        handleToolCallStatus(message);
+         break;
        default:
          console.warn('Unknown message type:', message.type);
      }
 -  }, [aiState, addAudioTask, appendHumanMessage, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages, setModelInfo, setSubtitleText, startMic, stopMic, setSelfUid, setGroupMembers, setIsOwner, backendSynthComplete, setBackendSynthComplete, clearResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
-+  }, [aiState, addAudioTask, appendHumanMessage, appendAIMessage, baseUrl, bgUrlContext, setAiState, setConfName, setConfUid, setConfigFiles, setCurrentHistoryUid, setHistoryList, setMessages, setModelInfo, setSubtitleText, startMic, stopMic, setSelfUid, setGroupMembers, setIsOwner, backendSynthComplete, setBackendSynthComplete, clearResponse, handleControlMessage, appendOrUpdateToolCallMessage, interrupt, setBrowserViewData, t]);
++  }, [appendHumanMessage, bgUrlContext, setAiState, setConfigFiles, setMessages, setSubtitleText, setGroupMembers, setIsOwner, setBackendSynthComplete, setForceNewMessage, handleControlMessage, interrupt, t, handleSetModelAndConf, handleTextDelta, handleConfigSwitched, handleAudioMessage, handleHistoryList, handleNewHistoryCreated, handleToolCallStatus]);
  
    useEffect(() => {
      wsService.connect(wsUrl);
-@@ -298,12 +311,39 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
+@@ -298,12 +343,39 @@ function WebSocketHandler({ children }: { children: React.ReactNode }) {
    useEffect(() => {
      const stateSubscription = wsService.onStateChange(setWsState);
      const messageSubscription = wsService.onMessage(handleWebSocketMessage);
@@ -4806,7 +5374,7 @@ index 5283617..e912bd6 100644
      sendMessage: wsService.sendMessage.bind(wsService),
      wsState,
 diff --git a/src/renderer/src/services/websocket-service.tsx b/src/renderer/src/services/websocket-service.tsx
-index ad2b79f..a4c6533 100644
+index ad2b79f..7c9ec73 100644
 --- a/src/renderer/src/services/websocket-service.tsx
 +++ b/src/renderer/src/services/websocket-service.tsx
 @@ -25,6 +25,7 @@ export interface AudioPayload {
@@ -4848,7 +5416,30 @@ index ad2b79f..a4c6533 100644
    model_info?: ModelInfo;
    conf_name?: string;
    conf_uid?: string;
-@@ -110,12 +121,24 @@ class WebSocketService {
+@@ -105,17 +116,47 @@ const getTranslation = () => {
+   }
+ };
+ 
++function buildAudioUrl(mainUrl: string, clientUid: string): string | null {
++  try {
++    const url = new URL(mainUrl);
++    url.pathname = url.pathname.replace(/\/client-ws\/?$/, '/audio-ws');
++    if (!url.pathname.endsWith('/audio-ws')) {
++      url.pathname = `${url.pathname.replace(/\/$/, '')}/audio-ws`;
++    }
++    url.searchParams.set('client_uid', clientUid);
++    return url.toString();
++  } catch (error) {
++    console.error('Failed to build audio WebSocket URL:', error);
++    return null;
++  }
++}
++
++const AUDIO_RECONNECT_DELAY_MS = 2000;
++const AUDIO_HEARTBEAT_INTERVAL_MS = 25000;
++
+ class WebSocketService {
+   private static instance: WebSocketService;
  
    private ws: WebSocket | null = null;
  
@@ -4873,7 +5464,7 @@ index ad2b79f..a4c6533 100644
    static getInstance() {
      if (!WebSocketService.instance) {
        WebSocketService.instance = new WebSocketService();
-@@ -144,6 +167,9 @@ class WebSocketService {
+@@ -144,6 +185,9 @@ class WebSocketService {
        this.disconnect();
      }
  
@@ -4883,7 +5474,7 @@ index ad2b79f..a4c6533 100644
      try {
        this.ws = new WebSocket(url);
        this.currentState = 'CONNECTING';
-@@ -170,11 +196,13 @@ class WebSocketService {
+@@ -170,11 +214,13 @@ class WebSocketService {
        };
  
        this.ws.onclose = () => {
@@ -4897,7 +5488,7 @@ index ad2b79f..a4c6533 100644
          this.currentState = 'CLOSED';
          this.stateSubject.next('CLOSED');
        };
-@@ -185,6 +213,101 @@ class WebSocketService {
+@@ -185,6 +231,93 @@ class WebSocketService {
      }
    }
  
@@ -4914,20 +5505,12 @@ index ad2b79f..a4c6533 100644
 +    this.disconnectAudio();
 +    this.audioClientUid = clientUid;
 +
-+    let url: URL;
-+    try {
-+      url = new URL(this.mainUrl);
-+    } catch (error) {
-+      console.error('Failed to build audio WebSocket URL:', error);
++    const audioUrl = buildAudioUrl(this.mainUrl, clientUid);
++    if (!audioUrl) {
 +      return;
 +    }
-+    url.pathname = url.pathname.replace(/\/client-ws\/?$/, '/audio-ws');
-+    if (!url.pathname.endsWith('/audio-ws')) {
-+      url.pathname = `${url.pathname.replace(/\/$/, '')}/audio-ws`;
-+    }
-+    url.searchParams.set('client_uid', clientUid);
 +
-+    const socket = new WebSocket(url.toString());
++    const socket = new WebSocket(audioUrl);
 +    this.audioWs = socket;
 +
 +    socket.onopen = () => {
@@ -4955,7 +5538,7 @@ index ad2b79f..a4c6533 100644
 +        this.audioReconnectTimer = setTimeout(() => {
 +          this.audioReconnectTimer = null;
 +          this.connectAudio(clientUid);
-+        }, 2000);
++        }, AUDIO_RECONNECT_DELAY_MS);
 +      }
 +    };
 +
@@ -4970,7 +5553,7 @@ index ad2b79f..a4c6533 100644
 +      if (this.audioWs?.readyState === WebSocket.OPEN) {
 +        this.audioWs.send(JSON.stringify({ type: 'heartbeat' }));
 +      }
-+    }, 25000);
++    }, AUDIO_HEARTBEAT_INTERVAL_MS);
 +  }
 +
 +  private stopAudioHeartbeat() {
@@ -4999,7 +5582,7 @@ index ad2b79f..a4c6533 100644
    sendMessage(message: object) {
      if (this.ws?.readyState === WebSocket.OPEN) {
        this.ws.send(JSON.stringify(message));
-@@ -202,11 +325,17 @@ class WebSocketService {
+@@ -202,11 +335,17 @@ class WebSocketService {
      return this.messageSubject.subscribe(callback);
    }
  
@@ -5018,10 +5601,44 @@ index ad2b79f..a4c6533 100644
      this.ws = null;
    }
 diff --git a/src/renderer/src/utils/audio-manager.ts b/src/renderer/src/utils/audio-manager.ts
-index 7caa275..e0c69e7 100644
+index 7caa275..c321b4c 100644
 --- a/src/renderer/src/utils/audio-manager.ts
 +++ b/src/renderer/src/utils/audio-manager.ts
-@@ -73,6 +73,13 @@ class AudioManager {
+@@ -1,3 +1,5 @@
++import { resetLipSync } from '@/utils/lip-sync';
++
+ /**
+  * Global audio manager for handling audio playback and interruption
+  * This ensures all components share the same audio reference
+@@ -28,26 +30,7 @@ class AudioManager {
+       audio.load();
+ 
+       // Stop Live2D lip sync
+-      const model = this.currentModel;
+-      if (model && model._wavFileHandler) {
+-        try {
+-          // Release PCM data to stop lip sync calculation in update()
+-          model._wavFileHandler.releasePcmData();
+-          console.log('[AudioManager] Called _wavFileHandler.releasePcmData()');
+-
+-          // Additional reset of state variables as fallback
+-          model._wavFileHandler._lastRms = 0.0;
+-          model._wavFileHandler._sampleOffset = 0;
+-          model._wavFileHandler._userTimeSeconds = 0.0;
+-          console.log('[AudioManager] Also reset _lastRms, _sampleOffset, _userTimeSeconds as fallback');
+-        } catch (e) {
+-          console.error('[AudioManager] Error stopping/resetting wavFileHandler:', e);
+-        }
+-      } else if (model) {
+-        console.warn('[AudioManager] Current model does not have _wavFileHandler to stop/reset.');
+-      } else {
+-        console.log('[AudioManager] No associated model found to stop lip sync.');
+-      }
++      resetLipSync(this.currentModel);
+ 
+       // Clear references
+       this.currentAudio = null;
+@@ -73,6 +56,13 @@ class AudioManager {
    hasCurrentAudio(): boolean {
      return this.currentAudio !== null;
    }
@@ -5035,9 +5652,165 @@ index 7caa275..e0c69e7 100644
  }
  
  // Export singleton instance
+diff --git a/src/renderer/src/utils/lip-sync.ts b/src/renderer/src/utils/lip-sync.ts
+new file mode 100644
+index 0000000..b719f87
+--- /dev/null
++++ b/src/renderer/src/utils/lip-sync.ts
+@@ -0,0 +1,150 @@
++export type Live2DModel = any;
++
++export interface WavFileHandler {
++  _ownerModel: Live2DModel;
++  _syncAudio: HTMLAudioElement | null;
++  _volumes: number[] | null;
++  _sliceLength: number;
++  _lipSyncGain: number;
++  _initialized?: boolean;
++  _lastRms: number;
++  _sampleOffset: number;
++  _userTimeSeconds: number;
++  _wavFileInfo: { _samplingRate: number };
++  update: (deltaTimeSeconds: number) => boolean;
++  start: (filePath: string) => Promise<boolean>;
++  releasePcmData?: () => void;
++}
++
++interface LipSyncInstallation {
++  wavHandler: WavFileHandler | null;
++  hasVolumeSchedule: boolean;
++}
++
++const DEFAULT_LIP_SYNC_GAIN = 0.2;
++
++export function resolveLipSyncGain(modelInfo?: { lipSyncGain?: number }): number {
++  const configuredGain = modelInfo?.lipSyncGain;
++  return typeof configuredGain === 'number'
++    && Number.isFinite(configuredGain)
++    && configuredGain >= 0
++    ? configuredGain
++    : DEFAULT_LIP_SYNC_GAIN;
++}
++
++/**
++ * Drive the mouth from the backend's per-slice RMS envelope. This keeps lip
++ * sync independent of the async WAV decode, which can otherwise leave a later
++ * sentence without a waveform.
++ */
++export function installLipSyncDriver({
++  model,
++  audio,
++  volumes,
++  sliceLength,
++  lipSyncGain,
++  getCurrentAudio,
++}: {
++  model: Live2DModel;
++  audio: HTMLAudioElement;
++  volumes: number[];
++  sliceLength: number;
++  lipSyncGain: number;
++  getCurrentAudio: () => HTMLAudioElement | null;
++}): LipSyncInstallation {
++  const hasVolumeSchedule = Array.isArray(volumes)
++    && volumes.length > 0
++    && sliceLength > 0;
++  const wavHandler = model._wavFileHandler as WavFileHandler | undefined;
++  if (!wavHandler) {
++    return { wavHandler: null, hasVolumeSchedule };
++  }
++
++  wavHandler._ownerModel = model;
++  wavHandler._syncAudio = audio;
++  wavHandler._volumes = hasVolumeSchedule ? volumes : null;
++  wavHandler._sliceLength = sliceLength;
++  wavHandler._lipSyncGain = lipSyncGain;
++
++  if (!wavHandler._initialized) {
++    console.log('Applying audio-driven lip sync');
++    wavHandler._initialized = true;
++
++    const originalUpdate = wavHandler.update.bind(wavHandler);
++    wavHandler.update = function (this: WavFileHandler, deltaTimeSeconds: number) {
++      const activeAudio = getCurrentAudio();
++      const isActive = !!activeAudio
++        && activeAudio === this._syncAudio
++        && !activeAudio.paused
++        && !activeAudio.ended
++        && activeAudio.currentTime > 0;
++
++      if (!isActive) {
++        this._lastRms = 0;
++        return false;
++      }
++
++      // Idle/Talk motions also animate the mouth parameter. Clear their
++      // value while speaking so only the audio amplitude drives the mouth.
++      const ownerModel = this._ownerModel;
++      const lipSyncIds = ownerModel?._lipSyncIds;
++      if (lipSyncIds && ownerModel?._model) {
++        for (let i = 0; i < lipSyncIds.getSize(); i++) {
++          ownerModel._model.setParameterValueById(lipSyncIds.at(i), 0);
++        }
++      }
++
++      if (this._volumes && this._sliceLength > 0) {
++        const position = (activeAudio.currentTime * 1000) / this._sliceLength;
++        const lower = Math.floor(position);
++        if (lower >= this._volumes.length) {
++          this._lastRms = 0;
++          return true;
++        }
++        const fraction = position - lower;
++        const v0 = this._volumes[lower] ?? 0;
++        const v1 = this._volumes[Math.min(lower + 1, this._volumes.length - 1)] ?? v0;
++        const volume = v0 + (v1 - v0) * fraction;
++        this._lastRms = volume * (this._lipSyncGain ?? DEFAULT_LIP_SYNC_GAIN);
++        return true;
++      }
++
++      // Fallback for payloads without a volume schedule. Anchor the PCM
++      // cursor to the audio clock rather than the handler's own timer.
++      this._userTimeSeconds = Math.max(0, activeAudio.currentTime - deltaTimeSeconds);
++      const samplingRate = this._wavFileInfo?._samplingRate ?? 0;
++      if (samplingRate > 0) {
++        const goalOffset = Math.floor(this._userTimeSeconds * samplingRate);
++        if (goalOffset <= this._sampleOffset) {
++          return false;
++        }
++      }
++      return originalUpdate(deltaTimeSeconds);
++    };
++  }
++
++  return { wavHandler, hasVolumeSchedule };
++}
++
++export function resetLipSync(model: Live2DModel | null): void {
++  if (model?._wavFileHandler) {
++    try {
++      const wavHandler = model._wavFileHandler as WavFileHandler;
++      // Release PCM data to stop lip sync calculation in update()
++      wavHandler.releasePcmData?.();
++      console.log('[AudioManager] Called _wavFileHandler.releasePcmData()');
++
++      // Additional reset of state variables as fallback
++      wavHandler._lastRms = 0;
++      wavHandler._sampleOffset = 0;
++      wavHandler._userTimeSeconds = 0;
++      console.log('[AudioManager] Also reset _lastRms, _sampleOffset, _userTimeSeconds as fallback');
++    } catch (e) {
++      console.error('[AudioManager] Error stopping/resetting wavFileHandler:', e);
++    }
++  } else if (model) {
++    console.warn('[AudioManager] Current model does not have _wavFileHandler to stop/reset.');
++  } else {
++    console.log('[AudioManager] No associated model found to stop lip sync.');
++  }
++}
 diff --git a/src/renderer/src/utils/rich-text.ts b/src/renderer/src/utils/rich-text.ts
 new file mode 100644
-index 0000000..a745948
+index 0000000..ff4bc4e
 --- /dev/null
 +++ b/src/renderer/src/utils/rich-text.ts
 @@ -0,0 +1,228 @@
@@ -5131,22 +5904,26 @@ index 0000000..a745948
 +interface ActionLookup {
 +  expressions: Set<string>;
 +  motions: Set<string>;
++  allKeys: string[];
 +}
 +
 +function buildActionLookup(modelInfo?: ModelInfo): ActionLookup {
++  const expressions = new Set(
++    Object.keys(modelInfo?.emotionMap || {}).map((key) => key.toLowerCase()),
++  );
++  const motions = new Set(
++    Object.keys(modelInfo?.motionMap || {}).map((key) => key.toLowerCase()),
++  );
 +  return {
-+    expressions: new Set(
-+      Object.keys(modelInfo?.emotionMap || {}).map((key) => key.toLowerCase()),
-+    ),
-+    motions: new Set(
-+      Object.keys(modelInfo?.motionMap || {}).map((key) => key.toLowerCase()),
-+    ),
++    expressions,
++    motions,
++    allKeys: [...expressions, ...motions],
 +  };
 +}
 +
 +function isActionPrefix(value: string, lookup: ActionLookup): boolean {
 +  const lower = value.toLowerCase();
-+  return [...lookup.expressions, ...lookup.motions].some((key) => key.startsWith(lower));
++  return lookup.allKeys.some((key) => key.startsWith(lower));
 +}
 +
 +function extractActions(
@@ -5192,16 +5969,12 @@ index 0000000..a745948
 +  const blocks: MessageBlock[] = [];
 +
 +  for (const block of splitThinkBlocks(raw || '')) {
-+    if (block.type === 'think') {
-+      const extracted = extractActions(block.text, lookup);
-+      actions.push(...extracted.actions);
-+      blocks.push({ ...block, text: extracted.text });
-+      continue;
-+    }
-+
 +    const extracted = extractActions(block.text, lookup);
 +    actions.push(...extracted.actions);
-+    if (extracted.text.trim()) {
++
++    if (block.type === 'think') {
++      blocks.push({ ...block, text: extracted.text });
++    } else if (extracted.text.trim()) {
 +      blocks.push({ type: 'text', text: extracted.text });
 +    }
 +  }
