@@ -216,6 +216,63 @@ class GroupConversationTriggerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(kwargs["initiator_client_uid"], "guest")
 
 
+def _interrupt_context():
+    return SimpleNamespace(
+        agent_engine=Mock(),
+        history_uid="history",
+        character_config=SimpleNamespace(
+            conf_uid="conf", character_name="AI", avatar=""
+        ),
+    )
+
+
+class InterruptHistoryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_empty_individual_interrupt_stores_nothing(self):
+        context = _interrupt_context()
+        tasks = {"client": None}
+
+        with patch.object(conversation_handler, "store_message") as store:
+            await conversation_handler.handle_individual_interrupt(
+                "client", tasks, context, ""
+            )
+
+        store.assert_not_called()
+
+    async def test_partial_individual_interrupt_stores_ai_and_marker(self):
+        context = _interrupt_context()
+        tasks = {"client": None}
+
+        with patch.object(conversation_handler, "store_message") as store:
+            await conversation_handler.handle_individual_interrupt(
+                "client", tasks, context, "partial answer"
+            )
+
+        self.assertEqual(
+            [call.kwargs["role"] for call in store.call_args_list],
+            ["ai", "system"],
+        )
+
+    async def test_empty_group_interrupt_stores_nothing(self):
+        task = asyncio.create_task(asyncio.Event().wait())
+        tasks = {"group": task}
+        context = _interrupt_context()
+        manager = Mock()
+        manager.get_group_by_id.return_value = SimpleNamespace(members={"client"})
+
+        with patch.object(conversation_handler, "store_message") as store:
+            await conversation_handler.handle_group_interrupt(
+                group_id="group",
+                heard_response="",
+                current_conversation_tasks=tasks,
+                chat_group_manager=manager,
+                client_contexts={"client": context},
+                broadcast_to_group=AsyncMock(),
+            )
+
+        store.assert_not_called()
+        self.assertTrue(task.cancelled())
+
+
 class ConnectionCleanupTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.handler = WebSocketHandler(default_context_cache=Mock())

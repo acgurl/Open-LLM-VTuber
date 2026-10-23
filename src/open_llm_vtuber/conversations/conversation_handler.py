@@ -190,7 +190,7 @@ async def handle_individual_interrupt(
         except Exception as e:
             logger.error(f"Error handling interrupt: {e}")
 
-        if context.history_uid:
+        if context.history_uid and heard_response:
             store_message(
                 conf_uid=context.character_config.conf_uid,
                 history_uid=context.history_uid,
@@ -245,7 +245,7 @@ async def handle_group_interrupt(
     GroupConversationState.remove_state(group_id)  # Clean up state after we've used it
 
     # Store messages with speaker info
-    if context and group:
+    if context and group and heard_response:
         for member_uid in group.members:
             if member_uid in client_contexts:
                 try:
