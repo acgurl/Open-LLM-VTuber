@@ -97,8 +97,10 @@ class WebSocketServer:
                 status_code=200 if ready else 503,
             )
 
-        # Include routes, passing the context instance
-        # The context will be populated during the initialize step
+        self._include_routes()
+        self._mount_static_files()
+
+    def _include_routes(self) -> None:
         self.app.include_router(
             init_client_ws_route(default_context_cache=self.default_context_cache),
         )
@@ -106,18 +108,12 @@ class WebSocketServer:
             init_webtool_routes(default_context_cache=self.default_context_cache),
         )
 
-        # Initialize and include proxy routes if proxy is enabled
-        system_config = config.system_config
+        system_config = self.config.system_config
         if hasattr(system_config, "enable_proxy") and system_config.enable_proxy:
-            # Construct the server URL for the proxy
-            host = system_config.host
-            port = system_config.port
-            server_url = f"ws://{host}:{port}/client-ws"
-            self.app.include_router(
-                init_proxy_route(server_url=server_url),
-            )
+            server_url = f"ws://{system_config.host}:{system_config.port}/client-ws"
+            self.app.include_router(init_proxy_route(server_url=server_url))
 
-        # Mount cache directory first (to ensure audio file access)
+    def _mount_static_files(self) -> None:
         if not os.path.exists("cache"):
             os.makedirs("cache")
         self.app.mount(
@@ -125,8 +121,6 @@ class WebSocketServer:
             CORSStaticFiles(directory="cache"),
             name="cache",
         )
-
-        # Mount static files with CORS-enabled handlers
         self.app.mount(
             "/live2d-models",
             CORSStaticFiles(directory="live2d-models"),
@@ -142,15 +136,11 @@ class WebSocketServer:
             AvatarStaticFiles(directory="avatars"),
             name="avatars",
         )
-
-        # Mount web tool directory separately from frontend
         self.app.mount(
             "/web-tool",
             CORSStaticFiles(directory="web_tool", html=True),
             name="web_tool",
         )
-
-        # Mount main frontend last (as catch-all)
         self.app.mount(
             "/",
             CORSStaticFiles(directory="frontend", html=True),
