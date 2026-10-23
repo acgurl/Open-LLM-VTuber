@@ -1,4 +1,6 @@
-# User config & backup
+# User config & runtime data (bind-mounted at runtime)
+/conf/
+/data/
 /conf.yaml
 # Avatars
 # avatars/*
