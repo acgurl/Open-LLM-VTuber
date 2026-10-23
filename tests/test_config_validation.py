@@ -47,6 +47,24 @@ class SelectedModelConfigTests(unittest.TestCase):
             validate_config(data)
 
 
+class DescriptionKeyTests(unittest.TestCase):
+    def test_descriptions_reference_existing_fields(self):
+        from open_llm_vtuber.config_manager.i18n import I18nMixin
+
+        def all_subclasses(cls):
+            for subclass in cls.__subclasses__():
+                yield subclass
+                yield from all_subclasses(subclass)
+
+        offenders = []
+        for config_class in all_subclasses(I18nMixin):
+            unknown = set(config_class.DESCRIPTIONS) - set(config_class.model_fields)
+            if unknown:
+                offenders.append((config_class.__name__, sorted(unknown)))
+
+        self.assertEqual(offenders, [])
+
+
 class CharacterNameFallbackTests(unittest.TestCase):
     def test_empty_character_name_falls_back_to_conf_name(self):
         data = read_yaml(str(TEMPLATE))

@@ -215,12 +215,4 @@ class AgentConfig(I18nMixin, BaseModel):
         "llm_configs": Description(
             en="Pool of LLM provider configurations", zh="语言模型提供者配置池"
         ),
-        "faster_first_response": Description(
-            en="Whether to respond as soon as encountering a comma in the first sentence to reduce latency (default: True)",
-            zh="是否在第一句回应时遇上逗号就直接生成音频以减少首句延迟（默认：True）",
-        ),
-        "segment_method": Description(
-            en="Method for segmenting sentences: 'regex' or 'pysbd' (default: 'pysbd')",
-            zh="分割句子的方法：'regex' 或 'pysbd'（默认：'pysbd'）",
-        ),
     }
