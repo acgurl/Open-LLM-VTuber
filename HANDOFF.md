@@ -1,6 +1,6 @@
 # Open-LLM-VTuber 部署交接
 
-更新日期：2026-10-23（OIDC 多用户上线）
+更新日期：2026-10-23（重构与缺陷修复部署）
 
 ## 1. 现状概览
 
@@ -9,7 +9,7 @@
 | 访问地址 | https://vtuber.acgurl.cn/ （未登录 302 → Casdoor 登录） |
 | 服务器 | 甲骨文凤凰城，Ubuntu 24.04 ARM64，SSH 别名 `oracle` |
 | 部署目录 | `/home/ubuntu/open-llm-vtuber` |
-| 容器 | `open-llm-vtuber`，镜像 `open-llm-vtuber:1.2.1-oidc-20261023-r2`，`--network host`，`--restart unless-stopped` |
+| 容器 | `open-llm-vtuber`，镜像 `open-llm-vtuber:1.2.1-refactor-20261023`，`--network host`，`--restart unless-stopped` |
 | 应用监听 | `127.0.0.1:12393`（FastAPI + WebSocket `/client-ws`，前端由后端静态托管） |
 | 登录 | OIDC / Casdoor，应用 `open-llm-vtuber`，issuer `https://sso.acgurl.cn`，回调 `https://vtuber.acgurl.cn/auth/callback`；`auth.mode: oidc` |
 | 健康检查 | `https://vtuber.acgurl.cn/healthz` → 200 `{"status":"ok"}`（公开） |
@@ -332,3 +332,39 @@ ssh oracle "docker restart open-llm-vtuber"
 - `/auth/logout` 只清本地 `vtuber_session`，未配置 Casdoor `post_logout_redirect_uri`；Casdoor 会话保留，已建立 WS 不会立即断开；会话默认 7 天。
 - 尚无每用户消息/TTS/ASR 速率限制；主 WS 仅限制 4 个连接。公开注册场景建议后续补。
 - SQLite 单进程单 worker 设计不变；多 worker 需 Redis/Postgres。
+
+## 15. 2026-10-23 重构与缺陷修复部署
+
+### 结果
+
+- 生产镜像 `open-llm-vtuber:1.2.1-refactor-20261023`，`run-container.sh` 已切换；旧镜像 `1.2.1-oidc-20261023-r2` 保留回滚。
+- 本次覆盖 `3ff00d9..0469c6e` 共 13 个提交：OIDC 入库、全仓库坏味道扫描后的低风险重构、5 个缺陷修复。
+- 重构：BasicMemoryAgent 工具执行块提取、SQLite 行映射统一、auth Cookie 参数收敛、TTS 冗余 path/cache 清理、translate traceback 保留、死代码移除。
+- 缺陷修复：Fish TTS 日志不再输出 API key；Hume `AudioOutput` 的 actions 不再二次 `.to_dict()`；`pyttsx3_tts` 重新可选（仅新增 Literal 值，无 YAML 改名）；群组消失时中断不再空引用；chain-end 不再向当前发言人重复发送。
+- 未改动 WS 消息字段、YAML 键、路径守卫和 `frontend/`；无需前端重建。
+
+### 备份与同步
+
+- 备份 `data/backups/refactor-20261023-105231/`：`source.tar.gz`、`conf.yaml`、`conf_model_dict.json`、`mcp_servers.json`、`run-container.sh`、SQLite `open_llm_vtuber.db`（使用 backup API）、`sha256-before`。
+- 同步方式：本地 `git archive HEAD` 经 tar 覆盖服务器源码，排除 `conf`、`characters`、`avatars`、`backgrounds`、`live2d-models`、`models`、`data`、`cache`、`logs`、`chat_history`、`frontend`、`mcp_servers.json`、`model_dict.json`；同步后关键源码 sha256 与本地一致，4 个运行时文件 sha256 未变。
+- 镜像由服务器 `docker build -f dockerfile -t open-llm-vtuber:1.2.1-refactor-20261023 .` 构建；`run-container.sh` 仅镜像标签一行变化。
+
+### 验证
+
+- 镜像内 210 个单测全部通过。
+- 隔离容器（12394，临时 conf 改为 single、临时 logs/cache/storage/chat_history）：健康 200；默认 AIRI/hiyori_pro；MCP cuc-kb 4+4 工具；文本流 2 个 `text-delta`；音频仅走 `/audio-ws`（`audio/mpeg`）；`backend-synth-complete` 在最后一段音频之后；历史 human+ai 落库并可删除；`config-files` 10 项；日志无 ERROR/WARNING。
+- 生产（12393）：启动日志 AIRI、Groq ASR、Azure TTS、MCP 4+4；`/healthz` 200（公网同）；带 `Accept: text/html` 的 `/` 302 到 `/auth/login`；`/api/session`、`/model_dict.json` 401；`/assets/main-DS8X0Aex.js` 200；`/live2d-models/info` 200；未登录 WS 关闭码 `/client-ws` 4401、`/audio-ws` 1008、`/tts-ws` 4401。
+- OIDC 后链路：用服务器本地签名的临时会话（用户 `deploy_smoke_20261023`）连接生产 WS，完成文本流、Azure MP3、完成信号顺序、历史 human+ai 写入与删除；测试后删除临时用户，DB 恢复 **110 历史 / 362 消息 / 2 用户**，与部署前一致。
+- 日志唯一 WARNING 是验证 `/auth/callback` 非法 state 时的预期告警；无 ERROR/Traceback。
+
+### 回滚
+
+1. 恢复 `data/backups/refactor-20261023-105231/run-container.sh` 到部署目录，执行 `bash run-container.sh`。
+2. 旧镜像 `open-llm-vtuber:1.2.1-oidc-20261023-r2` 仍在；数据库未改动，可直接回退。
+3. 如需恢复源码，解包备份中的 `source.tar.gz`。
+
+### 已知限制
+
+- 本次未改动数据库 schema；OIDC、历史隔离、MCP、TTS 行为与 r2 一致。
+- 全仓库扫描中的结构提取/高风险长函数批次（OpenAI/Claude `chat_completion`、Sherpa、TTS payload 统一、sentence_divider/live2d 去重）仍未执行。
+- TTS 发送失败时 `wait_for_delivery` 仍可能等到 10s 超时，未在本次修复范围。
