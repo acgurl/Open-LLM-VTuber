@@ -54,6 +54,18 @@ class ChatHistoryManagerTests(unittest.TestCase):
         self.assertTrue(delete_history("conf", history_uid))
         self.assertEqual(get_history("conf", history_uid), [])
 
+    def test_listing_does_not_delete_a_new_empty_history(self):
+        empty_uid = create_new_history("conf")
+        filled_uid = create_new_history("conf")
+        store_message("conf", filled_uid, "human", "你好")
+
+        histories = get_history_list("conf")
+
+        self.assertEqual([history["uid"] for history in histories], [filled_uid])
+        self.assertTrue(
+            os.path.exists(os.path.join("chat_history", "conf", f"{empty_uid}.json"))
+        )
+
     def test_metadata_modify_and_rename(self):
         history_uid = create_new_history("conf")
         store_message("conf", history_uid, "ai", "旧回复")

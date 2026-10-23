@@ -263,7 +263,6 @@ def get_history_list(conf_uid: str) -> List[dict]:
 
     histories = []
     conf_dir = _ensure_conf_dir(conf_uid)
-    empty_history_uids = []
 
     try:
         for filename in os.listdir(conf_dir):
@@ -279,7 +278,6 @@ def get_history_list(conf_uid: str) -> List[dict]:
                 # Filter out metadata for checking if history is empty
                 actual_messages = [msg for msg in messages if msg["role"] != "metadata"]
                 if not actual_messages:
-                    empty_history_uids.append(history_uid)
                     continue
 
                 latest_message = actual_messages[-1]
@@ -294,15 +292,6 @@ def get_history_list(conf_uid: str) -> List[dict]:
             except Exception as e:
                 logger.error(f"Error reading history file {filename}: {e}")
                 continue
-
-        # Clean up empty histories if there are other non-empty ones
-        if len(empty_history_uids) > 0 and len(os.listdir(conf_dir)) > 1:
-            for uid in empty_history_uids:
-                try:
-                    os.remove(os.path.join(conf_dir, f"{uid}.json"))
-                    logger.info(f"Removed empty history file: {uid}")
-                except Exception as e:
-                    logger.error(f"Failed to remove empty history file {uid}: {e}")
 
         histories.sort(
             key=lambda x: x["timestamp"] if x["timestamp"] else "", reverse=True
