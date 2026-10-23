@@ -28,19 +28,19 @@ class AgentInterface(ABC):
         logger.critical("Agent: No chat function set.")
         raise ValueError("Agent: No chat function set.")
 
-    @abstractmethod
     def handle_interrupt(self, heard_response: str) -> None:
         """
         Handle user interruption. This function will be called when the agent is interrupted.
+
+        Agents that keep their own conversation state should override this.
 
         Args:
             heard_response: str - The part of response heard before interruption
         """
         logger.warning(
-            """Agent: No interrupt handler set. The agent may not handle interruptions
-            correctly. The AI may not be able to understand that it was interrupted."""
+            "Agent: No interrupt handler set. The agent may not understand "
+            "that it was interrupted."
         )
-        pass
 
     @abstractmethod
     def set_memory_from_history(self, conf_uid: str, history_uid: str) -> None:

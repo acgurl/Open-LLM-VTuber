@@ -242,10 +242,6 @@ class HumeAIAgent(AgentInterface):
             logger.error(f"Error in chat: {e}")
             raise
 
-    def handle_interrupt(self, heard_response: str) -> None:
-        """Handle user interruption (not implemented for Hume AI)"""
-        pass
-
     async def close(self) -> None:
         """Release the WebSocket and any background tasks."""
         if self._idle_timer:

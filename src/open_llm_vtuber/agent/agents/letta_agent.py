@@ -54,9 +54,6 @@ class LettaAgent(AgentInterface):
         # The Letta Server automatically stores historical messages, so this part is not needed
         pass
 
-    def handle_interrupt(self, heard_response: str) -> None:
-        pass
-
     async def generator_to_async(self, gen):
         for item in gen:
             yield item
