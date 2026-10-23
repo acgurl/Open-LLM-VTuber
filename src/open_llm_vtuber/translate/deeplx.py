@@ -5,9 +5,6 @@ from .translate_interface import TranslateInterface
 
 
 class DeepLXTranslate(TranslateInterface):
-    api_endpoint: str = "http://127.0.0.1:1188/v2/translate"
-    target_lang: str = "JP"
-
     def __init__(self, api_endpoint: str, target_lang: str):
         self.api_endpoint = api_endpoint
         self.target_lang = target_lang
@@ -27,6 +24,6 @@ class DeepLXTranslate(TranslateInterface):
             logger.critical(f"Error translating text '{text}'. Error message: {e}")
             if response_text is not None:
                 logger.critical(f"Response: {response_text}")
-            raise e
+            raise
 
         return res

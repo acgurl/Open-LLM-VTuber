@@ -118,4 +118,4 @@ class TencentTranslate(TranslateInterface):
             return res.get("Response", {}).get("TargetText", "Translation failed")
         except Exception as e:
             logger.critical(f"API call error: {e}")
-            raise e
+            raise
