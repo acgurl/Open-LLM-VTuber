@@ -7,11 +7,16 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 try:
-    from open_llm_vtuber.agent import stateless_llm_factory
+    from open_llm_vtuber.agent import agent_factory, stateless_llm_factory
+    from open_llm_vtuber.agent.agent_factory import (
+        _AGENT_BUILDERS,
+        AgentFactory,
+    )
     from open_llm_vtuber.agent.stateless_llm_factory import (
         _LLM_BUILDERS,
         LLMFactory,
     )
+    from open_llm_vtuber.config_manager.agent import AgentConfig
     from open_llm_vtuber.asr.asr_factory import _ASR_BUILDERS, ASRFactory
     from open_llm_vtuber.config_manager.asr import ASRConfig
     from open_llm_vtuber.config_manager.tts import TTSConfig
@@ -82,6 +87,39 @@ class FactoryRegistryTests(unittest.TestCase):
     def test_unknown_tts_choice_raises(self):
         with self.assertRaises(ValueError):
             TTSFactory.get_tts_engine("missing")
+
+    def test_agent_registry_covers_config_choices(self):
+        choices = _literal_values(
+            AgentConfig.model_fields["conversation_agent_choice"].annotation
+        )
+        self.assertTrue(choices <= set(_AGENT_BUILDERS))
+
+    def test_hume_agent_builder_maps_settings(self):
+        with patch.object(agent_factory, "HumeAIAgent") as hume:
+            AgentFactory.create_agent(
+                "hume_ai_agent",
+                {
+                    "hume_ai_agent": {
+                        "api_key": "key",
+                        "host": "host",
+                        "config_id": "config",
+                        "idle_timeout": 5,
+                    }
+                },
+                {},
+                "system",
+            )
+
+        hume.assert_called_once_with(
+            api_key="key",
+            host="host",
+            config_id="config",
+            idle_timeout=5,
+        )
+
+    def test_unknown_agent_choice_raises(self):
+        with self.assertRaises(ValueError):
+            AgentFactory.create_agent("missing", {}, {}, "system")
 
     def test_llm_registry_covers_config_choices(self):
         from open_llm_vtuber.config_manager.agent import BasicMemoryAgentConfig
