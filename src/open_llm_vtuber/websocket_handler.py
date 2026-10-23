@@ -28,6 +28,7 @@ from .conversations.conversation_handler import (
     handle_group_interrupt,
     handle_individual_interrupt,
 )
+from .conversations.types import OutboundChannels
 
 
 MAX_WS_CONNECTIONS = 64
@@ -168,8 +169,9 @@ class WebSocketHandler:
                         self.client_audio_connections.pop(client_uid, None)
                 await websocket.send_text(data)
 
+            channels = OutboundChannels(text=websocket.send_text, audio=send_audio)
             session_service_context = await self._init_service_context(
-                websocket.send_text, client_uid, send_audio
+                channels, client_uid
             )
 
             await self._store_client_data(
@@ -268,7 +270,7 @@ class WebSocketHandler:
         await self.send_group_update(websocket, client_uid)
 
     async def _init_service_context(
-        self, send_text: Callable, client_uid: str, audio_send: Callable
+        self, channels: OutboundChannels, client_uid: str
     ) -> ServiceContext:
         """Initialize service context for a new session by cloning the default context"""
         session_service_context = ServiceContext()
@@ -288,8 +290,7 @@ class WebSocketHandler:
             translate_engine=self.default_context_cache.translate_engine,
             mcp_server_registery=self.default_context_cache.mcp_server_registery,
             tool_adapter=self.default_context_cache.tool_adapter,
-            send_text=send_text,
-            audio_send=audio_send,
+            channels=channels,
             client_uid=client_uid,
         )
         # Each connection needs its own agent state; the LLM client stays shared.

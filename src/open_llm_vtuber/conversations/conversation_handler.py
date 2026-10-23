@@ -12,7 +12,7 @@ from ..service_context import ServiceContext
 from .group_conversation import process_group_conversation
 from .single_conversation import process_single_conversation
 from .conversation_utils import EMOJI_LIST
-from .types import GroupConversationState
+from .types import GroupConversationState, OutboundChannels
 from prompts import prompt_loader
 
 
@@ -165,10 +165,13 @@ async def handle_conversation_trigger(
         if await _reject_if_at_capacity(websocket, current_conversation_tasks):
             return
 
+        channels = context.channels or OutboundChannels.from_text(
+            websocket.send_text
+        )
         task = asyncio.create_task(
             process_single_conversation(
                 context=context,
-                websocket_send=websocket.send_text,
+                channels=channels,
                 client_uid=client_uid,
                 user_input=user_input,
                 images=images,

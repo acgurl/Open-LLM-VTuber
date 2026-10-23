@@ -46,13 +46,9 @@ class PayloadDeliveryTests(unittest.IsolatedAsyncioTestCase):
     async def test_audio_payloads_use_the_audio_channel(self):
         manager = TTSTaskManager()
         audio_sent = []
-        text_sent = []
 
         async def audio_send(message: str) -> None:
             audio_sent.append(json.loads(message))
-
-        async def text_send(message: str) -> None:
-            text_sent.append(json.loads(message))
 
         await manager.speak(
             tts_text="测试。",
@@ -60,7 +56,6 @@ class PayloadDeliveryTests(unittest.IsolatedAsyncioTestCase):
             actions=None,
             live2d_model=None,
             tts_engine=_FailingTTSEngine(),
-            websocket_send=text_send,
             audio_send=audio_send,
         )
 
@@ -69,7 +64,6 @@ class PayloadDeliveryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(audio_sent), 1)
         self.assertEqual(audio_sent[0]["type"], "audio")
-        self.assertEqual(text_sent, [])
         manager.clear()
         await asyncio.sleep(0)
 
@@ -87,7 +81,6 @@ class PayloadDeliveryTests(unittest.IsolatedAsyncioTestCase):
                 actions=None,
                 live2d_model=None,
                 tts_engine=_FailingTTSEngine(),
-                websocket_send=audio_send,
                 audio_send=audio_send,
             )
 

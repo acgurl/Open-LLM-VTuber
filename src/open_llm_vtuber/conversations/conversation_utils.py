@@ -6,7 +6,7 @@ import json
 from loguru import logger
 
 from ..message_handler import message_handler
-from .types import WebSocketSend, BroadcastContext
+from .types import WebSocketSend, BroadcastContext, OutboundChannels
 from .tts_manager import TTSTaskManager
 from ..agent.output_types import SentenceOutput, AudioOutput
 from ..agent.input_types import BatchInput, TextData, ImageData, TextSource, ImageSource
@@ -134,16 +134,14 @@ async def process_agent_output(
     character_config: Any,
     live2d_model: Live2dModel,
     tts_engine: TTSInterface,
-    websocket_send: WebSocketSend,
+    channels: OutboundChannels,
     tts_manager: TTSTaskManager,
     translate_engine: Optional[Any] = None,
     streamed: bool = False,
-    audio_send: Optional[WebSocketSend] = None,
 ) -> str:
     """Process agent output with character information and optional translation"""
     output.display_text.name = character_config.character_name
     output.display_text.avatar = character_config.avatar
-    audio_send = audio_send or websocket_send
 
     full_response = ""
     try:
@@ -152,19 +150,18 @@ async def process_agent_output(
                 output,
                 live2d_model,
                 tts_engine,
-                websocket_send,
+                channels,
                 tts_manager,
                 translate_engine,
                 streamed,
-                audio_send,
             )
         elif isinstance(output, AudioOutput):
-            full_response = await handle_audio_output(output, audio_send)
+            full_response = await handle_audio_output(output, channels)
         else:
             logger.warning(f"Unknown output type: {type(output)}")
     except Exception as e:
         logger.error(f"Error processing agent output: {e}")
-        await websocket_send(
+        await channels.text(
             json.dumps(
                 {"type": "error", "message": f"Error processing response: {str(e)}"}
             )
@@ -177,11 +174,10 @@ async def handle_sentence_output(
     output: SentenceOutput,
     live2d_model: Live2dModel,
     tts_engine: TTSInterface,
-    websocket_send: WebSocketSend,
+    channels: OutboundChannels,
     tts_manager: TTSTaskManager,
     translate_engine: Optional[Any] = None,
     streamed: bool = False,
-    audio_send: Optional[WebSocketSend] = None,
 ) -> str:
     """Handle sentence output type with optional translation support"""
     full_response = ""
@@ -202,16 +198,15 @@ async def handle_sentence_output(
             actions=actions,
             live2d_model=live2d_model,
             tts_engine=tts_engine,
-            websocket_send=websocket_send,
+            audio_send=channels.audio,
             streamed=streamed,
-            audio_send=audio_send,
         )
     return full_response
 
 
 async def handle_audio_output(
     output: AudioOutput,
-    audio_send: WebSocketSend,
+    channels: OutboundChannels,
 ) -> str:
     """Process and send AudioOutput directly to the client"""
     full_response = ""
@@ -223,7 +218,7 @@ async def handle_audio_output(
             display_text=display_text,
             actions=actions.to_dict() if actions else None,
         )
-        await audio_send(json.dumps(audio_payload))
+        await channels.audio(json.dumps(audio_payload))
     return full_response
 
 
@@ -258,10 +253,9 @@ async def process_user_input(
 
 async def finalize_conversation_turn(
     tts_manager: TTSTaskManager,
-    websocket_send: WebSocketSend,
+    channels: OutboundChannels,
     client_uid: str,
     broadcast_ctx: Optional[BroadcastContext] = None,
-    audio_send: Optional[WebSocketSend] = None,
 ) -> None:
     """Finalize a conversation turn"""
     if tts_manager.task_list:
@@ -270,10 +264,8 @@ async def finalize_conversation_turn(
         # audio frame is out before the client is told playback may finish.
         await tts_manager.wait_for_delivery()
         # Send the completion on the audio channel so it cannot overtake a
-        # large audio payload that is still in flight. Falls back to the main
-        # channel when no audio channel is connected.
-        completion_send = audio_send or websocket_send
-        await completion_send(json.dumps({"type": "backend-synth-complete"}))
+        # large audio payload that is still in flight.
+        await channels.audio(json.dumps({"type": "backend-synth-complete"}))
         logger.info("All TTS payloads delivered; waiting for client playback")
 
         response = await message_handler.wait_for_response(
@@ -288,7 +280,7 @@ async def finalize_conversation_turn(
                 f"within {PLAYBACK_COMPLETE_TIMEOUT_SECONDS:.0f}s"
             )
 
-    await websocket_send(json.dumps({"type": "force-new-message"}))
+    await channels.text(json.dumps({"type": "force-new-message"}))
 
     if broadcast_ctx and broadcast_ctx.broadcast_func:
         await broadcast_ctx.broadcast_func(
@@ -297,7 +289,7 @@ async def finalize_conversation_turn(
             broadcast_ctx.current_client_uid,
         )
 
-    await send_conversation_end_signal(websocket_send, broadcast_ctx)
+    await send_conversation_end_signal(channels.text, broadcast_ctx)
 
 
 async def send_conversation_end_signal(

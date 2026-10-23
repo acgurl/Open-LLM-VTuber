@@ -1,5 +1,5 @@
 import json
-from typing import Any, Callable
+from typing import Any
 from loguru import logger
 from pydantic import ValidationError
 from fastapi import WebSocket
@@ -13,6 +13,7 @@ from .agent.agents.agent_interface import AgentInterface
 from .agent.agents.basic_memory_agent import BasicMemoryAgent
 from .translate.translate_interface import TranslateInterface
 
+from .conversations.types import OutboundChannels
 from .mcpp.server_registry import ServerRegistry
 from .mcpp.tool_manager import ToolManager
 from .mcpp.mcp_client import MCPClient
@@ -71,8 +72,7 @@ class ServiceContext:
 
         self.history_uid: str = ""  # Add history_uid field
 
-        self.send_text: Callable = None
-        self.audio_send_text: Callable = None
+        self.channels: OutboundChannels | None = None
         self.client_uid: str = None
 
     def __str__(self):
@@ -162,7 +162,9 @@ class ServiceContext:
             # 4. Initialize MCPClient
             if self.mcp_server_registery:
                 self.mcp_client = MCPClient(
-                    self.mcp_server_registery, self.send_text, self.client_uid
+                    self.mcp_server_registery,
+                    self.channels.text if self.channels else None,
+                    self.client_uid,
                 )
                 logger.info("MCPClient initialized for this session.")
             else:
@@ -222,8 +224,7 @@ class ServiceContext:
         translate_engine: TranslateInterface | None,
         mcp_server_registery: ServerRegistry | None = None,
         tool_adapter: ToolAdapter | None = None,
-        send_text: Callable = None,
-        audio_send: Callable = None,
+        channels: OutboundChannels | None = None,
         client_uid: str = None,
     ) -> None:
         """
@@ -247,8 +248,7 @@ class ServiceContext:
         # Load potentially shared components by reference
         self.mcp_server_registery = mcp_server_registery
         self.tool_adapter = tool_adapter
-        self.send_text = send_text
-        self.audio_send_text = audio_send or send_text
+        self.channels = channels
         self.client_uid = client_uid
 
         # Initialize session-specific MCP components

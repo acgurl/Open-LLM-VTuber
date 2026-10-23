@@ -14,7 +14,7 @@ from .conversation_utils import (
     cleanup_conversation,
     EMOJI_LIST,
 )
-from .types import WebSocketSend
+from .types import OutboundChannels
 from .tts_manager import TTSTaskManager
 from ..chat_history_manager import store_message
 from ..service_context import ServiceContext
@@ -25,7 +25,7 @@ from ..agent.output_types import SentenceOutput, AudioOutput
 
 async def process_single_conversation(
     context: ServiceContext,
-    websocket_send: WebSocketSend,
+    channels: OutboundChannels,
     client_uid: str,
     user_input: Union[str, np.ndarray],
     images: Optional[List[Dict[str, Any]]] = None,
@@ -36,7 +36,7 @@ async def process_single_conversation(
 
     Args:
         context: Service context containing all configurations and engines
-        websocket_send: WebSocket send function
+        channels: Text and audio senders for this client
         client_uid: Client unique identifier
         user_input: Text or audio input from user
         images: Optional list of image data
@@ -48,23 +48,22 @@ async def process_single_conversation(
     """
     # Create TTSTaskManager for this conversation
     tts_manager = TTSTaskManager()
-    audio_send = context.audio_send_text or websocket_send
     full_response = ""  # Initialize full_response here
     text_streamed = False
     text_delta_buffer = TextDeltaBuffer(
-        send=lambda message: websocket_send(json.dumps(message)),
+        send=lambda message: channels.text(json.dumps(message)),
         character_name=context.character_config.character_name,
         avatar=context.character_config.avatar,
     )
 
     try:
         # Send initial signals
-        await send_conversation_start_signals(websocket_send)
+        await send_conversation_start_signals(channels.text)
         logger.info(f"New Conversation Chain {session_emoji} started!")
 
         # Process user input
         input_text = await process_user_input(
-            user_input, context.asr_engine, websocket_send
+            user_input, context.asr_engine, channels.text
         )
 
         # Create batch input
@@ -114,7 +113,7 @@ async def process_single_conversation(
                     output_item["name"] = context.character_config.character_name
                     logger.debug(f"Sending tool status update: {output_item}")
 
-                    await websocket_send(json.dumps(output_item))
+                    await channels.text(json.dumps(output_item))
 
                 elif isinstance(output_item, (SentenceOutput, AudioOutput)):
                     # The display text is already on screen when token streaming ran.
@@ -124,11 +123,10 @@ async def process_single_conversation(
                         character_config=context.character_config,
                         live2d_model=context.live2d_model,
                         tts_engine=context.tts_engine,
-                        websocket_send=websocket_send,  # Pass websocket_send for audio/tts messages
+                        channels=channels,
                         tts_manager=tts_manager,
                         translate_engine=context.translate_engine,
                         streamed=text_streamed,
-                        audio_send=audio_send,
                     )
                     # Ensure response_part is treated as a string before concatenation
                     response_part_str = (
@@ -145,7 +143,7 @@ async def process_single_conversation(
             logger.exception(
                 f"Error processing agent response stream: {e}"
             )  # Log with stack trace
-            await websocket_send(
+            await channels.text(
                 json.dumps(
                     {
                         "type": "error",
@@ -162,9 +160,8 @@ async def process_single_conversation(
         # backend-synth-complete signal.
         await finalize_conversation_turn(
             tts_manager=tts_manager,
-            websocket_send=websocket_send,
+            channels=channels,
             client_uid=client_uid,
-            audio_send=audio_send,
         )
 
         if context.history_uid and full_response:  # Check full_response before storing
@@ -185,7 +182,7 @@ async def process_single_conversation(
         raise
     except Exception as e:
         logger.error(f"Error in conversation chain: {e}")
-        await websocket_send(
+        await channels.text(
             json.dumps({"type": "error", "message": f"Conversation error: {str(e)}"})
         )
         raise

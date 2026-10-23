@@ -44,9 +44,8 @@ class TTSTaskManager:
         actions: Optional[Actions],
         live2d_model: Live2dModel,
         tts_engine: TTSInterface,
-        websocket_send: WebSocketSend,
+        audio_send: WebSocketSend,
         streamed: bool = False,
-        audio_send: Optional[WebSocketSend] = None,
     ) -> None:
         """
         Queue a TTS task while maintaining order of delivery.
@@ -57,10 +56,10 @@ class TTSTaskManager:
             actions: Live2D model actions
             live2d_model: Live2D model instance
             tts_engine: TTS engine instance
-            websocket_send: WebSocket send function
+            audio_send: Sender for the audio channel
             streamed: Whether the display text was already sent as text deltas
         """
-        self._ensure_sender(audio_send or websocket_send)
+        self._ensure_sender(audio_send)
         current_sequence = self._next_sequence()
 
         if _is_silent_text(tts_text):

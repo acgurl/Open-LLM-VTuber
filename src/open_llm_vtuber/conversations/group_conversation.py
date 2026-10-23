@@ -20,6 +20,7 @@ from .types import (
     BroadcastFunc,
     GroupConversationState,
     BroadcastContext,
+    OutboundChannels,
     WebSocketSend,
 )
 from ..service_context import ServiceContext
@@ -249,6 +250,7 @@ async def handle_group_member_turn(
 
     context = client_contexts[current_member_uid]
     current_ws_send = client_connections[current_member_uid].send_text
+    channels = context.channels or OutboundChannels.from_text(current_ws_send)
 
     new_messages = state.conversation_history[state.memory_index[current_member_uid] :]
     new_context = "\n".join(new_messages) if new_messages else ""
@@ -268,7 +270,7 @@ async def handle_group_member_turn(
     full_response = await process_member_response(
         context=context,
         batch_input=batch_input,
-        current_ws_send=current_ws_send,
+        channels=channels,
         tts_manager=tts_manager,
         broadcast_func=broadcast_func,
         group_members=group_members,
@@ -283,10 +285,9 @@ async def handle_group_member_turn(
 
         await finalize_conversation_turn(
             tts_manager=tts_manager,
-            websocket_send=current_ws_send,
+            channels=channels,
             client_uid=current_member_uid,
             broadcast_ctx=broadcast_ctx,
-            audio_send=context.audio_send_text or current_ws_send,
         )
 
     if full_response:
@@ -348,7 +349,7 @@ async def handle_member_error(
 async def process_member_response(
     context: ServiceContext,
     batch_input: Any,
-    current_ws_send: WebSocketSend,
+    channels: OutboundChannels,
     tts_manager: TTSTaskManager,
     broadcast_func: Optional[BroadcastFunc] = None,
     group_members: Optional[List[str]] = None,
@@ -400,11 +401,10 @@ async def process_member_response(
                     character_config=context.character_config,
                     live2d_model=context.live2d_model,
                     tts_engine=context.tts_engine,
-                    websocket_send=current_ws_send,  # Send TTS/display text directly to speaker's client
+                    channels=channels,
                     tts_manager=tts_manager,
                     translate_engine=context.translate_engine,
                     streamed=text_streamed,
-                    audio_send=context.audio_send_text or current_ws_send,
                 )
                 full_response += response_part  # Accumulate text response
             else:
@@ -417,7 +417,7 @@ async def process_member_response(
     except Exception as e:
         logger.exception(f"Error processing group member response stream: {e}")
         await text_delta_buffer.flush()
-        await current_ws_send(
+        await channels.text(
             json.dumps(
                 {"type": "error", "message": f"Error processing response: {str(e)}"}
             )

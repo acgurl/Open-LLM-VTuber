@@ -9,6 +9,19 @@ WebSocketSend = Callable[[str], Awaitable[None]]
 BroadcastFunc = Callable[[List[str], dict, Optional[str]], Awaitable[None]]
 
 
+@dataclass(frozen=True)
+class OutboundChannels:
+    """Text and audio senders for one connected client."""
+
+    text: WebSocketSend
+    audio: WebSocketSend
+
+    @classmethod
+    def from_text(cls, send: WebSocketSend) -> "OutboundChannels":
+        """Use one socket for both text and audio."""
+        return cls(text=send, audio=send)
+
+
 class AudioPayload(TypedDict):
     """Type definition for audio payload"""
 
