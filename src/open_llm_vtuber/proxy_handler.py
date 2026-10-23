@@ -51,6 +51,7 @@ class ProxyHandler:
                     self._session = aiohttp.ClientSession()
                 self.server_ws = await self._session.ws_connect(self.server_url)
                 self.connected = True
+                self._running = True
                 logger.info(f"Proxy connected to server at {self.server_url}")
 
                 # Initialize message queue with our forward function
