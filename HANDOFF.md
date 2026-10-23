@@ -1,6 +1,6 @@
 # Open-LLM-VTuber 部署交接
 
-更新日期：2026-10-23（重构与缺陷修复部署）
+更新日期：2026-10-23（OAuth 入口切换、历史列表刷新部署）
 
 ## 1. 现状概览
 
@@ -9,9 +9,9 @@
 | 访问地址 | https://vtuber.acgurl.cn/ （未登录 302 → Casdoor 登录） |
 | 服务器 | 甲骨文凤凰城，Ubuntu 24.04 ARM64，SSH 别名 `oracle` |
 | 部署目录 | `/home/ubuntu/open-llm-vtuber` |
-| 容器 | `open-llm-vtuber`，镜像 `open-llm-vtuber:1.2.1-refactor-20261023`，`--network host`，`--restart unless-stopped` |
+| 容器 | `open-llm-vtuber`，镜像 `open-llm-vtuber:1.2.1-history-refresh-20261023`，`--network host`，`--restart unless-stopped` |
 | 应用监听 | `127.0.0.1:12393`（FastAPI + WebSocket `/client-ws`，前端由后端静态托管） |
-| 登录 | OIDC / Casdoor，应用 `open-llm-vtuber`，issuer `https://sso.acgurl.cn`，回调 `https://vtuber.acgurl.cn/auth/callback`；`auth.mode: oidc` |
+| 登录 | OIDC / Casdoor，应用 `app-acgurl`（组织 `acgurl`，client_id `9f4231ba6649ec33bdd7`），issuer `https://sso.acgurl.cn`，回调 `https://vtuber.acgurl.cn/auth/callback`；`auth.mode: oidc`；旧 `built-in/open-llm-vtuber` 保留用于回滚 |
 | 健康检查 | `https://vtuber.acgurl.cn/healthz` → 200 `{"status":"ok"}`（公开） |
 | 反向代理 | Caddy，`/etc/caddy/Caddyfile` 第 129-140 行，站点 `vtuber.acgurl.cn, vtuber.acgurl.qzz.io`，`flush_interval -1` 支持 WebSocket |
 | DNS / 优选 | DNSPod 按线路解析到 Cloudflare 优选 IP；Cloudflare SaaS custom hostname 经 `origin.acgurl.qzz.io` 回源；`/opt/cf2dns-sync/sync_cf_bestip.py` + `/etc/cron.d/cf2dns_sync` 每 2 小时同步 |
@@ -62,12 +62,12 @@ mcp_servers.json -> /app/mcp_servers.json (ro)
 - 实际生效的模型字典是 `conf/model_dict.json`。容器启动脚本会把 `/app/conf/model_dict.json` 软链到 `/app/model_dict.json`，**不要直接 bind mount `/app/model_dict.json`**，否则软链失败、容器重启循环。
 - Hiyori 模型：`live2d-models/hiyori_pro/runtime/hiyori_pro_t11.model3.json`，约 4.8 MB；`model_dict.json` 中 `kScale` 为 0.65（前端会把该值乘 2）。
 - 前端是 `frontend` 子模块，构建产物里已把 WS/base URL 改为同源：`(location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/client-ws"`。修改文件为 `frontend/assets/main-nu7uwxNJ.js`。
-- 当前镜像 `open-llm-vtuber:1.2.1-oidc-20261023-r2`（2026-10-23 OIDC 多用户，含 Casdoor JWKS UA 修复；上一版 `1.2.1-oidc-20261023` 有 JWKS 403 bug，`1.2.1-storage-20261023-r2`、`1.2.1-frontend-refactor-20261023`、`1.2.1-deploy-20261023-47bf2c7`、`1.2.1-deploy-20261023` 仍保留可回滚）。只有改源码/前端/依赖时才需要重建：
+- 当前镜像 `open-llm-vtuber:1.2.1-history-refresh-20261023`（2026-10-23 历史列表刷新；`1.2.1-refactor-20261023`、`1.2.1-oidc-20261023-r2`、`1.2.1-storage-20261023-r2`、`1.2.1-frontend-refactor-20261023`、`1.2.1-deploy-20261023-47bf2c7`、`1.2.1-deploy-20261023` 仍保留可回滚）。只有改源码/前端/依赖时才需要重建：
 
 ```bash
 ssh oracle
 cd /home/ubuntu/open-llm-vtuber
-docker build -f dockerfile -t open-llm-vtuber:1.2.1-oidc-20261023-r3 .
+docker build -f dockerfile -t open-llm-vtuber:1.2.1-<change>-20261023 .
 bash run-container.sh
 ```
 
@@ -328,7 +328,7 @@ ssh oracle "docker restart open-llm-vtuber"
 
 ### 已知问题/待办
 
-- Casdoor 应用当前 `enable_sign_up=true`，任何人都能注册并使用（会消耗 DeepSeek/Azure 额度）；如需限制，在 Casdoor 应用/组织关闭注册或限制用户。
+- `app-acgurl` 当前 `enable_sign_up=true`（邮箱验证码、无手机号），任何人都能注册并使用（会消耗 DeepSeek/Azure 额度）；如需限制，在 Casdoor 应用/组织关闭注册或限制用户。`built-in/admin` 不能登录 `app-acgurl`，旧会话过期后需注册 acgurl 账号。
 - `/auth/logout` 只清本地 `vtuber_session`，未配置 Casdoor `post_logout_redirect_uri`；Casdoor 会话保留，已建立 WS 不会立即断开；会话默认 7 天。
 - 尚无每用户消息/TTS/ASR 速率限制；主 WS 仅限制 4 个连接。公开注册场景建议后续补。
 - SQLite 单进程单 worker 设计不变；多 worker 需 Redis/Postgres。
@@ -368,3 +368,21 @@ ssh oracle "docker restart open-llm-vtuber"
 - 本次未改动数据库 schema；OIDC、历史隔离、MCP、TTS 行为与 r2 一致。
 - 全仓库扫描中的结构提取/高风险长函数批次（OpenAI/Claude `chat_completion`、Sherpa、TTS payload 统一、sentence_divider/live2d 去重）仍未执行。
 - TTS 发送失败时 `wait_for_delivery` 仍可能等到 10s 超时，未在本次修复范围。
+
+## 16. 2026-10-23 OAuth 入口切换到 acgurl 组织
+
+- VTuber 的 OIDC 客户端从 `built-in/open-llm-vtuber` 切到 `acgurl/app-acgurl`：`app-acgurl.redirect_uris` 新增 `https://vtuber.acgurl.cn/auth/callback`；服务器 `conf/conf.yaml` 的 `client_id/client_secret` 已更换（备份 `conf/conf.yaml.bak.oauth-entry.20261023-113559`）。
+- 登录入口现在落在 `acgurl` 组织的登录页；未注册用户可从登录页进入邮箱验证码注册（无手机号）。管理员内置账号不能登录该组织。
+- 验证：临时 acgurl 用户完成 authorize → callback → `/api/session` 全链路，随后删除 Casdoor 用户及内部 `users/user_identities` 行；VTuber DB 备份 `data/storage/backup-before-oauth-test-cleanup-20261023-113735.db`。
+- 影响：`built-in/admin` 的旧签名会话仍有效到 7 天过期；之后需用新增的 acgurl 账号登录，内部 user_id/历史不会继承。旧 `built-in/open-llm-vtuber` 应用未删除。
+- 回滚：恢复 conf 备份并重启容器；`app-acgurl` 的回调地址可保留，无副作用。
+
+## 17. 2026-10-23 历史列表刷新部署
+
+- 问题：前端只在 WebSocket 建连（及切换角色）时发送 `fetch-history-list`，连接保持期间打开历史抽屉不会刷新；后端其实逐轮写入 SQLite（human 即时、AI 在播放完成后），所以表现为“断开/刷新后才看到当前会话”。
+- 改动（父仓库 `47411df`，前端 submodule `afcea88`）：抽屉每次打开且 WS 为 OPEN 时拉取列表；收到 `history-list` 不再把 `currentHistoryUid` 改成第一条；刷新时保留尚未产生消息的当前会话；新建会话时清理遗留的空历史壳。
+- 前端产物 `main-qaAmbYPB.js` + `index-zpmUla8b.js`（CSS 未变），`frontend-streaming.patch` 已更新（新增 `use-history-drawer.ts` diff）。
+- 部署镜像 `open-llm-vtuber:1.2.1-history-refresh-20261023`，`run-container.sh` 已切换；备份 `data/backups/frontend-history-refresh-20261023-121516/`（frontend + run-container.sh）。旧镜像 `1.2.1-refactor-20261023` 保留回滚。
+- 验证：本地 mock WS + 浏览器连续打开抽屉 4 次均触发 `fetch-history-list`，模拟其他设备新增的会话即时出现，当前会话不被切走，手动切换历史正常；生产 `/healthz` 200、`assets/main-qaAmbYPB.js` 200 且 sha256 与本地一致（公网经 CF 命中缓存，哈希一致）、旧 `main-DS8X0Aex.js` 源站 404、镜像内 `/app/frontend` 含新包，启动日志无 ERROR/WARNING。
+- 回滚：把 `run-container.sh` 镜像改回 `open-llm-vtuber:1.2.1-refactor-20261023` 并执行 `bash run-container.sh`；前端文件可从未部署前的备份目录恢复。
+- 注意：Cloudflare 边缘仍可能对旧 hash 资源返回缓存的 200，但新 index 不再引用，无影响；已打开页面的用户需刷新一次。
