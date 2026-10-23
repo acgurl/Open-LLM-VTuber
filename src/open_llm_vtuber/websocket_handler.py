@@ -590,6 +590,9 @@ class WebSocketHandler:
     ) -> None:
         """Handle incoming raw audio data for VAD processing"""
         context = self.client_contexts[client_uid]
+        if context.vad_engine is None:
+            return
+
         chunk = data.get("audio", [])
         if chunk:
             for audio_bytes in context.vad_engine.detect_speech(chunk):
