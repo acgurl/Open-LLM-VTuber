@@ -19,11 +19,16 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    // WS 与 session 并行：握手走 cookie 鉴权，不必先等 session 往返。
+    wsClient.connect();
     void (async () => {
       const session = await fetchSession();
       if (cancelled) return;
       if (!session) {
-        useConnection.getState().setStatus('failed');
+        // WS 可能已连上（session 只是辅助信息），别把在线状态改回失败。
+        if (useConnection.getState().status !== 'online') {
+          useConnection.getState().setStatus('failed');
+        }
         return;
       }
       if (!session.authenticated && session.mode === 'oidc') {
@@ -31,7 +36,6 @@ export default function App() {
         return;
       }
       if (session.display_name) useConnection.getState().setDisplayName(session.display_name);
-      wsClient.connect();
     })();
     return () => {
       cancelled = true;

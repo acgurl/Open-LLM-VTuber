@@ -29,10 +29,38 @@ from .storage import (
 )
 
 
-# Create a custom StaticFiles class that adds CORS headers
+_STATIC_CACHE_POLICIES = (
+    ("/assets/", "public, max-age=31536000, immutable"),
+    ("/libs/", "public, max-age=2592000"),
+    ("/live2d-models/", "public, max-age=604800, stale-while-revalidate=86400"),
+    ("/bg/", "public, max-age=604800, stale-while-revalidate=86400"),
+    ("/avatars/", "public, max-age=604800, stale-while-revalidate=86400"),
+    ("/web-tool/", "public, max-age=3600"),
+    ("/cache/", "no-store"),
+)
+
+
+def _cache_control_for(path: str) -> str | None:
+    """Cache policy for static mounts, kept in sync with the deployment proxy."""
+    # Entry HTML may be cached briefly at the edge; browsers always revalidate.
+    # Auth middleware handles unauthenticated requests before this handler, so
+    # 302/401 responses never receive the shared-cache directive.
+    if path == "/" or path == "/index.html":
+        return "public, max-age=0, must-revalidate, s-maxage=60"
+    if path.endswith(".html"):
+        return "no-cache"
+    if path == "/favicon.ico":
+        return "public, max-age=604800"
+    for prefix, policy in _STATIC_CACHE_POLICIES:
+        if path.startswith(prefix):
+            return policy
+    return None
+
+
+# Create a custom StaticFiles class that adds CORS and cache headers
 class CORSStaticFiles(StarletteStaticFiles):
     """
-    Static files handler that adds CORS headers to all responses.
+    Static files handler that adds CORS and cache headers to all responses.
     Needed because Starlette StaticFiles might bypass standard middleware.
     """
 
@@ -43,6 +71,10 @@ class CORSStaticFiles(StarletteStaticFiles):
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
         response.headers["Access-Control-Allow-Headers"] = "*"
+
+        cache_control = _cache_control_for(scope.get("path", ""))
+        if cache_control is not None:
+            response.headers["Cache-Control"] = cache_control
 
         if path.endswith(".js"):
             response.headers["Content-Type"] = "application/javascript"

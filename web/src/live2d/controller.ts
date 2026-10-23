@@ -38,6 +38,8 @@ class Live2DController {
   private zoomTarget = 1;
   private offset = { x: 0, y: 0 };
   private drawableCount = 0;
+  private loadSeq = 0;
+  private loadingUrl: string | null = null;
   private dragArmed = false;
   private dragging = false;
   private hovering = false;
@@ -70,7 +72,9 @@ class Live2DController {
   }
 
   async load(info: ModelInfo | null) {
-    if (info?.url !== this.info?.url) {
+    const url = info?.url ?? null;
+    const previousUrl = this.info?.url ?? null;
+    if (url !== previousUrl) {
       this.zoom = 1;
       this.zoomTarget = 1;
       this.offset = { x: 0, y: 0 };
@@ -80,6 +84,16 @@ class Live2DController {
       this.pendingInfo = info;
       return;
     }
+    // 首屏先用本地缓存渲染；随后服务端配置到达时 URL 未变，只更新参数，
+    // 不销毁重载，避免闪烁和重复下载。
+    if (
+      url !== null &&
+      (url === this.loadingUrl || (url === previousUrl && this.model !== null))
+    ) {
+      if (this.model) this.layout();
+      return;
+    }
+    const seq = ++this.loadSeq;
     this.stopIdle();
     if (this.model) {
       this.app.stage.removeChild(this.model);
@@ -88,11 +102,19 @@ class Live2DController {
       this.mouthKind = null;
       this.drawableCount = 0;
     }
-    if (!info?.url) return;
+    this.loadingUrl = url;
+    if (url === null) {
+      this.loadingUrl = null;
+      return;
+    }
     try {
-      const model = (await Live2DModel.from(info.url, {
+      const model = (await Live2DModel.from(url, {
         autoInteract: true,
       })) as Live2DModel;
+      if (seq !== this.loadSeq) {
+        model.destroy();
+        return;
+      }
       this.model = model;
       this.app.stage.addChild(model);
       const internal = model.internalModel as unknown as Record<string, any>;
@@ -103,11 +125,14 @@ class Live2DController {
       } catch {
         this.drawableCount = 0;
       }
-      this.bindTap(model, info);
+      const bindInfo = this.info ?? info;
+      if (bindInfo) this.bindTap(model, bindInfo);
       this.layout();
       this.startIdle();
     } catch (err) {
-      console.error('Live2D load failed', err);
+      if (seq === this.loadSeq) console.error('Live2D load failed', err);
+    } finally {
+      if (seq === this.loadSeq) this.loadingUrl = null;
     }
   }
 

@@ -9,6 +9,7 @@ import { audioChannel } from './audioChannel';
 import { wsClient } from './websocket';
 import { live2d } from '../live2d/controller';
 import { groupBridge } from './groupBridge';
+import { saveCachedModel } from './modelCache';
 import i18n from '../i18n';
 import type { ServerMessage } from '../protocol/types';
 
@@ -31,6 +32,7 @@ export function handleServerMessage(msg: ServerMessage) {
         groupBridge.setUid(msg.client_uid);
       }
       conn.setModelConf(msg.model_info ?? {}, msg.conf_name ?? '', msg.conf_uid ?? '');
+      saveCachedModel(msg.model_info ?? null);
       void live2d.load(msg.model_info ?? null);
       break;
     }
