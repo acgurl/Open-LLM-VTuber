@@ -88,28 +88,6 @@ class AgentFactory:
                 mcp_prompt_string=mcp_prompt_string,
             )
 
-        elif conversation_agent_choice == "mem0_agent":
-            from .agents.mem0_llm import LLM as Mem0LLM
-
-            mem0_settings = agent_settings.get("mem0_agent", {})
-            if not mem0_settings:
-                raise ValueError("Mem0 agent settings not found")
-
-            # Validate required settings
-            required_fields = ["base_url", "model", "mem0_config"]
-            for field in required_fields:
-                if field not in mem0_settings:
-                    raise ValueError(
-                        f"Missing required field '{field}' in mem0_agent settings"
-                    )
-
-            return Mem0LLM(
-                user_id=kwargs.get("user_id", "default"),
-                system=system_prompt,
-                live2d_model=live2d_model,
-                **mem0_settings,
-            )
-
         elif conversation_agent_choice == "hume_ai_agent":
             settings = agent_settings.get("hume_ai_agent", {})
             return HumeAIAgent(
