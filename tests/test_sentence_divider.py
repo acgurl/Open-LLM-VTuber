@@ -50,6 +50,36 @@ class SentenceDividerTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    async def test_splits_multiple_sentences_and_flushes_tail(self):
+        divider = SentenceDivider(faster_first_response=False, segment_method="regex")
+
+        outputs = await _collect(divider, ["a.b.c."])
+
+        self.assertEqual([item.text for item in outputs], ["a.", "b.", "c."])
+
+        divider = SentenceDivider(faster_first_response=False, segment_method="regex")
+        outputs = await _collect(divider, ["abc"])
+        self.assertEqual([item.text for item in outputs], ["abc"])
+
+    async def test_tag_in_middle_splits_preceding_text(self):
+        divider = SentenceDivider(faster_first_response=False, segment_method="regex")
+
+        outputs = await _collect(divider, ["前文<think>思考</think>后文。"])
+
+        self.assertEqual(
+            [
+                (item.text, item.tags[0].name, item.tags[0].state.value)
+                for item in outputs
+            ],
+            [
+                ("前文", "", "none"),
+                ("<think>", "think", "start"),
+                ("思考", "think", "inside"),
+                ("</think>", "think", "end"),
+                ("后文。", "", "none"),
+            ],
+        )
+
     async def test_passes_dicts_through_and_keeps_buffered_text(self):
         divider = SentenceDivider(faster_first_response=False, segment_method="regex")
 
