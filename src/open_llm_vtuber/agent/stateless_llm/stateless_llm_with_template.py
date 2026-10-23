@@ -170,7 +170,7 @@ class AsyncLLMWithTemplate(StatelessLLMInterface):
                             yield next_token
         except Exception as e:
             logger.error(f"LLM API WITH TEMPLATE: Error occurred: {e}")
-            logger.info(f"Base URL: {self.base_url}")
+            logger.info(f"Base URL: {self.completion_url}")
             logger.info(f"Model: {self.model}")
             logger.info(f"Message count: {len(messages)}")
             logger.info(f"temperature: {self.temperature}")

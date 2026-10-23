@@ -91,7 +91,9 @@ class TTSEngine(TTSInterface):
             self.client = None
             raise e
 
-    def generate_audio(self, text: str, file_name_no_ext: str | None = None) -> str:
+    def generate_audio(
+        self, text: str, file_name_no_ext: str | None = None
+    ) -> str | None:
         """
         Generate speech audio file using Cartesia TTS.
 
@@ -104,7 +106,7 @@ class TTSEngine(TTSInterface):
         """
         if not self.client:
             logger.error("Cartesia client not initialized. Cannot generate audio.")
-            return "Cartesia client not initialized. Cannot generate audio."
+            return None
         # Use the configured file extension
         file_name = self.generate_cache_file_name(file_name_no_ext, self.output_format)
         speech_file_path = Path(file_name)
