@@ -18,13 +18,25 @@ class ChatGroupManager:
         self.groups: Dict[str, Group] = {}  # group_id -> Group
 
     def add_client_to_group(
-        self, inviter_uid: str, invitee_uid: str
+        self,
+        inviter_uid: str,
+        invitee_uid: str,
+        *,
+        inviter_user_id: str | None = None,
+        invitee_user_id: str | None = None,
     ) -> Tuple[bool, str]:
         """
         Add a client to the group of the inviter
         If inviter is not in a group, create one
         Returns (success, message)
         """
+        if (
+            inviter_user_id is not None
+            and invitee_user_id is not None
+            and inviter_user_id != invitee_user_id
+        ):
+            return False, "Cannot group clients belonging to different users"
+
         # Check if invitee exists in client map (connected)
         if invitee_uid not in self.client_group_map:
             return False, f"Invitee {invitee_uid} does not exist"
@@ -181,9 +193,11 @@ async def handle_group_operation(
     chat_group_manager: "ChatGroupManager",
     client_connections: Dict[str, WebSocket],
     send_group_update: Callable,
+    client_users: Dict[str, str] | None = None,
 ) -> None:
     """Handle group-related operations"""
     if target_uid:
+        client_users = client_users or {}
         # Get all affected members before operation
         old_members = chat_group_manager.get_group_members(client_uid)
         target_old_members = chat_group_manager.get_group_members(target_uid)
@@ -191,7 +205,10 @@ async def handle_group_operation(
 
         if operation == "add-client-to-group":
             success, message = chat_group_manager.add_client_to_group(
-                inviter_uid=client_uid, invitee_uid=target_uid
+                inviter_uid=client_uid,
+                invitee_uid=target_uid,
+                inviter_user_id=client_users.get(client_uid),
+                invitee_user_id=client_users.get(target_uid),
             )
 
             if success and target_uid in client_connections:

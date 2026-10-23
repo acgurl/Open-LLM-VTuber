@@ -5,6 +5,7 @@ import json
 import numpy as np
 from loguru import logger
 
+from .auth import AuthManager, Identity
 from .service_context import ServiceContext
 from .chat_group import (
     ChatGroupManager,
@@ -49,18 +50,27 @@ class WSMessage(TypedDict, total=False):
 class WebSocketHandler:
     """Handles WebSocket connections and message routing"""
 
-    def __init__(self, default_context_cache: ServiceContext):
+    def __init__(
+        self,
+        default_context_cache: ServiceContext,
+        auth_manager: AuthManager | None = None,
+        max_connections_per_user: int = 4,
+    ):
         """Initialize the WebSocket handler with default context"""
+        self.default_context_cache = default_context_cache
+        self.auth_manager = auth_manager
+        self.max_connections_per_user = max_connections_per_user
         self.client_connections: Dict[str, WebSocket] = {}
         # Audio gets its own socket so large TTS payloads cannot block text deltas.
         self.client_audio_connections: Dict[str, WebSocket] = {}
         self.client_contexts: Dict[str, ServiceContext] = {}
+        self.client_users: Dict[str, str] = {}
         # Slots are reserved before the expensive per-session initialization so a
         # burst of connections cannot spawn unbounded MCP processes.
         self._pending_connections: set[str] = set()
+        self._pending_user_ids: Dict[str, str] = {}
         self.chat_group_manager = ChatGroupManager()
         self.current_conversation_tasks: Dict[str, Optional[asyncio.Task]] = {}
-        self.default_context_cache = default_context_cache
         self.received_data_buffers: Dict[str, np.ndarray] = {}
 
         # Message handlers mapping
@@ -90,21 +100,39 @@ class WebSocketHandler:
             "heartbeat": self._handle_heartbeat,
         }
 
-    def try_reserve_connection(self, client_uid: str) -> bool:
+    def try_reserve_connection(
+        self, client_uid: str, user_id: str | None = None
+    ) -> bool:
         """Reserve a connection slot before session initialization starts."""
         if (
             len(self.client_connections) + len(self._pending_connections)
             >= MAX_WS_CONNECTIONS
         ):
             return False
+
+        if user_id is not None:
+            active = sum(1 for value in self.client_users.values() if value == user_id)
+            pending = sum(
+                1 for value in self._pending_user_ids.values() if value == user_id
+            )
+            if active + pending >= self.max_connections_per_user:
+                return False
+
         self._pending_connections.add(client_uid)
+        if user_id is not None:
+            self._pending_user_ids[client_uid] = user_id
         return True
 
     def release_connection_reservation(self, client_uid: str) -> None:
         self._pending_connections.discard(client_uid)
+        self._pending_user_ids.pop(client_uid, None)
 
-    def has_client(self, client_uid: str) -> bool:
-        return client_uid in self.client_connections
+    def has_client(self, client_uid: str, user_id: str | None = None) -> bool:
+        if client_uid not in self.client_connections:
+            return False
+        if user_id is None:
+            return True
+        return self.client_users.get(client_uid) == user_id
 
     @staticmethod
     def _install_serialized_send(websocket: WebSocket) -> None:
@@ -119,7 +147,10 @@ class WebSocketHandler:
         websocket.send_text = serialized_send_text
 
     async def handle_new_connection(
-        self, websocket: WebSocket, client_uid: str
+        self,
+        websocket: WebSocket,
+        client_uid: str,
+        identity: Identity | None = None,
     ) -> None:
         """
         Handle new WebSocket connection setup
@@ -127,10 +158,18 @@ class WebSocketHandler:
         Args:
             websocket: The WebSocket connection
             client_uid: Unique identifier for the client
+            identity: Server-verified identity; defaults to the local user
 
         Raises:
             Exception: If initialization fails
         """
+        if identity is None:
+            if self.auth_manager is not None and self.auth_manager.enabled:
+                raise ValueError("Authentication required")
+            local_user_id = getattr(self.default_context_cache, "user_id", None)
+            if not isinstance(local_user_id, str) or not local_user_id:
+                local_user_id = "local"
+            identity = Identity(local_user_id, "Local User")
         try:
             self._install_serialized_send(websocket)
 
@@ -150,7 +189,7 @@ class WebSocketHandler:
 
             channels = OutboundChannels(text=websocket.send_text, audio=send_audio)
             session_service_context = await self._init_service_context(
-                channels, client_uid
+                channels, client_uid, identity
             )
 
             await self._store_client_data(
@@ -213,8 +252,12 @@ class WebSocketHandler:
         session_service_context: ServiceContext,
     ):
         """Store client data and initialize group status"""
+        # The reservation only protects the expensive initialization window.
+        self._pending_connections.discard(client_uid)
+        self._pending_user_ids.pop(client_uid, None)
         self.client_connections[client_uid] = websocket
         self.client_contexts[client_uid] = session_service_context
+        self.client_users[client_uid] = session_service_context.user_id
         self.received_data_buffers[client_uid] = np.array([])
 
         self.chat_group_manager.client_group_map[client_uid] = ""
@@ -239,9 +282,16 @@ class WebSocketHandler:
         await self.send_group_update(websocket, client_uid)
 
     async def _init_service_context(
-        self, channels: OutboundChannels, client_uid: str
+        self,
+        channels: OutboundChannels,
+        client_uid: str,
+        identity: Identity,
     ) -> ServiceContext:
         """Initialize service context for a new session by cloning the default context"""
+        repository = self.default_context_cache.history_repository
+        if repository is not None:
+            await repository.ensure_user(identity.user_id, identity.display_name)
+
         session_service_context = ServiceContext()
         await session_service_context.load_cache(
             config=self.default_context_cache.config.model_copy(deep=True),
@@ -262,7 +312,7 @@ class WebSocketHandler:
             channels=channels,
             client_uid=client_uid,
             history_repository=self.default_context_cache.history_repository,
-            user_id=self.default_context_cache.user_id,
+            user_id=identity.user_id,
         )
         # Each connection needs its own agent state; the LLM client stays shared.
         await session_service_context.init_session_agent(
@@ -343,6 +393,7 @@ class WebSocketHandler:
             target_uid=target_uid,
             chat_group_manager=self.chat_group_manager,
             client_connections=self.client_connections,
+            client_users=self.client_users,
             send_group_update=self.send_group_update,
         )
 
@@ -378,6 +429,7 @@ class WebSocketHandler:
         await self._close_audio_connection(client_uid)
         self.client_connections.pop(client_uid, None)
         context = self.client_contexts.pop(client_uid, None)
+        self.client_users.pop(client_uid, None)
         self.received_data_buffers.pop(client_uid, None)
         await self._cancel_conversation_task(client_uid, failure_message)
 

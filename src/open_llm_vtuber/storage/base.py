@@ -10,6 +10,7 @@ from typing import Literal, TypedDict
 
 DEFAULT_USER_ID = "local"
 MAX_KEY_LENGTH = 128
+MAX_IDENTITY_LENGTH = 512
 
 _USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
@@ -47,6 +48,19 @@ def validate_key(value: str, name: str) -> str:
     return value
 
 
+def validate_identity(value: str, name: str) -> str:
+    if (
+        not isinstance(value, str)
+        or not value
+        or value != value.strip()
+        or len(value) > MAX_IDENTITY_LENGTH
+    ):
+        raise ValueError(
+            f"{name} must be a non-empty string up to {MAX_IDENTITY_LENGTH} characters"
+        )
+    return value
+
+
 class HistoryRepository(ABC):
     """Database-agnostic history storage.
 
@@ -66,6 +80,25 @@ class HistoryRepository(ABC):
     @abstractmethod
     async def ensure_user(self, user_id: str, display_name: str | None = None) -> None:
         """Create the user row if it does not exist."""
+
+    @abstractmethod
+    async def resolve_user_identity(
+        self,
+        *,
+        provider: str,
+        subject: str,
+        display_name: str | None = None,
+        email: str | None = None,
+    ) -> str:
+        """Return the internal user id for an external identity.
+
+        The identity is created on first login. ``provider`` and ``subject``
+        come from the OIDC issuer and ID token, never from client input.
+        """
+
+    @abstractmethod
+    async def list_conf_uids(self, *, user_id: str) -> list[str]:
+        """Return every character config that has histories for this user."""
 
     @abstractmethod
     async def create_history(

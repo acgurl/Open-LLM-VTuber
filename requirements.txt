@@ -38,6 +38,8 @@ pre-commit==4.5.1
     # via open-llm-vtuber (pyproject.toml)
 pydub==0.25.1
     # via open-llm-vtuber (pyproject.toml)
+pyjwt[crypto]==2.10.1
+    # via open-llm-vtuber (pyproject.toml)
 pysbd==0.3.4
     # via open-llm-vtuber (pyproject.toml)
 pyttsx3==2.99

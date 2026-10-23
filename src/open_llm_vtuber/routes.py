@@ -2,11 +2,13 @@ import os
 import json
 import re
 import asyncio
+from urllib.parse import urlsplit
 from uuid import uuid4
-from fastapi import APIRouter, WebSocket, UploadFile, File, Response
+from fastapi import APIRouter, WebSocket, UploadFile, File, Request, Response
 from starlette.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 from loguru import logger
+from .auth import AuthManager, Identity
 from .service_context import ServiceContext
 from .websocket_handler import WebSocketHandler
 from .proxy_handler import ProxyHandler
@@ -121,35 +123,93 @@ async def _serve_tts_connection(websocket: WebSocket, tts_engine) -> None:
         await websocket.close()
 
 
-def init_client_ws_route(default_context_cache: ServiceContext) -> APIRouter:
+def _websocket_identity(
+    websocket: WebSocket,
+    auth: AuthManager | None,
+    default_user_id: str,
+) -> Identity | None:
+    if auth is None:
+        return Identity(default_user_id, "Local User")
+    return auth.resolve_identity(websocket.cookies)
+
+
+def _websocket_origin_allowed(websocket: WebSocket, auth: AuthManager | None) -> bool:
+    """Reject cross-site browser WebSockets in OIDC mode.
+
+    Non-browser clients may omit Origin; the session cookie is still required.
+    The frontend is served same-origin, so comparing Origin's host with the
+    request Host is sufficient for this deployment.
+    """
+    if auth is None or not auth.enabled:
+        return True
+    origin = websocket.headers.get("origin")
+    if not origin:
+        return True
+    parsed = urlsplit(origin)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    default_port = ":443" if parsed.scheme == "https" else ":80"
+    origin_host = parsed.netloc.removesuffix(default_port)
+    request_host = (websocket.headers.get("host") or "").removesuffix(default_port)
+    return origin_host == request_host
+
+
+def init_client_ws_route(
+    default_context_cache: ServiceContext,
+    auth: AuthManager | None = None,
+) -> APIRouter:
     """
     Create and return API routes for handling the `/client-ws` WebSocket connections.
 
     Args:
         default_context_cache: Default service context cache for new sessions.
+        auth: Authentication manager; omitted only by isolated tests.
 
     Returns:
         APIRouter: Configured router with WebSocket endpoint.
     """
 
     router = APIRouter()
-    ws_handler = WebSocketHandler(default_context_cache)
+    max_connections_per_user = (
+        auth.config.max_connections_per_user if auth is not None else 4
+    )
+    ws_handler = WebSocketHandler(
+        default_context_cache,
+        auth_manager=auth,
+        max_connections_per_user=max_connections_per_user,
+    )
 
     @router.websocket("/client-ws")
     async def websocket_endpoint(websocket: WebSocket):
         """WebSocket endpoint for client connections"""
-        client_uid = str(uuid4())
-
-        if not ws_handler.try_reserve_connection(client_uid):
+        if not _websocket_origin_allowed(websocket, auth):
             await websocket.accept()
-            await websocket.close(code=1013, reason="Server is at capacity")
+            await websocket.close(code=1008, reason="Origin not allowed")
+            return
+
+        identity = _websocket_identity(
+            websocket, auth, getattr(default_context_cache, "user_id", None) or "local"
+        )
+        if identity is None:
+            await websocket.accept()
+            await websocket.close(code=4401, reason="Authentication required")
+            return
+
+        client_uid = str(uuid4())
+        per_user_id = identity.user_id if auth is not None and auth.enabled else None
+
+        if not ws_handler.try_reserve_connection(client_uid, per_user_id):
+            await websocket.accept()
+            await websocket.close(
+                code=1013, reason="Too many connections for this user"
+            )
             return
 
         try:
             await websocket.accept()
 
             try:
-                await ws_handler.handle_new_connection(websocket, client_uid)
+                await ws_handler.handle_new_connection(websocket, client_uid, identity)
                 await ws_handler.handle_websocket_communication(websocket, client_uid)
             except WebSocketDisconnect:
                 await ws_handler.handle_disconnect(client_uid)
@@ -165,9 +225,17 @@ def init_client_ws_route(default_context_cache: ServiceContext) -> APIRouter:
     @router.websocket("/audio-ws")
     async def audio_endpoint(websocket: WebSocket):
         """Secondary WebSocket that carries only audio payloads."""
+        identity = _websocket_identity(
+            websocket, auth, getattr(default_context_cache, "user_id", None) or "local"
+        )
         client_uid = websocket.query_params.get("client_uid")
         await websocket.accept()
-        if not client_uid or not ws_handler.has_client(client_uid):
+        if (
+            not _websocket_origin_allowed(websocket, auth)
+            or identity is None
+            or not client_uid
+            or not ws_handler.has_client(client_uid, identity.user_id)
+        ):
             await websocket.close(code=1008, reason="Unknown client")
             return
         await ws_handler.handle_audio_connection(websocket, client_uid)
@@ -200,7 +268,10 @@ def init_proxy_route(server_url: str) -> APIRouter:
     return router
 
 
-def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
+def init_webtool_routes(
+    default_context_cache: ServiceContext,
+    auth: AuthManager | None = None,
+) -> APIRouter:
     """
     Create and return API routes for handling web tool interactions.
 
@@ -271,10 +342,13 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
         )
 
     @router.post("/asr")
-    async def transcribe_audio(file: UploadFile = File(...)):
+    async def transcribe_audio(request: Request, file: UploadFile = File(...)):
         """
         Endpoint for transcribing audio using the ASR engine
         """
+        if auth is not None and auth.enabled:
+            if auth.resolve_identity(request.cookies) is None:
+                return _json_error(401, "Authentication required")
         try:
             contents = await file.read(MAX_ASR_UPLOAD_BYTES + 1)
             logger.info(f"Received audio upload: {len(contents)} bytes")
@@ -310,6 +384,19 @@ def init_webtool_routes(default_context_cache: ServiceContext) -> APIRouter:
     @router.websocket("/tts-ws")
     async def tts_endpoint(websocket: WebSocket):
         """WebSocket endpoint for TTS generation"""
+        if not _websocket_origin_allowed(websocket, auth):
+            await websocket.accept()
+            await websocket.close(code=1008, reason="Origin not allowed")
+            return
+
+        identity = _websocket_identity(
+            websocket, auth, getattr(default_context_cache, "user_id", None) or "local"
+        )
+        if identity is None:
+            await websocket.accept()
+            await websocket.close(code=4401, reason="Authentication required")
+            return
+
         if tts_slots.locked():
             await websocket.accept()
             await websocket.close(code=1013, reason="Server is at capacity")

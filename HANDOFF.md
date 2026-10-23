@@ -1,21 +1,23 @@
 # Open-LLM-VTuber 部署交接
 
-更新日期：2026-10-23
+更新日期：2026-10-23（OIDC 多用户上线）
 
 ## 1. 现状概览
 
 | 项 | 值 |
 | --- | --- |
-| 访问地址 | https://vtuber.acgurl.cn/ （HTTP 200） |
+| 访问地址 | https://vtuber.acgurl.cn/ （未登录 302 → Casdoor 登录） |
 | 服务器 | 甲骨文凤凰城，Ubuntu 24.04 ARM64，SSH 别名 `oracle` |
 | 部署目录 | `/home/ubuntu/open-llm-vtuber` |
-| 容器 | `open-llm-vtuber`，镜像 `open-llm-vtuber:1.2.1-storage-20261023-r2`，`--network host`，`--restart unless-stopped` |
+| 容器 | `open-llm-vtuber`，镜像 `open-llm-vtuber:1.2.1-oidc-20261023-r2`，`--network host`，`--restart unless-stopped` |
 | 应用监听 | `127.0.0.1:12393`（FastAPI + WebSocket `/client-ws`，前端由后端静态托管） |
-| 健康检查 | `https://vtuber.acgurl.cn/healthz` → 200 `{"status":"ok"}` |
+| 登录 | OIDC / Casdoor，应用 `open-llm-vtuber`，issuer `https://sso.acgurl.cn`，回调 `https://vtuber.acgurl.cn/auth/callback`；`auth.mode: oidc` |
+| 健康检查 | `https://vtuber.acgurl.cn/healthz` → 200 `{"status":"ok"}`（公开） |
 | 反向代理 | Caddy，`/etc/caddy/Caddyfile` 第 129-140 行，站点 `vtuber.acgurl.cn, vtuber.acgurl.qzz.io`，`flush_interval -1` 支持 WebSocket |
 | DNS / 优选 | DNSPod 按线路解析到 Cloudflare 优选 IP；Cloudflare SaaS custom hostname 经 `origin.acgurl.qzz.io` 回源；`/opt/cf2dns-sync/sync_cf_bestip.py` + `/etc/cron.d/cf2dns_sync` 每 2 小时同步 |
 | ASR / TTS | Groq `whisper-large-v3-turbo` + Azure Speech（`azure_tts`，japaneast F0，`zh-CN-XiaoyiNeural`） |
-| 历史存储 | SQLite `data/storage/open_llm_vtuber.db`（旧 JSON 迁移到 `data/storage/legacy_history/`） |
+| 历史存储 | SQLite `data/storage/open_llm_vtuber.db`，按内部 `user_id` 隔离；旧 `local` 历史已归档、不再绑定会话 |
+| 本地历史归档 | `data/storage/archive/local-history-archive.json`（104 条非空历史 / 349 条消息，ubuntu:ubuntu 600） |
 
 ## 2. 模型与角色
 
@@ -60,12 +62,12 @@ mcp_servers.json -> /app/mcp_servers.json (ro)
 - 实际生效的模型字典是 `conf/model_dict.json`。容器启动脚本会把 `/app/conf/model_dict.json` 软链到 `/app/model_dict.json`，**不要直接 bind mount `/app/model_dict.json`**，否则软链失败、容器重启循环。
 - Hiyori 模型：`live2d-models/hiyori_pro/runtime/hiyori_pro_t11.model3.json`，约 4.8 MB；`model_dict.json` 中 `kScale` 为 0.65（前端会把该值乘 2）。
 - 前端是 `frontend` 子模块，构建产物里已把 WS/base URL 改为同源：`(location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/client-ws"`。修改文件为 `frontend/assets/main-nu7uwxNJ.js`。
-- 当前镜像 `open-llm-vtuber:1.2.1-storage-20261023-r2`（2026-10-23 构建，SQLite 历史存储；上一版 `1.2.1-frontend-refactor-20261023`、`1.2.1-deploy-20261023-47bf2c7`、`1.2.1-deploy-20261023` 仍保留可回滚）。只有改源码/前端/依赖时才需要重建：
+- 当前镜像 `open-llm-vtuber:1.2.1-oidc-20261023-r2`（2026-10-23 OIDC 多用户，含 Casdoor JWKS UA 修复；上一版 `1.2.1-oidc-20261023` 有 JWKS 403 bug，`1.2.1-storage-20261023-r2`、`1.2.1-frontend-refactor-20261023`、`1.2.1-deploy-20261023-47bf2c7`、`1.2.1-deploy-20261023` 仍保留可回滚）。只有改源码/前端/依赖时才需要重建：
 
 ```bash
 ssh oracle
 cd /home/ubuntu/open-llm-vtuber
-docker build -f dockerfile -t open-llm-vtuber:1.2.1-storage-20261023-r2 .
+docker build -f dockerfile -t open-llm-vtuber:1.2.1-oidc-20261023-r3 .
 bash run-container.sh
 ```
 
@@ -263,7 +265,70 @@ system_config:
 
 ### 已知限制
 
-- 尚未接入登录，所有连接仍属于 `local` 用户；真正的多用户隔离需要下一步 auth + 连接绑定 `user_id`。
+- 截至第 13 节部署时尚未接入登录，所有连接仍属于 `local` 用户；该限制已在第 14 节 OIDC 上线中解决。
 - SQLite 当前按单进程设计；多 uvicorn worker 需要把 session/群组状态迁到 Redis，存储本身可继续 WAL。
 - 备份 SQLite 时不要只复制主文件：至少一起复制 `-wal`/`-shm`，或使用 `sqlite3.Connection.backup()`（本次部署备份就是用该方式）。
 - 空历史会保留在 DB 中但不会出现在列表；如果长期积累，可后续加定期清理。
+
+## 14. 2026-10-23 OIDC 多用户上线
+
+### 结果
+
+- 生产镜像 `open-llm-vtuber:1.2.1-oidc-20261023-r2`；`run-container.sh` 已指向该镜像。
+- Casdoor 应用 `open-llm-vtuber`：client_id `ce78b62865acce526bc5`，redirect_uri `https://vtuber.acgurl.cn/auth/callback`，issuer `https://sso.acgurl.cn`，grant_types 仅 `authorization_code`，`enable_signin_session=true`，scopes `openid profile email`。client_secret 和 `auth.signing_secret` 只在服务器 `conf/conf.yaml`（600），不在仓库/文档/聊天中记录。
+- `local` 历史已归档到 `data/storage/archive/local-history-archive.json`：104 条非空历史 / 349 条消息（DB local 共 105 条，含 1 条空历史不归档）。`local` 行保留在 DB 中，但 OIDC 模式下 `default_context_cache` 不绑定 local，任何会话都不能读写它。
+
+### 行为
+
+- 登录：`/auth/login` → Casdoor authorization code + nonce/state → `/auth/callback`（校验 state/nonce/ID Token 签名、iss/aud/exp）→ 设置 HMAC 签名 `vtuber_session` Cookie（HttpOnly/Secure/SameSite=Lax，默认 7 天）。
+- 身份：`user_identities(provider, subject)` 映射 Casdoor issuer+sub 到内部随机 user_id；所有历史读写仍经 `UserHistoryStore(user_id)`。
+- 访问控制：`/`、`/web-tool`、`/model_dict.json`、`/cache` 需要登录；`/healthz`、`/auth/*`、`/api/session`、`/assets/`、`/libs/`、`/live2d-models/`、`/bg/`、`/avatars/` 公开。`/client-ws`、`/tts-ws` 无会话关闭 4401，`/audio-ws` 关闭 1008，OIDC 模式校验 Origin。
+- 每用户主 WS 连接上限 4（`auth.max_connections_per_user`）；群组只允许同一 user_id 互邀；角色预设对所有已登录用户开放。
+- `ServiceContext._owns_tts_engine` 修复共享 TTS 被某个会话切预设关闭的问题。
+
+### 代码入口
+
+- `src/open_llm_vtuber/auth/`：`manager.py`（AuthManager/会话/state）、`oidc.py`（discovery/token/JWKS/ID Token）、`routes.py`、`middleware.py`、`cookies.py`。
+- `src/open_llm_vtuber/config_manager/auth.py` + `system.py`；`storage/sqlite.py` 的 `user_identities` 与 `resolve_user_identity`；`storage/archive.py`；`server.py` 初始化/归档；`routes.py`/`websocket_handler.py` 的 WS 身份；`chat_group.py` 同用户限制。
+- 依赖：`PyJWT[crypto]`（mcp 已传递依赖，本次显式加入 `pyproject.toml`，`uv.lock` 最小改动）。
+
+### 部署与踩坑
+
+1. 在 Casdoor 创建应用并设置 redirect/grant/scope；`enable_signin_session=true`，否则授权页每次要求密码。
+2. 把 Casdoor 应用凭据直接从 `casdoor-db` 读取并写入服务器 `conf/conf.yaml`（不经过聊天/文档），生成独立 `signing_secret`。
+3. 同步源码时只覆盖 `src/`、`pyproject.toml`、`uv.lock`、`requirements.txt`，排除 `conf/`、`data/`、`mcp_servers.json`、`model_dict.json`；备份 `data/backups/oidc-20261023-101635/`。
+4. 首次 r1 镜像登录在 ID Token 校验阶段失败：Casdoor/Cloudflare 对默认 Python-urllib UA 的 `/.well-known/jwks` 返回 403。修复为给 `jwt.PyJWKClient` 传浏览器兼容 User-Agent（`auth/oidc.py` 顶部 `_JWKS_USER_AGENT`），重建 r2。
+5. r2 上线重启时归档 local；再次重启会检测到归档文件并跳过（幂等）。
+
+### 验证
+
+- `/healthz` 200；未登录 `/` 302 到 `/auth/login?next=%2F`；`/api/session`、`/cache`、`/model_dict.json` 401；`/assets`、`/live2d-models/info` 200。
+- 浏览器用 Casdoor admin 实际完成登录，`/api/session` 返回 `authenticated: true`；`/client-ws`、`/audio-ws` 建立；AIRI 回复、Live2D 动作、Azure TTS、MCP cuc-kb 4 工具正常。
+- DB：新 OIDC 用户 1 条历史（测试对话后 2 条消息），local 保持 105 条历史/349 条消息且不显示给新用户；`user_identities` 1 行；schema versions `[1,2]`。
+- 自动化后台标签页不发送播放完成回执，日志会出现 120s playback timeout WARNING；AI 消息在超时后正常落库，前台正常播放不受影响。
+
+### 常用操作
+
+```bash
+# 查看登录/WS/归档日志
+ssh oracle "docker logs --tail 200 open-llm-vtuber | grep -E 'OIDC|Connection established|Archived|ERROR|WARNING'"
+
+# 查看本地历史归档（宿主机）
+ssh oracle "python3 -c \"import json; d=json.load(open('/home/ubuntu/open-llm-vtuber/data/storage/archive/local-history-archive.json')); print(d['history_count'], d['message_count'])\""
+
+# 改 auth 配置后重启（无需重建镜像）
+ssh oracle "docker restart open-llm-vtuber"
+```
+
+### 回滚
+
+1. 恢复上线前 conf/run-container：`cp data/backups/oidc-20261023-101635/conf.yaml conf/conf.yaml`、`cp data/backups/oidc-20261023-101635/run-container.sh run-container.sh`，`chmod 600 conf/conf.yaml`，执行 `bash run-container.sh`。
+2. 该回滚回到 `1.2.1-storage-20261023-r2`，local 历史仍在 DB 中；OIDC 期间新建的用户/历史保留但不被旧镜像使用。若需要完全回到上线前数据，再恢复备份 DB（会丢失上线后新用户消息）。
+3. 若只想回退 JWKS 修复，恢复 `run-container.sh.bak.oidc-r1.20261023` 会回到有 403 bug 的 r1，不建议。
+
+### 已知问题/待办
+
+- Casdoor 应用当前 `enable_sign_up=true`，任何人都能注册并使用（会消耗 DeepSeek/Azure 额度）；如需限制，在 Casdoor 应用/组织关闭注册或限制用户。
+- `/auth/logout` 只清本地 `vtuber_session`，未配置 Casdoor `post_logout_redirect_uri`；Casdoor 会话保留，已建立 WS 不会立即断开；会话默认 7 天。
+- 尚无每用户消息/TTS/ASR 速率限制；主 WS 仅限制 4 个连接。公开注册场景建议后续补。
+- SQLite 单进程单 worker 设计不变；多 worker 需 Redis/Postgres。

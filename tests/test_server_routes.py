@@ -36,6 +36,10 @@ class ServerRouteTests(unittest.TestCase):
         names = {getattr(route, "name", "") for route in server.app.routes}
         self.assertIn("/healthz", paths)
         self.assertIn("/client-ws", paths)
+        self.assertIn("/auth/login", paths)
+        self.assertIn("/auth/callback", paths)
+        self.assertIn("/auth/logout", paths)
+        self.assertIn("/api/session", paths)
         for name in (
             "cache",
             "live2d-models",

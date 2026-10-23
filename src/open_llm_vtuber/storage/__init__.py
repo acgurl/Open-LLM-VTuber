@@ -1,10 +1,12 @@
 """History storage abstraction and implementations."""
 
+from .archive import ArchiveResult, archive_user_histories
 from .base import (
     DEFAULT_USER_ID,
     HistoryMessage,
     HistoryNotFoundError,
     HistoryRepository,
+    validate_identity,
     validate_key,
     validate_user_id,
 )
@@ -14,6 +16,7 @@ from .sqlite import SQLiteHistoryRepository
 from .user_store import UserHistoryStore
 
 __all__ = [
+    "ArchiveResult",
     "DEFAULT_USER_ID",
     "HistoryMessage",
     "HistoryNotFoundError",
@@ -21,8 +24,10 @@ __all__ = [
     "LegacyImportResult",
     "SQLiteHistoryRepository",
     "UserHistoryStore",
+    "archive_user_histories",
     "create_history_repository",
     "import_legacy_histories",
+    "validate_identity",
     "validate_key",
     "validate_user_id",
 ]

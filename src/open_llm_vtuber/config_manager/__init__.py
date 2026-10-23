@@ -7,6 +7,7 @@ and utility functions for loading/saving configurations.
 
 # Import main configuration classes
 from .main import Config
+from .auth import AuthConfig, OIDCConfig
 from .storage import StorageConfig
 from .system import SystemConfig
 from .character import CharacterConfig
@@ -64,6 +65,8 @@ from .utils import (
 __all__ = [
     # Main configuration classes
     "Config",
+    "AuthConfig",
+    "OIDCConfig",
     "StorageConfig",
     "SystemConfig",
     "CharacterConfig",

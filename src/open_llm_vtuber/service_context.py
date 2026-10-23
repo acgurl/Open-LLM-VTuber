@@ -79,7 +79,12 @@ class ServiceContext:
         self.history_uid: str = ""  # Add history_uid field
         self.history_repository: HistoryRepository | None = None
         self.history: UserHistoryStore | None = None
-        self.user_id: str = DEFAULT_USER_ID
+        self.user_id: str | None = DEFAULT_USER_ID
+
+        # TTS is normally shared from the default context. A session that
+        # switches to a different TTS config creates its own engine and must be
+        # the only one allowed to close it.
+        self._owns_tts_engine = False
 
         self.channels: OutboundChannels | None = None
         self.client_uid: str = None
@@ -214,17 +219,25 @@ class ServiceContext:
                 await self.agent_engine.close()
             except Exception:
                 logger.exception("Failed to close agent engine")
+        if self._owns_tts_engine and self.tts_engine is not None:
+            try:
+                self.tts_engine.close()
+            except Exception:
+                logger.exception("Failed to close session TTS engine")
+            self._owns_tts_engine = False
         logger.info("ServiceContext closed.")
 
     def set_history_storage(
         self,
         repository: HistoryRepository | None,
-        user_id: str = DEFAULT_USER_ID,
+        user_id: str | None = DEFAULT_USER_ID,
     ) -> None:
         self.history_repository = repository
         self.user_id = user_id
         self.history = (
-            UserHistoryStore(repository, user_id) if repository is not None else None
+            UserHistoryStore(repository, user_id)
+            if repository is not None and user_id is not None
+            else None
         )
 
     async def load_history(self, history_uid: str) -> list[HistoryMessage]:
@@ -289,7 +302,7 @@ class ServiceContext:
         channels: OutboundChannels | None = None,
         client_uid: str = None,
         history_repository: HistoryRepository | None = None,
-        user_id: str = DEFAULT_USER_ID,
+        user_id: str | None = DEFAULT_USER_ID,
     ) -> None:
         """
         Load the ServiceContext with the reference of the provided instances.
@@ -314,6 +327,8 @@ class ServiceContext:
         self.tool_adapter = tool_adapter
         self.channels = channels
         self.client_uid = client_uid
+        # Engines passed in by load_cache are shared with the default context.
+        self._owns_tts_engine = False
         self.set_history_storage(history_repository, user_id)
 
         # Initialize session-specific MCP components
@@ -442,8 +457,11 @@ class ServiceContext:
                 tts_config.tts_model,
                 **getattr(tts_config, tts_config.tts_model.lower()).model_dump(),
             )
-            if previous_engine is not None:
+            # Never close an engine borrowed from the default context; other
+            # sessions may still be using it.
+            if previous_engine is not None and self._owns_tts_engine:
                 previous_engine.close()
+            self._owns_tts_engine = True
             # saving config should be done after successful initialization
             self.character_config.tts_config = tts_config
         else:
@@ -492,7 +510,9 @@ class ServiceContext:
                 live2d_model=self.live2d_model,
                 tts_preprocessor_config=self.character_config.tts_preprocessor_config,
                 character_avatar=avatar,
-                system_config=self.system_config.model_dump(),
+                # Agents only need prompt paths; keep auth/storage secrets out
+                # of the agent configuration dict.
+                system_config={"tool_prompts": self.system_config.tool_prompts},
                 tool_manager=self.tool_manager,
                 tool_executor=self.tool_executor,
                 mcp_prompt_string=self.mcp_prompt,

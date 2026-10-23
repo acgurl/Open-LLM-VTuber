@@ -2,6 +2,7 @@
 from pydantic import Field, model_validator
 from typing import Dict, ClassVar
 from .i18n import I18nMixin, Description
+from .auth import AuthConfig
 from .storage import StorageConfig
 
 
@@ -15,6 +16,7 @@ class SystemConfig(I18nMixin):
     tool_prompts: Dict[str, str] = Field(..., alias="tool_prompts")
     enable_proxy: bool = Field(False, alias="enable_proxy")
     storage: StorageConfig = Field(default_factory=StorageConfig, alias="storage")
+    auth: AuthConfig = Field(default_factory=AuthConfig, alias="auth")
 
     DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
         "conf_version": Description(en="Configuration version", zh="配置文件版本"),
@@ -34,6 +36,10 @@ class SystemConfig(I18nMixin):
         "storage": Description(
             en="Chat history storage settings",
             zh="聊天历史存储设置",
+        ),
+        "auth": Description(
+            en="Authentication settings",
+            zh="认证设置",
         ),
     }
 

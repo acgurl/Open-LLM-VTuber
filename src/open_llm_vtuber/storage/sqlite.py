@@ -12,6 +12,7 @@ from .base import (
     HistoryMessage,
     HistoryNotFoundError,
     HistoryRepository,
+    validate_identity,
     validate_key,
     validate_user_id,
 )
@@ -28,6 +29,19 @@ CREATE TABLE IF NOT EXISTS users (
     display_name TEXT,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS user_identities (
+    provider TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    email TEXT,
+    created_at TEXT NOT NULL,
+    last_login_at TEXT NOT NULL,
+    PRIMARY KEY (provider, subject)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_identities_user_id
+    ON user_identities(user_id);
 
 CREATE TABLE IF NOT EXISTS histories (
     id TEXT PRIMARY KEY,
@@ -128,11 +142,14 @@ class SQLiteHistoryRepository(HistoryRepository):
                 conn.execute("PRAGMA journal_mode = WAL")
                 conn.execute("PRAGMA synchronous = NORMAL")
             conn.executescript(_SCHEMA)
-            conn.execute(
-                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) "
-                "VALUES(?, ?)",
-                (1, _now_iso()),
-            )
+            applied_at = _now_iso()
+            # Version 1: histories/messages/users. Version 2: OIDC identities.
+            for version in (1, 2):
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_migrations(version, applied_at) "
+                    "VALUES(?, ?)",
+                    (version, applied_at),
+                )
             conn.commit()
             self._conn = conn
 
@@ -177,6 +194,73 @@ class SQLiteHistoryRepository(HistoryRepository):
         assert self._conn is not None
         with self._conn:
             self._ensure_user_sync(self._conn, user_id, display_name)
+
+    async def resolve_user_identity(
+        self,
+        *,
+        provider: str,
+        subject: str,
+        display_name: str | None = None,
+        email: str | None = None,
+    ) -> str:
+        validate_identity(provider, "provider")
+        validate_identity(subject, "subject")
+        return await self._run(
+            self._resolve_user_identity_sync,
+            provider,
+            subject,
+            display_name,
+            email,
+        )
+
+    def _resolve_user_identity_sync(
+        self,
+        provider: str,
+        subject: str,
+        display_name: str | None,
+        email: str | None,
+    ) -> str:
+        assert self._conn is not None
+        now = _now_iso()
+        with self._conn:
+            row = self._conn.execute(
+                "SELECT user_id FROM user_identities "
+                "WHERE provider = ? AND subject = ?",
+                (provider, subject),
+            ).fetchone()
+
+            if row is not None:
+                user_id = row["user_id"]
+                self._ensure_user_sync(self._conn, user_id, display_name)
+                self._conn.execute(
+                    "UPDATE user_identities SET email = COALESCE(?, email), "
+                    "last_login_at = ? WHERE provider = ? AND subject = ?",
+                    (email, now, provider, subject),
+                )
+                return user_id
+
+            user_id = uuid.uuid4().hex
+            self._ensure_user_sync(self._conn, user_id, display_name)
+            self._conn.execute(
+                "INSERT INTO user_identities("
+                "provider, subject, user_id, email, created_at, last_login_at"
+                ") VALUES(?, ?, ?, ?, ?, ?)",
+                (provider, subject, user_id, email, now, now),
+            )
+            return user_id
+
+    async def list_conf_uids(self, *, user_id: str) -> list[str]:
+        validate_user_id(user_id)
+        return await self._run(self._list_conf_uids_sync, user_id)
+
+    def _list_conf_uids_sync(self, user_id: str) -> list[str]:
+        assert self._conn is not None
+        rows = self._conn.execute(
+            "SELECT DISTINCT conf_uid FROM histories "
+            "WHERE user_id = ? ORDER BY conf_uid",
+            (user_id,),
+        ).fetchall()
+        return [row["conf_uid"] for row in rows]
 
     async def create_history(
         self,
