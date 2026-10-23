@@ -313,6 +313,17 @@ class SherpaOnnxASRConfig(I18nMixin):
         return values
 
 
+_ASR_CONFIG_FIELDS = {
+    "faster_whisper": "faster_whisper",
+    "whisper_cpp": "whisper_cpp",
+    "whisper": "whisper",
+    "azure_asr": "azure_asr",
+    "fun_asr": "fun_asr",
+    "groq_whisper_asr": "groq_whisper_asr",
+    "sherpa_onnx_asr": "sherpa_onnx_asr",
+}
+
+
 class ASRConfig(I18nMixin):
     """Configuration for Automatic Speech Recognition."""
 
@@ -359,23 +370,8 @@ class ASRConfig(I18nMixin):
     }
 
     @model_validator(mode="after")
-    def check_asr_config(cls, values: "ASRConfig", info: ValidationInfo):
-        asr_model = values.asr_model
-
-        # Only validate the selected ASR model
-        if asr_model == "AzureASR" and values.azure_asr is not None:
-            values.azure_asr.model_validate(values.azure_asr.model_dump())
-        elif asr_model == "Faster-Whisper" and values.faster_whisper is not None:
-            values.faster_whisper.model_validate(values.faster_whisper.model_dump())
-        elif asr_model == "WhisperCPP" and values.whisper_cpp is not None:
-            values.whisper_cpp.model_validate(values.whisper_cpp.model_dump())
-        elif asr_model == "Whisper" and values.whisper is not None:
-            values.whisper.model_validate(values.whisper.model_dump())
-        elif asr_model == "FunASR" and values.fun_asr is not None:
-            values.fun_asr.model_validate(values.fun_asr.model_dump())
-        elif asr_model == "GroqWhisperASR" and values.groq_whisper_asr is not None:
-            values.groq_whisper_asr.model_validate(values.groq_whisper_asr.model_dump())
-        elif asr_model == "SherpaOnnxASR" and values.sherpa_onnx_asr is not None:
-            values.sherpa_onnx_asr.model_validate(values.sherpa_onnx_asr.model_dump())
-
-        return values
+    def check_asr_config(self) -> "ASRConfig":
+        field_name = _ASR_CONFIG_FIELDS.get(self.asr_model)
+        if field_name and getattr(self, field_name) is None:
+            raise ValueError(f"Missing configuration for asr_model '{self.asr_model}'")
+        return self

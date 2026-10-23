@@ -1,5 +1,5 @@
 # config_manager/character.py
-from pydantic import Field, field_validator
+from pydantic import Field, ValidationInfo, field_validator
 from typing import Dict, ClassVar
 from .i18n import I18nMixin, Description
 from .asr import ASRConfig
@@ -78,7 +78,8 @@ class CharacterConfig(I18nMixin):
         return v
 
     @field_validator("character_name")
-    def set_default_character_name(cls, v, values):
-        if not v and "conf_name" in values:
-            return values["conf_name"]
+    @classmethod
+    def set_default_character_name(cls, v, info: ValidationInfo):
+        if not v:
+            return info.data.get("conf_name", v)
         return v
