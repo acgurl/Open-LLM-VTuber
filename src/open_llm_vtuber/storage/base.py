@@ -37,6 +37,7 @@ class UserMCPServer(TypedDict, total=False):
     headers: dict[str, str]
     enabled: bool
     mode: str  # "remote" (backend connects) or "local" (browser connects)
+    transport: str  # "http" (Streamable HTTP) or "sse" (legacy HTTP+SSE)
     created_at: str
     updated_at: str
 
@@ -262,6 +263,7 @@ class HistoryRepository(ABC):
         headers: dict[str, str],
         enabled: bool = True,
         mode: str = "remote",
+        transport: str = "http",
     ) -> UserMCPServer:
         """Create a user MCP server and return it."""
 
@@ -276,6 +278,7 @@ class HistoryRepository(ABC):
         headers: dict[str, str],
         enabled: bool,
         mode: str = "remote",
+        transport: str = "http",
     ) -> UserMCPServer | None:
         """Replace a user MCP server's fields; returns None when not owned."""
 

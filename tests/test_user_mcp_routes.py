@@ -115,6 +115,27 @@ class UserMCPConfigRouteTests(unittest.TestCase):
             len(asyncio.run(self.repo.list_user_mcp_servers(user_id="local"))), 1
         )
 
+    def test_local_sse_config_round_trip(self):
+        response = self._put(
+            {
+                "mcpServers": {
+                    "local-sse": {
+                        "type": "sse",
+                        "url": "http://127.0.0.1:8788/sse?key=secret",
+                    }
+                }
+            }
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        data = response.json()
+        self.assertEqual(data["servers"][0]["mode"], "local")
+        self.assertEqual(data["servers"][0]["transport"], "sse")
+        self.assertEqual(data["config"]["mcp_servers"]["local-sse"]["type"], "sse")
+        self.assertEqual(
+            data["config"]["mcp_servers"]["local-sse"]["url"],
+            "http://127.0.0.1:8788/sse?key=secret",
+        )
+
     def test_stdio_and_public_http_are_rejected(self):
         for config in (
             {"mcp_servers": {"x": {"command": "uvx", "args": ["server"]}}},

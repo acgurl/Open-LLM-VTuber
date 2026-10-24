@@ -98,6 +98,34 @@ class UserMCPStorageTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(await self.repo.list_user_mcp_servers(user_id="alice"), [])
 
+    async def test_transport_round_trip(self):
+        created = await self.repo.create_user_mcp_server(
+            user_id="alice",
+            name="sse",
+            url="http://127.0.0.1:8788/sse",
+            headers={},
+            mode="local",
+            transport="sse",
+        )
+        self.assertEqual(created["transport"], "sse")
+        self.assertEqual(created["mode"], "local")
+
+        records = await self.repo.replace_user_mcp_servers(
+            user_id="alice",
+            servers=[
+                {
+                    "name": "sse",
+                    "url": "http://127.0.0.1:8788/sse",
+                    "headers": {},
+                    "enabled": True,
+                    "mode": "local",
+                    "transport": "sse",
+                }
+            ],
+        )
+        self.assertEqual(records[0]["id"], created["id"])
+        self.assertEqual(records[0]["transport"], "sse")
+
     async def test_duplicate_names_are_rejected(self):
         await self.repo.create_user_mcp_server(
             user_id="alice",
@@ -242,6 +270,53 @@ class URLClassificationTests(unittest.TestCase):
             {"mcp_servers": {"x": {"url": "http://127.0.0.1:1/mcp", "cwd": "/"}}},
             {"servers": {}},
             {"mcp_servers": []},
+        ):
+            with self.subTest(config=config):
+                with self.assertRaises(ValueError):
+                    parse_user_mcp_config(config)
+
+    def test_standard_mcpservers_and_sse_are_supported(self):
+        parsed = parse_user_mcp_config(
+            {
+                "mcpServers": {
+                    "local-sse": {
+                        "type": "sse",
+                        "url": "http://127.0.0.1:8788/sse?key=k",
+                    }
+                }
+            }
+        )
+        self.assertEqual(parsed[0]["mode"], "local")
+        self.assertEqual(parsed[0]["transport"], "sse")
+
+        with patch.object(
+            user_servers_module.socket, "getaddrinfo", side_effect=_public_dns
+        ):
+            parsed = parse_user_mcp_config(
+                {
+                    "mcp_servers": {
+                        "remote-sse": {
+                            "type": "sse",
+                            "url": "https://mcp.example.com/sse",
+                        }
+                    }
+                }
+            )
+        self.assertEqual(parsed[0]["mode"], "remote")
+        self.assertEqual(parsed[0]["transport"], "sse")
+
+    def test_stdio_and_conflicting_transports_are_rejected(self):
+        for config in (
+            {"mcpServers": {"x": {"type": "stdio", "url": "http://127.0.0.1:1/mcp"}}},
+            {
+                "mcp_servers": {
+                    "x": {
+                        "type": "sse",
+                        "transport": "http",
+                        "url": "http://127.0.0.1:1/mcp",
+                    }
+                }
+            },
         ):
             with self.subTest(config=config):
                 with self.assertRaises(ValueError):

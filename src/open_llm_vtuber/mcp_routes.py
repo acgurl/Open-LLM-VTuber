@@ -88,7 +88,10 @@ def _config_response(records: list[dict]) -> dict:
     servers: list[dict] = []
     for record in records:
         headers = _mask_headers(record.get("headers") or {})
+        transport = record.get("transport") or "http"
         entry: dict[str, Any] = {"url": record["url"]}
+        if transport == "sse":
+            entry["type"] = "sse"
         if headers:
             entry["headers"] = headers
         entry["enabled"] = bool(record.get("enabled", True))
@@ -101,6 +104,7 @@ def _config_response(records: list[dict]) -> dict:
                 "headers": headers,
                 "enabled": bool(record.get("enabled", True)),
                 "mode": record.get("mode") or "remote",
+                "transport": transport,
             }
         )
     return {"config": config, "servers": servers}
@@ -216,6 +220,7 @@ def init_user_mcp_routes(
                     timeout=timedelta(seconds=USER_MCP_TIMEOUT_SECONDS),
                     is_user=True,
                     display_name=record.get("name"),
+                    transport=record.get("transport") or "http",
                 )
             }
         )

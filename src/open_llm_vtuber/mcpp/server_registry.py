@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from loguru import logger
 
 from .types import MCPServer
+from .user_servers import normalize_mcp_transport
 from .utils.path import validate_file
 
 DEFAULT_CONFIG_PATH = "mcp_servers.json"
@@ -119,12 +120,25 @@ class ServerRegistry:
             )
             return None
 
-        logger.debug(f"MCPSR: Loaded HTTP server: '{server_name}' ({url}).")
+        try:
+            transport = normalize_mcp_transport(
+                server_details.get("transport", server_details.get("type"))
+            )
+        except ValueError as exc:
+            logger.warning(
+                f"MCPSR: Invalid transport for '{server_name}': {exc}. Ignoring."
+            )
+            return None
+
+        logger.debug(
+            f"MCPSR: Loaded HTTP server: '{server_name}' ({url}, {transport})."
+        )
         return MCPServer(
             name=server_name,
             url=url,
             headers=headers,
             timeout=server_details.get("timeout", None),
+            transport=transport,
         )
 
     def _parse_stdio_server(

@@ -13,6 +13,16 @@ export interface LocalMcpCallResult {
   isError: boolean;
 }
 
+export interface LocalMcpClientLike {
+  initialize(): Promise<void>;
+  listTools(): Promise<LocalMcpTool[]>;
+  callTool(
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<LocalMcpCallResult>;
+  close(): Promise<void>;
+}
+
 interface JsonRpcMessage {
   jsonrpc?: string;
   id?: number | string;
@@ -60,7 +70,19 @@ function parseSseMessage(chunk: string): JsonRpcMessage | null {
   }
 }
 
-function normalizeContent(items: unknown[]): Array<Record<string, unknown>> {
+export function filterCustomHeaders(
+  headers: Record<string, string>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers).filter(
+      ([key]) => !RESERVED_HEADERS.has(key.toLowerCase()),
+    ),
+  );
+}
+
+export function normalizeContent(
+  items: unknown[],
+): Array<Record<string, unknown>> {
   const normalized: Array<Record<string, unknown>> = [];
   for (const item of items.slice(0, 64)) {
     if (!item || typeof item !== 'object') continue;
@@ -87,7 +109,7 @@ function normalizeContent(items: unknown[]): Array<Record<string, unknown>> {
   return normalized;
 }
 
-function errorFromHttp(status: number, body: string): Error {
+export function errorFromHttp(status: number, body: string): Error {
   if (status === 401 || status === 403) {
     return new Error('本地 MCP 拒绝了网页请求（检查 CORS / Origin 配置）');
   }
@@ -95,7 +117,7 @@ function errorFromHttp(status: number, body: string): Error {
   return new Error(`本地 MCP 返回 HTTP ${status}${detail ? `：${detail}` : ''}`);
 }
 
-export class LocalMcpClient {
+export class LocalMcpClient implements LocalMcpClientLike {
   private readonly url: string;
   private readonly customHeaders: Record<string, string>;
   private sessionId: string | null = null;
@@ -105,11 +127,7 @@ export class LocalMcpClient {
 
   constructor(url: string, headers: Record<string, string> = {}) {
     this.url = url;
-    this.customHeaders = Object.fromEntries(
-      Object.entries(headers).filter(
-        ([key]) => !RESERVED_HEADERS.has(key.toLowerCase()),
-      ),
-    );
+    this.customHeaders = filterCustomHeaders(headers);
   }
 
   async initialize(): Promise<void> {

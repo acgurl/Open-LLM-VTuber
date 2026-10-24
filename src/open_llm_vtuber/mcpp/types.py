@@ -31,6 +31,8 @@ class MCPServer:
     # every connection and their tools are namespaced away from global ones.
     is_user: bool = False
     display_name: Optional[str] = None
+    # "http" = Streamable HTTP, "sse" = legacy HTTP+SSE MCP transport.
+    transport: str = "http"
 
 
 @dataclass

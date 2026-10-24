@@ -67,6 +67,7 @@ export interface LocalMcpServerConfig {
   name: string;
   url: string;
   headers: Record<string, string>;
+  transport: 'http' | 'sse';
 }
 
 export interface ToolCallStatus {

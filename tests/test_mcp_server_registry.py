@@ -34,6 +34,20 @@ class ServerRegistryTests(unittest.TestCase):
         self.assertEqual(server.headers, {"Authorization": "Bearer test-token"})
         self.assertEqual(server.command, "")
 
+    def test_loads_sse_server(self):
+        registry = self._load(
+            {
+                "cuc-sse": {
+                    "url": "http://127.0.0.1:8788/sse",
+                    "type": "sse",
+                }
+            }
+        )
+
+        server = registry.get_server("cuc-sse")
+        self.assertIsNotNone(server)
+        self.assertEqual(server.transport, "sse")
+
     def test_loads_stdio_server(self):
         registry = self._load(
             {

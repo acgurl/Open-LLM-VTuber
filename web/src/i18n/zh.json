@@ -64,7 +64,7 @@
     "proactiveSpeak": "让 AI 主动说话",
     "mcp": {
       "title": "MCP 配置",
-      "jsonHint": "与 mcp_servers.json 相同的 JSON。后端按 URL 判定：公网 HTTPS 由后端连接（远程），本机/内网地址由浏览器连接（本地）。",
+      "jsonHint": "支持 mcp_servers / mcpServers 与 type: \"sse\" / \"streamable-http\"。后端按 URL 判定：公网 HTTPS 由后端连接（远程），本机/内网地址由浏览器连接（本地）。",
       "headersHint": "请求头值显示为 *** 表示保留已保存的密钥；新增服务器需要填写真实值。",
       "reconnectHint": "保存后重新连接（刷新页面）才会应用新配置。",
       "save": "保存",

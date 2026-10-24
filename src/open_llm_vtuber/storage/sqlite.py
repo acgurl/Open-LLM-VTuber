@@ -79,6 +79,7 @@ CREATE TABLE IF NOT EXISTS user_mcp_servers (
     headers_json TEXT,
     enabled INTEGER NOT NULL DEFAULT 1,
     mode TEXT NOT NULL DEFAULT 'remote',
+    transport TEXT NOT NULL DEFAULT 'http',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     UNIQUE (user_id, name)
@@ -116,6 +117,7 @@ def _validate_mcp_fields(
     headers: dict[str, str],
     enabled: bool,
     mode: str,
+    transport: str,
 ) -> None:
     validate_key(name, "name")
     if (
@@ -136,6 +138,8 @@ def _validate_mcp_fields(
         raise ValueError("enabled must be a boolean")
     if mode not in {"local", "remote"}:
         raise ValueError("mode must be 'local' or 'remote'")
+    if transport not in {"http", "sse"}:
+        raise ValueError("transport must be 'http' or 'sse'")
 
 
 def _mcp_server_from_row(row: sqlite3.Row) -> UserMCPServer:
@@ -152,6 +156,7 @@ def _mcp_server_from_row(row: sqlite3.Row) -> UserMCPServer:
         "headers": headers,
         "enabled": bool(row["enabled"]),
         "mode": row["mode"] if "mode" in row.keys() else "remote",
+        "transport": row["transport"] if "transport" in row.keys() else "http",
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
@@ -225,7 +230,8 @@ class SQLiteHistoryRepository(HistoryRepository):
             applied_at = _now_iso()
             # Version 1: histories/messages/users. Version 2: OIDC identities.
             # Version 3: per-user MCP servers. Version 4: local/remote mode.
-            for version in (1, 2, 3, 4):
+            # Version 5: transport (Streamable HTTP / legacy SSE).
+            for version in (1, 2, 3, 4, 5):
                 conn.execute(
                     "INSERT OR IGNORE INTO schema_migrations(version, applied_at) "
                     "VALUES(?, ?)",
@@ -239,6 +245,11 @@ class SQLiteHistoryRepository(HistoryRepository):
                 conn.execute(
                     "ALTER TABLE user_mcp_servers ADD COLUMN mode "
                     "TEXT NOT NULL DEFAULT 'remote'"
+                )
+            if "transport" not in mcp_columns:
+                conn.execute(
+                    "ALTER TABLE user_mcp_servers ADD COLUMN transport "
+                    "TEXT NOT NULL DEFAULT 'http'"
                 )
             conn.commit()
             self._conn = conn
@@ -802,7 +813,7 @@ class SQLiteHistoryRepository(HistoryRepository):
     def _list_user_mcp_servers_sync(self, user_id: str) -> list[UserMCPServer]:
         rows = self._conn.execute(
             "SELECT id, user_id, name, url, headers_json, enabled, mode, "
-            "created_at, updated_at FROM user_mcp_servers "
+            "transport, created_at, updated_at FROM user_mcp_servers "
             "WHERE user_id = ? ORDER BY created_at, id",
             (user_id,),
         ).fetchall()
@@ -817,9 +828,10 @@ class SQLiteHistoryRepository(HistoryRepository):
         headers: dict[str, str],
         enabled: bool = True,
         mode: str = "remote",
+        transport: str = "http",
     ) -> UserMCPServer:
         validate_user_id(user_id)
-        _validate_mcp_fields(name, url, headers, enabled, mode)
+        _validate_mcp_fields(name, url, headers, enabled, mode, transport)
         return await self._run(
             self._create_user_mcp_server_sync,
             user_id,
@@ -828,6 +840,7 @@ class SQLiteHistoryRepository(HistoryRepository):
             headers,
             enabled,
             mode,
+            transport,
         )
 
     def _create_user_mcp_server_sync(
@@ -838,6 +851,7 @@ class SQLiteHistoryRepository(HistoryRepository):
         headers: dict[str, str],
         enabled: bool,
         mode: str,
+        transport: str,
     ) -> UserMCPServer:
         server_id = uuid.uuid4().hex
         now = _now_iso()
@@ -847,8 +861,8 @@ class SQLiteHistoryRepository(HistoryRepository):
                 self._conn.execute(
                     "INSERT INTO user_mcp_servers("
                     "id, user_id, name, url, headers_json, enabled, mode, "
-                    "created_at, updated_at"
-                    ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "transport, created_at, updated_at"
+                    ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         server_id,
                         user_id,
@@ -857,6 +871,7 @@ class SQLiteHistoryRepository(HistoryRepository):
                         json.dumps(headers, ensure_ascii=False),
                         1 if enabled else 0,
                         mode,
+                        transport,
                         now,
                         now,
                     ),
@@ -872,6 +887,7 @@ class SQLiteHistoryRepository(HistoryRepository):
             "headers": dict(headers),
             "enabled": enabled,
             "mode": mode,
+            "transport": transport,
             "created_at": now,
             "updated_at": now,
         }
@@ -886,10 +902,11 @@ class SQLiteHistoryRepository(HistoryRepository):
         headers: dict[str, str],
         enabled: bool,
         mode: str = "remote",
+        transport: str = "http",
     ) -> UserMCPServer | None:
         validate_user_id(user_id)
         validate_key(server_id, "server_id")
-        _validate_mcp_fields(name, url, headers, enabled, mode)
+        _validate_mcp_fields(name, url, headers, enabled, mode, transport)
         return await self._run(
             self._update_user_mcp_server_sync,
             user_id,
@@ -899,6 +916,7 @@ class SQLiteHistoryRepository(HistoryRepository):
             headers,
             enabled,
             mode,
+            transport,
         )
 
     def _update_user_mcp_server_sync(
@@ -910,6 +928,7 @@ class SQLiteHistoryRepository(HistoryRepository):
         headers: dict[str, str],
         enabled: bool,
         mode: str,
+        transport: str,
     ) -> UserMCPServer | None:
         now = _now_iso()
         with self._conn:
@@ -917,13 +936,15 @@ class SQLiteHistoryRepository(HistoryRepository):
                 cursor = self._conn.execute(
                     "UPDATE user_mcp_servers SET "
                     "name = ?, url = ?, headers_json = ?, enabled = ?, "
-                    "mode = ?, updated_at = ? WHERE id = ? AND user_id = ?",
+                    "mode = ?, transport = ?, updated_at = ? "
+                    "WHERE id = ? AND user_id = ?",
                     (
                         name,
                         url,
                         json.dumps(headers, ensure_ascii=False),
                         1 if enabled else 0,
                         mode,
+                        transport,
                         now,
                         server_id,
                         user_id,
@@ -936,7 +957,7 @@ class SQLiteHistoryRepository(HistoryRepository):
 
             row = self._conn.execute(
                 "SELECT id, user_id, name, url, headers_json, enabled, mode, "
-                "created_at, updated_at FROM user_mcp_servers "
+                "transport, created_at, updated_at FROM user_mcp_servers "
                 "WHERE id = ? AND user_id = ?",
                 (server_id, user_id),
             ).fetchone()
@@ -965,7 +986,7 @@ class SQLiteHistoryRepository(HistoryRepository):
         if not isinstance(servers, list):
             raise ValueError("servers must be a list")
 
-        prepared: list[tuple[str, str, dict[str, str], bool, str]] = []
+        prepared: list[tuple[str, str, dict[str, str], bool, str, str]] = []
         names: set[str] = set()
         for entry in servers:
             if not isinstance(entry, dict):
@@ -975,18 +996,19 @@ class SQLiteHistoryRepository(HistoryRepository):
             headers = entry.get("headers", {})
             enabled = entry.get("enabled", True)
             mode = entry.get("mode", "remote")
-            _validate_mcp_fields(name, url, headers, enabled, mode)
+            transport = entry.get("transport", "http")
+            _validate_mcp_fields(name, url, headers, enabled, mode, transport)
             if name in names:
                 raise ValueError(f"duplicate MCP server name: {name}")
             names.add(name)
-            prepared.append((name, url, headers, enabled, mode))
+            prepared.append((name, url, headers, enabled, mode, transport))
 
         return await self._run(self._replace_user_mcp_servers_sync, user_id, prepared)
 
     def _replace_user_mcp_servers_sync(
         self,
         user_id: str,
-        prepared: list[tuple[str, str, dict[str, str], bool, str]],
+        prepared: list[tuple[str, str, dict[str, str], bool, str, str]],
     ) -> list[UserMCPServer]:
         now = _now_iso()
         with self._conn:
@@ -1000,7 +1022,7 @@ class SQLiteHistoryRepository(HistoryRepository):
             }
 
             keep: set[str] = set()
-            for name, url, headers, enabled, mode in prepared:
+            for name, url, headers, enabled, mode, transport in prepared:
                 keep.add(name)
                 server_id = existing.get(name)
                 headers_json = json.dumps(headers, ensure_ascii=False)
@@ -1008,12 +1030,14 @@ class SQLiteHistoryRepository(HistoryRepository):
                     self._conn.execute(
                         "UPDATE user_mcp_servers SET "
                         "url = ?, headers_json = ?, enabled = ?, mode = ?, "
-                        "updated_at = ? WHERE id = ? AND user_id = ?",
+                        "transport = ?, updated_at = ? "
+                        "WHERE id = ? AND user_id = ?",
                         (
                             url,
                             headers_json,
                             1 if enabled else 0,
                             mode,
+                            transport,
                             now,
                             server_id,
                             user_id,
@@ -1023,8 +1047,8 @@ class SQLiteHistoryRepository(HistoryRepository):
                     self._conn.execute(
                         "INSERT INTO user_mcp_servers("
                         "id, user_id, name, url, headers_json, enabled, mode, "
-                        "created_at, updated_at"
-                        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "transport, created_at, updated_at"
+                        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
                             uuid.uuid4().hex,
                             user_id,
@@ -1033,6 +1057,7 @@ class SQLiteHistoryRepository(HistoryRepository):
                             headers_json,
                             1 if enabled else 0,
                             mode,
+                            transport,
                             now,
                             now,
                         ),

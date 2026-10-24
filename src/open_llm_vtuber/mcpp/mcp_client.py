@@ -8,6 +8,7 @@ from datetime import timedelta
 import httpx
 from mcp import ClientSession, StdioServerParameters
 from mcp.types import Tool
+from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import (
     create_mcp_http_client,
@@ -150,14 +151,57 @@ class MCPClient:
             yield session
 
     @asynccontextmanager
+    async def _sse_session(
+        self, server_name: str, server: MCPServer, timeout: timedelta
+    ) -> AsyncIterator[ClientSession]:
+        """Open a short-lived legacy HTTP+SSE session in the caller's task."""
+        if server.is_user:
+            await validate_public_https_url_async(server.url)
+
+        logger.info(
+            f"MCPC: Connecting to SSE server '{server_name}' at {server.url}..."
+        )
+        async with AsyncExitStack() as stack:
+            try:
+                transport = await stack.enter_async_context(
+                    sse_client(
+                        server.url,
+                        headers=server.headers or None,
+                        timeout=timeout.total_seconds(),
+                        sse_read_timeout=300,
+                    )
+                )
+                read, write = transport
+                session = await stack.enter_async_context(
+                    ClientSession(read, write, read_timeout_seconds=timeout)
+                )
+                await session.initialize()
+            except Exception as e:
+                logger.exception(
+                    f"MCPC: Failed to connect to SSE server '{server_name}': {e}"
+                )
+                raise RuntimeError(
+                    f"MCPC: Failed to connect to server '{server_name}'."
+                ) from e
+
+            logger.info(f"MCPC: Successfully connected to SSE server '{server_name}'.")
+            yield session
+
+    @asynccontextmanager
     async def _session(self, server_name: str) -> AsyncIterator[ClientSession]:
         """Yield a session using the transport configured for the server."""
         server = self._get_server(server_name)
         if server.url:
-            async with self._http_session(
-                server_name, server, self._get_timeout(server)
-            ) as session:
-                yield session
+            if server.transport == "sse":
+                async with self._sse_session(
+                    server_name, server, self._get_timeout(server)
+                ) as session:
+                    yield session
+            else:
+                async with self._http_session(
+                    server_name, server, self._get_timeout(server)
+                ) as session:
+                    yield session
         else:
             yield await self._ensure_stdio_session(server_name)
 

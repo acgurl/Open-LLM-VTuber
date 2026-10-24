@@ -19,6 +19,7 @@ export interface MCPServerSummary {
   headers: Record<string, string>; // values are masked as "***"
   enabled: boolean;
   mode: MCPServerMode;
+  transport: 'http' | 'sse';
 }
 
 export interface MCPConfigResponse {

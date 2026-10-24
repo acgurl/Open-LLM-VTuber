@@ -169,6 +169,9 @@ export function McpPanel() {
                       ? t('settings.mcp.modeLocal')
                       : t('settings.mcp.modeRemote')}
                   </span>
+                  {server.transport === 'sse' && (
+                    <span className="mcp-badge sse">SSE</span>
+                  )}
                   {!server.enabled && (
                     <span className="mcp-badge">
                       {t('settings.mcp.disabled')}

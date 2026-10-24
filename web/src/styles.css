@@ -1218,6 +1218,11 @@ body,
   color: var(--accent-2);
 }
 
+.mcp-badge.sse {
+  background: rgba(255, 190, 120, 0.15);
+  color: #ffbe78;
+}
+
 .mcp-editor {
   width: 100%;
   min-height: 220px;

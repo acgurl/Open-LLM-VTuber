@@ -62,7 +62,29 @@ _LOCAL_HOST_SUFFIXES = (
     ".local",
     ".localhost",
 )
-_USER_MCP_ENTRY_KEYS = {"url", "headers", "enabled"}
+_USER_MCP_ENTRY_KEYS = {"url", "headers", "enabled", "type", "transport"}
+_TRANSPORT_ALIASES = {
+    "http": "http",
+    "streamable-http": "http",
+    "streamable_http": "http",
+    "streamablehttp": "http",
+    "sse": "sse",
+}
+
+
+def normalize_mcp_transport(value: Any) -> str:
+    """Map the ecosystem's ``type``/``transport`` values to our two modes."""
+    if value is None:
+        return "http"
+    if not isinstance(value, str):
+        raise ValueError("type must be a string")
+    normalized = _TRANSPORT_ALIASES.get(value.strip().lower())
+    if normalized is None:
+        raise ValueError(
+            "type must be 'sse', 'http' or 'streamable-http'; "
+            "stdio commands cannot run on the server"
+        )
+    return normalized
 
 
 def validate_server_name(name: Any) -> str:
@@ -319,10 +341,14 @@ def parse_user_mcp_config(config: Any) -> list[dict]:
     """
     if not isinstance(config, dict):
         raise ValueError("config must be an object")
-    unknown_top = set(config) - {"mcp_servers"}
+    unknown_top = set(config) - {"mcp_servers", "mcpServers"}
     if unknown_top:
         raise ValueError(f"unsupported config keys: {', '.join(sorted(unknown_top))}")
-    servers = config.get("mcp_servers")
+    if "mcp_servers" in config and "mcpServers" in config:
+        raise ValueError("use either mcp_servers or mcpServers, not both")
+    servers = config.get("mcp_servers", config.get("mcpServers"))
+    if servers is None:
+        raise ValueError("config.mcp_servers must be an object")
     if not isinstance(servers, dict):
         raise ValueError("config.mcp_servers must be an object")
     if len(servers) > MAX_USER_MCP_SERVERS:
@@ -337,9 +363,18 @@ def parse_user_mcp_config(config: Any) -> list[dict]:
         if unknown:
             raise ValueError(
                 f"server '{name}' has unsupported keys: "
-                f"{', '.join(sorted(unknown))}; only url/headers/enabled "
-                "are allowed (stdio commands cannot run on the server)"
+                f"{', '.join(sorted(unknown))}; only url/headers/enabled/"
+                "type/transport are allowed (stdio commands cannot run on "
+                "the server)"
             )
+        if "type" in entry and "transport" in entry:
+            if normalize_mcp_transport(entry["type"]) != normalize_mcp_transport(
+                entry["transport"]
+            ):
+                raise ValueError(f"server '{name}' has conflicting type and transport")
+        transport = normalize_mcp_transport(
+            entry.get("transport", entry.get("type", "http"))
+        )
         url = entry.get("url")
         mode = classify_mcp_url(url)
         headers = validate_headers(entry.get("headers"))
@@ -353,6 +388,7 @@ def parse_user_mcp_config(config: Any) -> list[dict]:
                 "headers": headers,
                 "enabled": enabled,
                 "mode": mode,
+                "transport": transport,
             }
         )
 
@@ -397,6 +433,7 @@ def local_mcp_config_payload(records: list[dict] | None) -> list[dict]:
                 "name": record.get("name") or server_id,
                 "url": url,
                 "headers": record.get("headers") or {},
+                "transport": record.get("transport") or "http",
             }
         )
     return payload
@@ -422,6 +459,7 @@ def build_user_mcp_servers(records: list[dict] | None) -> dict[str, MCPServer]:
             timeout=timedelta(seconds=USER_MCP_TIMEOUT_SECONDS),
             is_user=True,
             display_name=record.get("name") or key,
+            transport=record.get("transport") or "http",
         )
     return servers
 

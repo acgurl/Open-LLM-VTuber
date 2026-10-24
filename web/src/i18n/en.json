@@ -64,7 +64,7 @@
     "proactiveSpeak": "Let AI speak first",
     "mcp": {
       "title": "MCP configuration",
-      "jsonHint": "Same JSON shape as mcp_servers.json. The backend classifies each URL: public HTTPS is connected by the server (remote); loopback/LAN addresses are connected by the browser (local).",
+      "jsonHint": "Accepts mcp_servers / mcpServers and type: \"sse\" / \"streamable-http\". The backend classifies each URL: public HTTPS is connected by the server (remote); loopback/LAN addresses are connected by the browser (local).",
       "headersHint": "*** keeps a stored secret; new servers must provide real values.",
       "reconnectHint": "Reconnect (refresh the page) to apply a saved configuration.",
       "save": "Save",

@@ -1,18 +1,32 @@
 import { useMcp } from '../stores/mcp';
 import type { LocalMcpServerConfig, ServerMessage } from '../protocol/types';
 import { wsClient } from './websocket';
-import { LocalMcpClient, localMcpErrorMessage } from './localMcpClient';
+import {
+  LocalMcpClient,
+  type LocalMcpClientLike,
+  localMcpErrorMessage,
+} from './localMcpClient';
+import { LocalSseMcpClient } from './localSseMcpClient';
 
 interface ClientEntry {
-  client: LocalMcpClient;
+  client: LocalMcpClientLike;
   fingerprint: string;
+}
+
+function createClient(config: LocalMcpServerConfig): LocalMcpClientLike {
+  if (config.transport === 'sse') {
+    return new LocalSseMcpClient(config.url, config.headers);
+  }
+  return new LocalMcpClient(config.url, config.headers);
 }
 
 const clients = new Map<string, ClientEntry>();
 let queue: Promise<void> = Promise.resolve();
 
 function fingerprint(config: LocalMcpServerConfig): string {
-  return `${config.url}\n${JSON.stringify(config.headers ?? {})}`;
+  return `${config.transport}\n${config.url}\n${JSON.stringify(
+    config.headers ?? {},
+  )}`;
 }
 
 async function registerServer(config: LocalMcpServerConfig): Promise<void> {
@@ -29,7 +43,7 @@ async function registerServer(config: LocalMcpServerConfig): Promise<void> {
     }
 
     if (!entry) {
-      const client = new LocalMcpClient(config.url, config.headers);
+      const client = createClient(config);
       await client.initialize();
       entry = { client, fingerprint: expected };
       clients.set(config.server_id, entry);
@@ -41,7 +55,7 @@ async function registerServer(config: LocalMcpServerConfig): Promise<void> {
     } catch {
       // The local MCP session may have expired while the socket was down.
       await entry.client.close();
-      const client = new LocalMcpClient(config.url, config.headers);
+      const client = createClient(config);
       await client.initialize();
       entry = { client, fingerprint: expected };
       clients.set(config.server_id, entry);
