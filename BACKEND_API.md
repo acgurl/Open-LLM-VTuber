@@ -298,7 +298,7 @@ Cookie（`auth/manager.py`）：
 ```json
 {
   "type": "set-model-and-conf",
-  "model_info": { "name": "nahida", "url": "/live2d-models/...", "lipSyncGain": 0.2, "emotionMap": {}, "motionMap": {}, "...": "..." },
+  "model_info": { "name": "nahida", "url": "/live2d-models/...", "lipSyncGain": 1.2, "emotionMap": {}, "motionMap": {}, "...": "..." },
   "conf_name": "纳西妲",
   "conf_uid": "zh_nahida_01",
   "client_uid": "6f1c...-uuid"
@@ -558,6 +558,8 @@ Cookie（`auth/manager.py`）：
 
 - `volumes` 是归一化 RMS 序列，`slice_length` 是每格毫秒数（默认 20）。播放进度 `t` 毫秒对应 `volumes[floor(t / slice_length)]`。
 - 最终嘴部开合幅度 = `volume * model_info.lipSyncGain`。**增益只来自 `model_dict.json`**，不要再乘额外系数。
+- 口型参数**不能写死 `ParamMouthOpenY`**：应读取模型 `model3.json` 的 `Groups[Name=LipSync].Ids`（pixi 里是 `internalModel.motionManager.lipSyncIds`）。例如 `mao_pro` 用的是 `ParamA`。
+- 写入时机要在模型 update 的 `beforeModelUpdate` 阶段（或等效的绘制前钩子），否则会被动作参数回滚覆盖。
 - `volumes` 为空数组时（静音载荷）不做口型。
 
 ### 9.3 字幕
@@ -635,9 +637,10 @@ LLM 被提示在句子里插入方括号关键字（提示词 `prompts/utils/liv
 | `initialXshift` / `initialYshift` | number | 画布偏移（同上，当前前端不使用） |
 | `kXOffset` | number | 水平偏移（同上，当前前端不使用） |
 | `idleMotionGroupName` | string | 待机动作组名，如 `"Idle"` |
+| `defaultEmotion` | number / string（可选） | 一轮对话结束后回落的表情；缺省使用第 0 个表情 |
 | `emotionMap` | object | 情绪关键字 → **表情索引（int）**。可为 `{}` |
 | `motionMap` | object | 动作关键字 → `{"group": string, "index"?: int}`。可为 `{}` |
-| `tapMotions` | object（可选） | 点击区域 → {动作组名 → 索引}，如 `{"HitAreaHead": {"": 1}}` |
+| `tapMotions` | object（可选） | 点击区域 → {动作组名 → **权重**}，如 `{"HitAreaBody": {"Tap@Body": 1}}`。区域键可匹配 model3.json 的 HitArea `Id` 或 `Name`；权重用于加权随机选组，`1` 不是动作索引。没有命中已配置区域时，应合并所有区域的动作组按权重兜底 |
 
 真实样例（`model_dict.json` 的 `nahida` 条目）：
 
@@ -647,7 +650,7 @@ LLM 被提示在句子里插入方括号关键字（提示词 `prompts/utils/liv
   "description": "纳西妲 (Genshin Impact)",
   "url": "/live2d-models/nahida/runtime/Nahida_v2.model3.json",
   "kScale": 0.5,
-  "lipSyncGain": 0.2,
+  "lipSyncGain": 1.2,
   "initialXshift": 0,
   "initialYshift": 0,
   "kXOffset": 0,

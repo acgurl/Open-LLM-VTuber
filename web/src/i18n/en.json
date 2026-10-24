@@ -58,6 +58,9 @@
     "logout": "Log out",
     "group": "Group chat",
     "speech": "Speech",
+    "live2d": "Live2D",
+    "pointerInteractive": "Pointer interaction",
+    "scrollToResize": "Scroll to zoom",
     "proactiveSpeak": "Let AI speak first"
   },
   "group": {

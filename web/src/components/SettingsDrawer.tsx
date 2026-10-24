@@ -28,6 +28,10 @@ export function SettingsDrawer() {
   const backgroundFiles = useSettings((s) => s.backgroundFiles);
   const configs = useSettings((s) => s.configs);
   const switching = useSettings((s) => s.switching);
+  const pointerInteractive = useSettings((s) => s.pointerInteractive);
+  const setPointerInteractive = useSettings((s) => s.setPointerInteractive);
+  const scrollToResize = useSettings((s) => s.scrollToResize);
+  const setScrollToResize = useSettings((s) => s.setScrollToResize);
   const displayName = useConnection((s) => s.displayName);
 
   useEffect(() => {
@@ -95,6 +99,26 @@ export function SettingsDrawer() {
                 );
               })}
             </div>
+          </section>
+
+          <section>
+            <h3>{t('settings.live2d')}</h3>
+            <label className="setting-row">
+              <span>{t('settings.pointerInteractive')}</span>
+              <input
+                type="checkbox"
+                checked={pointerInteractive}
+                onChange={(e) => setPointerInteractive(e.target.checked)}
+              />
+            </label>
+            <label className="setting-row">
+              <span>{t('settings.scrollToResize')}</span>
+              <input
+                type="checkbox"
+                checked={scrollToResize}
+                onChange={(e) => setScrollToResize(e.target.checked)}
+              />
+            </label>
           </section>
 
           <section>

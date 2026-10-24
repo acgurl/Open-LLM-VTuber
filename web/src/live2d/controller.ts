@@ -1,6 +1,7 @@
 import * as PIXI from 'pixi.js';
-import { Live2DModel } from 'pixi-live2d-display-lipsyncpatch';
+import { Live2DModel, MotionPriority } from 'pixi-live2d-display-lipsyncpatch';
 import type { Actions, ModelInfo } from '../protocol/types';
+import { useSettings } from '../stores/settings';
 
 (window as unknown as { PIXI: typeof PIXI }).PIXI = PIXI;
 
@@ -9,6 +10,7 @@ const MAX_ZOOM = 5;
 const ZOOM_STEP = 1.05; // 每格滚轮 ±5%
 const ZOOM_EASING = 0.3;
 const DRAG_THRESHOLD_PX = 5;
+const TAP_MAX_MS = 350;
 // 默认构图：模型可见轮廓高度占视口 81%，顶部留白 10%，窄屏时宽度不超过 92%
 const FRAME_HEIGHT_RATIO = 0.81;
 const FRAME_TOP_RATIO = 0.1;
@@ -21,6 +23,13 @@ type DrawableHost = {
   getDrawableIDs(): string[];
   getDrawableBounds(index: number, bounds?: Rect): Rect;
 };
+type HitAreaDef = { id?: string; name?: string; index: number };
+type HitAreaHost = { getHitAreaDefs?: () => HitAreaDef[] };
+type MotionManagerLike = {
+  lipSyncIds?: string[];
+  groups?: { idle?: string };
+};
+type UpdateHookHost = { on(event: string, fn: () => void): void };
 
 const hitPoint = new PIXI.Point();
 const scratchBounds: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -32,9 +41,8 @@ class Live2DController {
   private info: ModelInfo | null = null;
   private pendingInfo: ModelInfo | null = null;
   private lipValue = 0;
-  private speaking = false;
+  private lipSyncIds: string[] = ['ParamMouthOpenY'];
   private mouthKind: 'cubism4' | 'cubism2' | null = null;
-  private idleTimer: number | null = null;
   private resizeHandler = () => this.layout();
   private canvas: HTMLCanvasElement | null = null;
   private baseScale = 1;
@@ -54,6 +62,7 @@ class Live2DController {
   private dragArmed = false;
   private dragging = false;
   private hovering = false;
+  private pointerDownAt = 0;
   private dragStart = { x: 0, y: 0 };
   private dragOrigin = { x: 0, y: 0 };
 
@@ -67,14 +76,13 @@ class Live2DController {
       autoDensity: true,
       resolution: window.devicePixelRatio || 1,
     });
-    this.app.ticker.add(() => this.applyLipSync());
     this.app.ticker.add(() => this.stepZoom());
     window.addEventListener('resize', this.resizeHandler);
     canvas.addEventListener('wheel', this.onWheel, { passive: false });
     canvas.addEventListener('pointerdown', this.onPointerDown);
     window.addEventListener('pointermove', this.onPointerMove);
     window.addEventListener('pointerup', this.onPointerUp);
-    window.addEventListener('pointercancel', this.onPointerUp);
+    window.addEventListener('pointercancel', this.onPointerCancel);
     if (this.pendingInfo !== null) {
       const info = this.pendingInfo;
       this.pendingInfo = null;
@@ -105,12 +113,12 @@ class Live2DController {
       return;
     }
     const seq = ++this.loadSeq;
-    this.stopIdle();
     if (this.model) {
       this.app.stage.removeChild(this.model);
       this.model.destroy();
       this.model = null;
       this.mouthKind = null;
+      this.lipSyncIds = ['ParamMouthOpenY'];
       this.drawableCount = 0;
       this.contentBounds = null;
     }
@@ -121,7 +129,8 @@ class Live2DController {
     }
     try {
       const model = (await Live2DModel.from(url, {
-        autoInteract: true,
+        autoHitTest: false,
+        autoFocus: true,
       })) as Live2DModel;
       if (seq !== this.loadSeq) {
         model.destroy();
@@ -129,14 +138,31 @@ class Live2DController {
       }
       this.model = model;
       this.app.stage.addChild(model);
+      // 必须挂在模型 update 的最后一刻写口型，否则会被动作/参数回滚覆盖。
+      (model.internalModel as unknown as UpdateHookHost).on(
+        'beforeModelUpdate',
+        this.applyLipSync,
+      );
       const internal = model.internalModel as unknown as Record<string, any>;
       if (internal?.coreModel?.setParameterValueById) this.mouthKind = 'cubism4';
       else if (internal?.live2DModel) this.mouthKind = 'cubism2';
+      const manager = internal?.motionManager as MotionManagerLike | undefined;
+      if (Array.isArray(manager?.lipSyncIds) && manager.lipSyncIds.length > 0) {
+        this.lipSyncIds = [...manager.lipSyncIds];
+      } else {
+        this.lipSyncIds =
+          this.mouthKind === 'cubism4' ? ['ParamMouthOpenY'] : ['PARAM_MOUTH_OPEN_Y'];
+      }
+      const idleGroup = info?.idleMotionGroupName;
+      if (manager?.groups && idleGroup) {
+        try {
+          manager.groups.idle = idleGroup;
+        } catch {
+          /* ignore */
+        }
+      }
       this.measureContent();
-      const bindInfo = this.info ?? info;
-      if (bindInfo) this.bindTap(model, bindInfo);
       this.layout();
-      this.startIdle();
     } catch (err) {
       if (seq === this.loadSeq) console.error('Live2D load failed', err);
     } finally {
@@ -144,12 +170,19 @@ class Live2DController {
     }
   }
 
+  private get pointerInteractive() {
+    return this.info?.pointerInteractive ?? useSettings.getState().pointerInteractive;
+  }
+
+  private get scrollToResize() {
+    return this.info?.scrollToResize ?? useSettings.getState().scrollToResize;
+  }
+
   setLipSync(v: number) {
     this.lipValue = Math.max(0, Math.min(1, v));
   }
 
   setSpeaking(speaking: boolean) {
-    this.speaking = speaking;
     if (!speaking) this.lipValue = 0;
   }
 
@@ -164,34 +197,115 @@ class Live2DController {
     }
     for (const m of actions.motions ?? []) {
       try {
-        void this.model.motion(m.group, m.index);
+        void this.model.motion(m.group, m.index).catch(() => undefined);
       } catch {
         /* 模型没有该动作 */
       }
     }
   }
 
-  private bindTap(model: Live2DModel, info: ModelInfo) {
-    const tap = info.tapMotions ?? {};
-    if (Object.keys(tap).length === 0) return;
-    (model as unknown as { on(e: string, fn: (areas: string[]) => void): void }).on(
-      'hit',
-      (hitAreas: string[]) => {
-        if (this.dragging || this.dragArmed || this.pinch) return;
-        if (Date.now() < this.tapGuardUntil) return;
-        for (const area of hitAreas) {
-          const motions = tap[area];
-          if (!motions) continue;
-          for (const [group, index] of Object.entries(motions)) {
-            try {
-              void this.model?.motion(group || (info.idleMotionGroupName ?? 'Idle'), index);
-            } catch {
-              /* ignore */
-            }
-          }
+  // 回到模型默认表情：优先 model_dict 的 defaultEmotion，否则用第 0 个表情。
+  resetExpression() {
+    const model = this.model;
+    if (!model) return;
+    try {
+      const manager = (model.internalModel as unknown as {
+        motionManager?: { expressionManager?: { definitions?: unknown[] } };
+      }).motionManager;
+      const count = manager?.expressionManager?.definitions?.length ?? 0;
+      if (count === 0) return;
+      const target = this.info?.defaultEmotion ?? 0;
+      void model.expression(target);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private hitKeysAt(x: number, y: number): string[] {
+    const model = this.model;
+    if (!model) return [];
+    const point = model.toModelPosition(hitPoint.set(x, y), hitPoint);
+    const internal = model.internalModel as unknown as HitAreaHost & DrawableHost;
+    try {
+      const defs = internal.getHitAreaDefs?.() ?? [];
+      if (defs.length > 0) {
+        const keys: string[] = [];
+        for (const def of defs) {
+          if (def.index < 0 || !this.pointInDrawable(def.index, point)) continue;
+          if (def.id) keys.push(def.id);
+          if (def.name && def.name !== def.id) keys.push(def.name);
         }
-      },
-    );
+        return keys;
+      }
+    } catch {
+      /* fall through to PIXI hit test */
+    }
+    try {
+      return model.hitTest(x, y);
+    } catch {
+      return [];
+    }
+  }
+
+  private pointInDrawable(index: number, point: { x: number; y: number }) {
+    try {
+      const bounds = (this.model?.internalModel as unknown as DrawableHost).getDrawableBounds(
+        index,
+        scratchBounds,
+      );
+      return (
+        point.x >= bounds.x &&
+        point.x <= bounds.x + bounds.width &&
+        point.y >= bounds.y &&
+        point.y <= bounds.y + bounds.height
+      );
+    } catch {
+      return false;
+    }
+  }
+
+  // tapMotions 的值是权重不是索引：按命中区域取配置，没有命中则合并所有区域兜底。
+  private handleTap(clientX: number, clientY: number, downAt: number) {
+    if (Date.now() - downAt > TAP_MAX_MS) return;
+    if (Date.now() < this.tapGuardUntil) return;
+    if (!this.pointerInteractive) return;
+    const tap = this.info?.tapMotions ?? {};
+    if (Object.keys(tap).length === 0) return;
+
+    const p = this.toStage(clientX, clientY);
+    let motions: Record<string, number> = {};
+    for (const key of new Set(this.hitKeysAt(p.x, p.y))) {
+      const cfg = tap[key];
+      if (!cfg) continue;
+      motions = { ...cfg };
+      break;
+    }
+    if (Object.keys(motions).length === 0) {
+      for (const cfg of Object.values(tap)) {
+        for (const [group, weight] of Object.entries(cfg)) {
+          const value = Number(weight);
+          if (!Number.isFinite(value)) continue;
+          motions[group] = (motions[group] ?? 0) + value;
+        }
+      }
+    }
+
+    const entries = Object.entries(motions)
+      .map(([group, weight]) => [group, Number(weight)] as [string, number])
+      .filter(([, weight]) => Number.isFinite(weight) && weight > 0);
+    const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+    if (total <= 0) return;
+
+    let pick = Math.random() * total;
+    let group = entries[entries.length - 1][0];
+    for (const [name, weight] of entries) {
+      pick -= weight;
+      if (pick < 0) {
+        group = name;
+        break;
+      }
+    }
+    void this.model?.motion(group, undefined, MotionPriority.FORCE).catch(() => undefined);
   }
 
   // 取渲染出来的实际像素轮廓来构图：几何轮廓会把不可见网格算进去，主体会偏小。
@@ -368,6 +482,7 @@ class Live2DController {
   }
 
   private onWheel = (e: WheelEvent) => {
+    if (!this.scrollToResize) return;
     const p = this.toStage(e.clientX, e.clientY);
     if (!this.isOverModel(p.x, p.y)) return;
     e.preventDefault();
@@ -385,6 +500,7 @@ class Live2DController {
     const p = this.toStage(e.clientX, e.clientY);
     if (!this.isOverModel(p.x, p.y)) return;
     this.dragArmed = true;
+    this.pointerDownAt = Date.now();
     this.dragStart = { x: e.clientX, y: e.clientY };
     this.dragOrigin = { x: this.offset.x, y: this.offset.y };
   };
@@ -467,63 +583,54 @@ class Live2DController {
     }
   };
 
-  private onPointerUp = (e: PointerEvent) => {
+  private onPointerUp = (e: PointerEvent) => this.endPointer(e, true);
+
+  private onPointerCancel = (e: PointerEvent) => this.endPointer(e, false);
+
+  private endPointer(e: PointerEvent, allowTap: boolean) {
+    const wasPinching = this.pinch !== null;
     if (this.pointers.delete(e.pointerId) && this.pinch) {
       this.pinch = null;
       this.tapGuardUntil = Date.now() + TAP_GUARD_MS;
       this.zoomTarget = this.zoom;
     }
+    const wasArmed = this.dragArmed;
+    const wasDragging = this.dragging;
+    const downAt = this.pointerDownAt;
+    const downX = this.dragStart.x;
+    const downY = this.dragStart.y;
     this.dragArmed = false;
     if (this.dragging) {
       this.dragging = false;
       this.setCursor(this.hovering ? 'grab' : '');
     }
-  };
+    if (allowTap && wasArmed && !wasDragging && !wasPinching && !this.pinch) {
+      this.handleTap(downX, downY, downAt);
+    }
+  }
 
-  private applyLipSync() {
+  private applyLipSync = () => {
     if (!this.model || !this.mouthKind) return;
     const v = this.lipValue;
     try {
       const internal = this.model.internalModel as unknown as Record<string, any>;
-      if (this.mouthKind === 'cubism4') {
-        internal.coreModel.setParameterValueById('ParamMouthOpenY', v);
-      } else {
-        internal.live2DModel.setParamFloat?.('PARAM_MOUTH_OPEN_Y', v);
+      for (const id of this.lipSyncIds) {
+        if (this.mouthKind === 'cubism4') {
+          internal.coreModel.setParameterValueById(id, v);
+        } else {
+          internal.live2DModel.setParamFloat?.(id, v);
+        }
       }
     } catch {
       /* 模型结构异常时忽略 */
     }
-  }
-
-  private startIdle() {
-    this.stopIdle();
-    const group = this.info?.idleMotionGroupName;
-    if (!group || !this.model) return;
-    const tick = () => {
-      if (!this.speaking && this.model) {
-        try {
-          void this.model.motion(group);
-        } catch {
-          /* ignore */
-        }
-      }
-      this.idleTimer = window.setTimeout(tick, 9000 + Math.random() * 8000);
-    };
-    this.idleTimer = window.setTimeout(tick, 4000);
-  }
-
-  private stopIdle() {
-    if (this.idleTimer !== null) {
-      clearTimeout(this.idleTimer);
-      this.idleTimer = null;
-    }
-  }
+  };
 
   destroy() {
     window.removeEventListener('resize', this.resizeHandler);
     window.removeEventListener('pointermove', this.onPointerMove);
     window.removeEventListener('pointerup', this.onPointerUp);
-    window.removeEventListener('pointercancel', this.onPointerUp);
+    window.removeEventListener('pointercancel', this.onPointerCancel);
     this.canvas?.removeEventListener('wheel', this.onWheel);
     this.canvas?.removeEventListener('pointerdown', this.onPointerDown);
     this.canvas = null;
@@ -531,7 +638,6 @@ class Live2DController {
     this.dragging = false;
     this.pointers.clear();
     this.pinch = null;
-    this.stopIdle();
     this.app?.destroy(true);
     this.app = null;
     this.model = null;

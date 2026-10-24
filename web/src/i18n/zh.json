@@ -58,6 +58,9 @@
     "logout": "退出登录",
     "group": "群聊",
     "speech": "语音",
+    "live2d": "Live2D",
+    "pointerInteractive": "鼠标交互",
+    "scrollToResize": "滚轮缩放",
     "proactiveSpeak": "让 AI 主动说话"
   },
   "group": {

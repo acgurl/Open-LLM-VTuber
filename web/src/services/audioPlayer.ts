@@ -56,6 +56,7 @@ class AudioPlayer {
   private maybeAck() {
     if (this.synthComplete && !this.draining && this.queue.length === 0) {
       this.synthComplete = false;
+      live2d.resetExpression();
       wsClient.send({ type: 'frontend-playback-complete' });
     }
   }

@@ -23,6 +23,9 @@ export interface ModelInfo {
   initialYshift?: number;
   kXOffset?: number;
   idleMotionGroupName?: string;
+  defaultEmotion?: number | string;
+  pointerInteractive?: boolean;
+  scrollToResize?: boolean;
   emotionMap?: Record<string, number>;
   motionMap?: Record<string, MotionRef>;
   tapMotions?: Record<string, Record<string, number>>;

@@ -10,6 +10,8 @@ interface SettingsState {
   historyOpen: boolean;
   settingsOpen: boolean;
   switching: boolean; // 角色切换 loading
+  pointerInteractive: boolean;
+  scrollToResize: boolean;
   setSubtitlesOn: (v: boolean) => void;
   setBackground: (url: string | null) => void;
   setBackgroundFiles: (f: string[]) => void;
@@ -18,6 +20,8 @@ interface SettingsState {
   setHistoryOpen: (v: boolean) => void;
   setSettingsOpen: (v: boolean) => void;
   setSwitching: (v: boolean) => void;
+  setPointerInteractive: (v: boolean) => void;
+  setScrollToResize: (v: boolean) => void;
 }
 
 const persisted = (key: string): string | null => {
@@ -37,6 +41,8 @@ export const useSettings = create<SettingsState>((set) => ({
   historyOpen: false,
   settingsOpen: false,
   switching: false,
+  pointerInteractive: persisted('ollmvt.l2d.pointer') !== '0',
+  scrollToResize: persisted('ollmvt.l2d.scroll') !== '0',
   setSubtitlesOn: (subtitlesOn) => {
     try {
       localStorage.setItem('ollmvt.subtitles', subtitlesOn ? '1' : '0');
@@ -56,4 +62,16 @@ export const useSettings = create<SettingsState>((set) => ({
   setHistoryOpen: (historyOpen) => set({ historyOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setSwitching: (switching) => set({ switching }),
+  setPointerInteractive: (pointerInteractive) => {
+    try {
+      localStorage.setItem('ollmvt.l2d.pointer', pointerInteractive ? '1' : '0');
+    } catch { /* ignore */ }
+    set({ pointerInteractive });
+  },
+  setScrollToResize: (scrollToResize) => {
+    try {
+      localStorage.setItem('ollmvt.l2d.scroll', scrollToResize ? '1' : '0');
+    } catch { /* ignore */ }
+    set({ scrollToResize });
+  },
 }));
