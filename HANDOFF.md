@@ -434,8 +434,26 @@ ssh oracle "docker restart open-llm-vtuber"
 - 公网新资源 `/assets/index-CUMe6bnS.js`、`/assets/index-C8VRA23Y.css` 均 200；容器日志无 ERROR/Traceback。新前端产物：入口 `index-CUMe6bnS.js`、VAD chunk `index-BYcNb3V_.js`、CSS `index-C8VRA23Y.css`。
 - 未做：浏览器端在 HTTPS 生产域下访问 `http://127.0.0.1` 的 Local Network Access / CORS 实测（本地开发域已通过），需要真实用户环境授权后验证；CF HTML 入口缓存未手动 purge（匿名入口仍 401/BYPASS）。
 
+### SSE 兼容修复部署（2026-10-24）
+
+- 问题：标准 MCP 配置使用 `mcpServers`，并用 `type: "sse"` 表示 legacy HTTP+SSE；原实现只接受 `mcp_servers` 且只支持 Streamable HTTP。用户本机 `127.0.0.1:8788` 的 `cuc-sse` 因此无法保存/连接。
+- 代码：源码 `46f7c21`、父仓 bundle 指针 `bfccc3d`、前端子模块 `23f8be7`。
+  - 配置接受 `mcp_servers` / `mcpServers`，条目接受 `type` / `transport`（`sse`、`http`、`streamable-http`，拒绝 `stdio`）。
+  - 新增浏览器端 SSE client（`localSseMcpClient.ts`）：GET SSE 流、解析 `endpoint` 事件、把原 URL 的查询参数（如 `?key=...`）追加到 `/messages` 端点，再走 POST/SSE JSON-RPC。
+  - 后端 `MCPClient` 增加 `sse_client` 分支；`MCPServer.transport` 持久化到 schema v5 的 `transport` 列；`local-mcp-config` 下发 `transport`。
+  - 设置页显示 `SSE` 徽标，继续保留本地/远程分类。
+- 生产镜像 `open-llm-vtuber:1.2.1-user-mcp-sse-20261024`，`run-container.sh` 已切换，旧 `1.2.1-user-mcp-20261024` 保留回滚；备份 `data/backups/user-mcp-sse-20261024-172827/` 与 `run-container.sh.bak.usermcpsse.20261024`。
+- 验证：
+  - 264 个单测通过（镜像内 `uv run --frozen python -m unittest discover -s tests`）；schema `[1..5]`，`user_mcp_servers` 已有 `transport`。
+  - 本机真实 SSE 服务（用户 Windows，`127.0.0.1:8788`）：页面注册 7 个工具（`cuc_status`/`cuc_timetable`/`cuc_card`/`cuc_activity`/`cuc_message`/`cuc_visitor`/`cuc_request`），假 LLM 调用 `cuc_status` 成功返回 643 字符状态 JSON。
+  - 生产签名会话冒烟：PUT `mcpServers` + `type: sse` → `mode=local`、`transport=sse`；WS `local-mcp-config` 同样带 `transport: sse`；临时用户/配置已清理。
+  - 公网 `/healthz` 200，未登录 `/api/mcp/config` 401；新资源 `assets/index-CqRZKQEN.js`、`assets/index-CU-Yp-c1.css` 200；容器日志无 ERROR/Traceback；`mcp_servers.json`/`conf.yaml` 哈希未变。
+  - 本机 SSE 服务的 CORS：`Access-Control-Allow-Origin: *`，允许 `Content-Type` 等预检头；生产域 `https://vtuber.acgurl.cn` 可访问。HTTPS 页面访问 `http://127.0.0.1` 仍可能需要浏览器 Local Network Access 授权。
+- 使用方式：在生产设置页把 `mcpServers` JSON 保存；刷新/重连后浏览器会连接本机 SSE 服务。每用户独立配置。
+
 ### 回滚
 
-- 恢复 `run-container.sh.bak.usermcp.20261024`（或把镜像改回 `1.2.1-history-refresh-20261023`）并 `bash run-container.sh`。
-- `user_mcp_servers` 表与 `mode` 列均为新增，旧镜像不会读写/依赖，无需删表；如需完全恢复数据库，用备份目录的 `open_llm_vtuber.db`。
+- 恢复 `run-container.sh.bak.usermcpsse.20261024`（或把镜像改回 `1.2.1-user-mcp-20261024`）并 `bash run-container.sh`，可回退 SSE 兼容修复。
+- 再往前回退到 `run-container.sh.bak.usermcp.20261024` / `1.2.1-history-refresh-20261023`，可撤销整个用户 MCP 功能。
+- `user_mcp_servers` 表及 `mode`/`transport` 列均为新增，旧镜像不会读写/依赖，无需删表；如需完全恢复数据库，用对应备份目录的 `open_llm_vtuber.db`。
 - 前端可回退到备份 `frontend.tar.gz`；旧 hash 资源仍在服务器，打开中的页面不受影响。
