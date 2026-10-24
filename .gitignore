@@ -1,6 +1,10 @@
 # ignore the user configuration file
 conf.yaml
 
+# runtime model selection (per-deployment, not source)
+/model_dict.json
+/conf/model_dict.json
+
 # ignore non-default background images
 /backgrounds/*
 !/backgrounds/README.md
