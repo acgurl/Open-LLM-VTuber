@@ -7,13 +7,17 @@ export function ToolCallCard({ entry }: { entry: ToolEntry }) {
   const [open, setOpen] = useState(entry.status === 'running');
   return (
     <div className={`tool-card status-${entry.status}`}>
-      <button className="tool-head" onClick={() => setOpen((v) => !v)}>
+      <button className="tool-head" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <span className={`tool-dot ${entry.status}`} />
         <span className="tool-name">{entry.tool_name}</span>
         <span className="tool-status">{t(`tool.${entry.status}`)}</span>
         <span className="think-chevron">▸</span>
       </button>
-      {open && <pre className="tool-body">{entry.content}</pre>}
+      <div className={`collapsible${open ? ' open' : ''}`} aria-hidden={!open}>
+        <div className="collapsible-inner">
+          <pre className="tool-body">{entry.content}</pre>
+        </div>
+      </div>
     </div>
   );
 }

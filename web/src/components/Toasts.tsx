@@ -6,7 +6,11 @@ export function Toasts() {
   return (
     <div className="toasts">
       {toasts.map((t) => (
-        <div key={t.id} className={`toast ${t.level}`} onClick={() => dismiss(t.id)}>
+        <div
+          key={t.id}
+          className={`toast ${t.level}${t.leaving ? ' leaving' : ''}`}
+          onClick={() => dismiss(t.id)}
+        >
           {t.text}
         </div>
       ))}

@@ -10,6 +10,7 @@ import {
   deleteHistory,
 } from '../services/actions';
 import { stripTags, buildTagSet } from '../utils/text';
+import { usePresence } from '../hooks/usePresence';
 
 export function HistoryDrawer() {
   const { t } = useTranslation();
@@ -18,13 +19,14 @@ export function HistoryDrawer() {
   const histories = useHistory((s) => s.histories);
   const currentUid = useHistory((s) => s.currentUid);
   const modelInfo = useConnection((s) => s.modelInfo);
+  const presence = usePresence(open, 220);
 
   // 抽屉打开时总是刷新列表
   useEffect(() => {
     if (open) refreshHistories();
   }, [open]);
 
-  if (!open) return null;
+  if (!presence.mounted) return null;
   const tagSet = buildTagSet(modelInfo);
 
   const snippet = (content?: string) => {
@@ -35,8 +37,11 @@ export function HistoryDrawer() {
 
   return (
     <>
-      <div className="drawer-mask" onClick={() => setOpen(false)} />
-      <aside className="drawer left">
+      <div
+        className={`drawer-mask${presence.closing ? ' closing' : ''}`}
+        onClick={() => setOpen(false)}
+      />
+      <aside className={`drawer left${presence.closing ? ' closing' : ''}`}>
         <div className="drawer-head">
           <span>{t('history.title')}</span>
           <button className="icon-btn" aria-label={t('drawer.close')} onClick={() => setOpen(false)}>

@@ -16,6 +16,7 @@ import {
 } from '../services/actions';
 import { backgroundUrl } from '../utils/text';
 import i18n from '../i18n';
+import { usePresence } from '../hooks/usePresence';
 
 export function SettingsDrawer() {
   const { t } = useTranslation();
@@ -33,6 +34,7 @@ export function SettingsDrawer() {
   const scrollToResize = useSettings((s) => s.scrollToResize);
   const setScrollToResize = useSettings((s) => s.setScrollToResize);
   const displayName = useConnection((s) => s.displayName);
+  const presence = usePresence(open, 220);
 
   useEffect(() => {
     if (open) {
@@ -42,12 +44,15 @@ export function SettingsDrawer() {
     }
   }, [open]);
 
-  if (!open) return null;
+  if (!presence.mounted) return null;
 
   return (
     <>
-      <div className="drawer-mask" onClick={() => setOpen(false)} />
-      <aside className="drawer right">
+      <div
+        className={`drawer-mask${presence.closing ? ' closing' : ''}`}
+        onClick={() => setOpen(false)}
+      />
+      <aside className={`drawer right${presence.closing ? ' closing' : ''}`}>
         <div className="drawer-head">
           <span>{t('settings.title')}</span>
           <button className="icon-btn" aria-label={t('drawer.close')} onClick={() => setOpen(false)}>

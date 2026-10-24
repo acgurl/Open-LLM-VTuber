@@ -4,6 +4,7 @@ export interface Toast {
   id: number;
   text: string;
   level: 'info' | 'error' | 'success';
+  leaving: boolean;
 }
 
 let toastSeq = 0;
@@ -14,16 +15,27 @@ interface ToastState {
   dismiss: (id: number) => void;
 }
 
-export const useToasts = create<ToastState>((set) => ({
+export const useToasts = create<ToastState>((set, get) => ({
   toasts: [],
   push: (text, level = 'info') => {
     const id = ++toastSeq;
-    set((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, level }] }));
+    set((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, level, leaving: false }] }));
     setTimeout(() => {
-      set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
+      useToasts.getState().dismiss(id);
     }, 4200);
   },
-  dismiss: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+  dismiss: (id) => {
+    const current = get().toasts.find((t) => t.id === id);
+    if (!current || current.leaving) return;
+
+    set((s) => ({
+      toasts: s.toasts.map((t) => (t.id === id ? { ...t, leaving: true } : t)),
+    }));
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    setTimeout(() => {
+      set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
+    }, reducedMotion ? 0 : 160);
+  },
 }));
 
 export const toast = (text: string, level: Toast['level'] = 'info') =>

@@ -10,6 +10,7 @@ import { camera } from '../services/camera';
 import { fileToBase64 } from '../utils/base64';
 import { captureCamera, captureScreen } from '../utils/capture';
 import { LIMITS, type ImagePayload, type ImageSource } from '../protocol/types';
+import { usePresence } from '../hooks/usePresence';
 
 interface PendingImage {
   payload: ImagePayload;
@@ -25,6 +26,7 @@ export function InputBar() {
   const [images, setImages] = useState<PendingImage[]>([]);
   const [micStarting, setMicStarting] = useState(false);
   const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
+  const mediaMenuPresence = usePresence(mediaMenuOpen, 140);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const grabAndAdd = async (source: 'camera' | 'screen') => {
@@ -139,8 +141,8 @@ export function InputBar() {
           >
             <ImageIcon />
           </button>
-          {mediaMenuOpen && (
-            <div className="media-menu">
+          {mediaMenuPresence.mounted && (
+            <div className={`media-menu${mediaMenuPresence.closing ? ' closing' : ''}`}>
               <button
                 onClick={() => {
                   setMediaMenuOpen(false);
