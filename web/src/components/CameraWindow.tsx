@@ -71,11 +71,6 @@ export function CameraWindow() {
     const rect = e.currentTarget.getBoundingClientRect();
     drag.current = { x: e.clientX, y: e.clientY, left: rect.left, top: rect.top, moved: false };
     movedRef.current = false;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      /* 合成事件没有真实指针，忽略 */
-    }
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -88,6 +83,12 @@ export function CameraWindow() {
       d.moved = true;
       movedRef.current = true;
       setDragging(true);
+      try {
+        // 越过阈值才捕获指针：在 pointerdown 就捕获会把后续 click 重定向到窗口，按钮点不动
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        /* 合成事件没有真实指针，忽略 */
+      }
     }
     const next = clampTo(
       { left: d.left + dx, top: d.top + dy },
