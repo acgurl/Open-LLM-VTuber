@@ -10,6 +10,13 @@ import { wsClient } from './websocket';
 import { live2d } from '../live2d/controller';
 import { groupBridge } from './groupBridge';
 import { saveCachedModel } from './modelCache';
+import {
+  configureLocalMcpServers,
+  handleLocalToolCall,
+  onLocalMcpError,
+  onLocalMcpRegistered,
+  onLocalMcpUnregistered,
+} from './localMcp';
 import i18n from '../i18n';
 import type { ServerMessage } from '../protocol/types';
 
@@ -144,6 +151,26 @@ export function handleServerMessage(msg: ServerMessage) {
 
     case 'heartbeat-ack':
       wsClient.markAlive();
+      break;
+
+    case 'local-mcp-config':
+      void configureLocalMcpServers(msg.servers ?? []);
+      break;
+
+    case 'local-tool-call':
+      void handleLocalToolCall(msg);
+      break;
+
+    case 'local-mcp-registered':
+      onLocalMcpRegistered(msg);
+      break;
+
+    case 'local-mcp-unregistered':
+      onLocalMcpUnregistered(msg);
+      break;
+
+    case 'local-mcp-error':
+      onLocalMcpError(msg);
       break;
 
     case 'error':

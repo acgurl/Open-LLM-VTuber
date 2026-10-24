@@ -1163,6 +1163,132 @@ body,
   cursor: default;
 }
 
+/* ---------- MCP ---------- */
+.mcp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 8px;
+}
+
+.mcp-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.mcp-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.mcp-item-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 0.9em;
+}
+
+.mcp-item-title > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-badge {
+  font-size: 0.72em;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.mcp-badge.remote {
+  background: rgba(138, 180, 255, 0.15);
+  color: var(--accent);
+}
+
+.mcp-badge.local {
+  background: rgba(183, 140, 255, 0.15);
+  color: var(--accent-2);
+}
+
+.mcp-editor {
+  width: 100%;
+  min-height: 220px;
+  box-sizing: border-box;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 10px 12px;
+  font-family: 'JetBrains Mono', Consolas, monospace;
+  font-size: 0.8em;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.mcp-error {
+  color: var(--danger);
+  font-size: 0.82em;
+  padding: 4px 0;
+}
+
+.mcp-url {
+  margin-top: 4px;
+  color: var(--dim);
+  font-size: 0.78em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-tools {
+  margin-top: 4px;
+  color: var(--accent);
+  font-size: 0.78em;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.mcp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.mcp-empty,
+.mcp-hint {
+  color: var(--dim);
+  font-size: 0.82em;
+  line-height: 1.5;
+  padding: 4px 0;
+}
+
+.mcp-status {
+  font-size: 0.82em;
+  color: var(--dim);
+  word-break: break-word;
+}
+
+.mcp-status.connected {
+  color: var(--accent);
+}
+
+.mcp-status.connecting {
+  color: var(--accent-2);
+}
+
+.mcp-status.error {
+  color: var(--danger);
+}
+
 /* ---------- toast ---------- */
 .toasts {
   position: fixed;

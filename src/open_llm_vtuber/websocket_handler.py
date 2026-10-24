@@ -19,6 +19,7 @@ from .utils.stream_audio import prepare_audio_payload
 from .utils.audio import MAX_AUDIO_SAMPLES
 from .config_manager.utils import scan_config_alts_directory, scan_bg_directory
 from .storage import HistoryNotFoundError
+from .mcpp.user_servers import split_user_mcp_servers, validate_server_id
 from .conversations.conversation_handler import (
     handle_conversation_trigger,
     handle_group_interrupt,
@@ -32,6 +33,7 @@ MAX_TEXT_INPUT_CHARS = 4000
 MAX_IMAGES_PER_MESSAGE = 4
 MAX_IMAGE_DATA_CHARS = 8 * 1024 * 1024
 IMAGE_SOURCES = {"camera", "screen", "shared", "clipboard", "upload"}
+MAX_LOCAL_MCP_PAYLOAD_CHARS = 256 * 1024
 
 
 class WSMessage(TypedDict, total=False):
@@ -98,6 +100,11 @@ class WebSocketHandler:
             "audio-play-start": self._handle_audio_play_start,
             "request-init-config": self._handle_init_config_request,
             "heartbeat": self._handle_heartbeat,
+            "register-local-mcp": self._handle_register_local_mcp,
+            "unregister-local-mcp": self._handle_unregister_local_mcp,
+            # Resolved by message_handler before routing; kept out of the
+            # unknown-message warning path.
+            "local-tool-result": self._handle_local_tool_result,
         }
 
     def try_reserve_connection(
@@ -278,6 +285,18 @@ class WebSocketHandler:
             json.dumps(session_service_context.model_conf_payload(client_uid))
         )
 
+        # The backend decides which user MCP entries are local; the browser
+        # connects to those and registers their tools over WebSocket.
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "local-mcp-config",
+                    "servers": session_service_context.get_local_mcp_config(),
+                },
+                ensure_ascii=False,
+            )
+        )
+
         # Send initial group status
         await self.send_group_update(websocket, client_uid)
 
@@ -291,6 +310,16 @@ class WebSocketHandler:
         repository = self.default_context_cache.history_repository
         if repository is not None:
             await repository.ensure_user(identity.user_id, identity.display_name)
+
+        remote_mcp_servers: list[dict] = []
+        local_mcp_servers: list[dict] = []
+        if repository is not None:
+            try:
+                remote_mcp_servers, local_mcp_servers = split_user_mcp_servers(
+                    await repository.list_user_mcp_servers(user_id=identity.user_id)
+                )
+            except Exception:
+                logger.exception("Failed to load per-user MCP servers")
 
         session_service_context = ServiceContext()
         await session_service_context.load_cache(
@@ -313,6 +342,8 @@ class WebSocketHandler:
             client_uid=client_uid,
             history_repository=self.default_context_cache.history_repository,
             user_id=identity.user_id,
+            user_mcp_servers=remote_mcp_servers,
+            local_mcp_servers=local_mcp_servers,
         )
         # Each connection needs its own agent state; the LLM client stays shared.
         await session_service_context.init_session_agent(
@@ -805,6 +836,100 @@ class WebSocketHandler:
             context = self.default_context_cache
 
         await websocket.send_text(json.dumps(context.model_conf_payload(client_uid)))
+
+    async def _send_local_mcp_error(
+        self, websocket: WebSocket, server_id, message: str
+    ) -> None:
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "local-mcp-error",
+                    "server_id": server_id if isinstance(server_id, str) else "",
+                    "message": message,
+                },
+                ensure_ascii=False,
+            )
+        )
+
+    async def _handle_register_local_mcp(
+        self, websocket: WebSocket, client_uid: str, data: WSMessage
+    ) -> None:
+        """Register tool schemas from an MCP server running in the browser."""
+        context = self.client_contexts.get(client_uid)
+        if context is None:
+            return
+
+        raw_server_id = data.get("server_id")
+        try:
+            server_id = validate_server_id(raw_server_id)
+            title = data.get("name")
+            name = title if isinstance(title, str) else server_id
+            tools = data.get("tools")
+            if not isinstance(tools, list):
+                raise ValueError("tools must be a list")
+            if len(json.dumps(data, ensure_ascii=False)) > MAX_LOCAL_MCP_PAYLOAD_CHARS:
+                raise ValueError("Local MCP registration payload is too large")
+            exposed_tools = context.register_local_mcp_server(
+                server_id=server_id,
+                tools=tools,
+            )
+        except Exception as exc:
+            if isinstance(exc, ValueError):
+                message = str(exc)
+            else:
+                logger.exception("Failed to register local MCP tools")
+                message = "Failed to register local MCP server"
+            logger.warning(
+                f"Local MCP registration failed for client {client_uid}: {message}"
+            )
+            await self._send_local_mcp_error(websocket, raw_server_id, message)
+            return
+
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "local-mcp-registered",
+                    "server_id": server_id,
+                    "server_name": name,
+                    "tools": exposed_tools,
+                },
+                ensure_ascii=False,
+            )
+        )
+        logger.info(
+            f"Local MCP server '{server_id}' registered "
+            f"{len(exposed_tools)} tool(s) for client {client_uid}"
+        )
+
+    async def _handle_unregister_local_mcp(
+        self, websocket: WebSocket, client_uid: str, data: WSMessage
+    ) -> None:
+        context = self.client_contexts.get(client_uid)
+        if context is None:
+            return
+        try:
+            server_id = validate_server_id(data.get("server_id"))
+        except ValueError as exc:
+            await self._send_local_mcp_error(websocket, data.get("server_id"), str(exc))
+            return
+
+        removed = context.unregister_local_mcp_server(server_id)
+        await websocket.send_text(
+            json.dumps(
+                {
+                    "type": "local-mcp-unregistered",
+                    "server_id": server_id,
+                    "success": removed,
+                },
+                ensure_ascii=False,
+            )
+        )
+
+    async def _handle_local_tool_result(
+        self, websocket: WebSocket, client_uid: str, data: WSMessage
+    ) -> None:
+        # message_handler.wait_for_response already consumed the payload.
+        return
 
     async def _handle_heartbeat(
         self, websocket: WebSocket, client_uid: str, data: WSMessage

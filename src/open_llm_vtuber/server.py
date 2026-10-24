@@ -17,6 +17,7 @@ from starlette.staticfiles import StaticFiles as StarletteStaticFiles
 
 from .auth import AuthManager, AuthRedirectMiddleware, init_auth_routes
 from .routes import init_client_ws_route, init_webtool_routes, init_proxy_route
+from .mcp_routes import init_user_mcp_routes
 from .service_context import ServiceContext
 from .config_manager.auth import AuthConfig
 from .config_manager.storage import StorageConfig
@@ -161,6 +162,12 @@ class WebSocketServer:
         )
         self.app.include_router(
             init_webtool_routes(
+                default_context_cache=self.default_context_cache,
+                auth=self.auth,
+            ),
+        )
+        self.app.include_router(
+            init_user_mcp_routes(
                 default_context_cache=self.default_context_cache,
                 auth=self.auth,
             ),

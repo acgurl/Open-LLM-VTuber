@@ -23,6 +23,24 @@ class HistoryMessage(TypedDict, total=False):
     avatar: str
 
 
+class UserMCPServer(TypedDict, total=False):
+    """A user-scoped remote MCP server configuration.
+
+    Headers contain user-supplied credentials and are never returned to the
+    browser verbatim by the HTTP API.
+    """
+
+    id: str
+    user_id: str
+    name: str
+    url: str
+    headers: dict[str, str]
+    enabled: bool
+    mode: str  # "remote" (backend connects) or "local" (browser connects)
+    created_at: str
+    updated_at: str
+
+
 class HistoryNotFoundError(LookupError):
     """Raised when a history does not exist for the requested user/character."""
 
@@ -224,4 +242,56 @@ class HistoryRepository(ABC):
         """Bulk-insert a history with original timestamps.
 
         Returns False when the same history id or legacy path already exists.
+        """
+
+    # Each user may attach MCP servers that only their own sessions can use.
+    # The global mcp_servers.json registry is deliberately not part of this
+    # interface: it is deployment configuration, not user data.
+
+    @abstractmethod
+    async def list_user_mcp_servers(self, *, user_id: str) -> list[UserMCPServer]:
+        """Return every MCP server owned by this user."""
+
+    @abstractmethod
+    async def create_user_mcp_server(
+        self,
+        *,
+        user_id: str,
+        name: str,
+        url: str,
+        headers: dict[str, str],
+        enabled: bool = True,
+        mode: str = "remote",
+    ) -> UserMCPServer:
+        """Create a user MCP server and return it."""
+
+    @abstractmethod
+    async def update_user_mcp_server(
+        self,
+        *,
+        user_id: str,
+        server_id: str,
+        name: str,
+        url: str,
+        headers: dict[str, str],
+        enabled: bool,
+        mode: str = "remote",
+    ) -> UserMCPServer | None:
+        """Replace a user MCP server's fields; returns None when not owned."""
+
+    @abstractmethod
+    async def delete_user_mcp_server(self, *, user_id: str, server_id: str) -> bool:
+        """Delete a user MCP server; returns False when not owned."""
+
+    @abstractmethod
+    async def replace_user_mcp_servers(
+        self,
+        *,
+        user_id: str,
+        servers: list[dict],
+    ) -> list[UserMCPServer]:
+        """Atomically apply a whole user config document.
+
+        Rows whose names are unchanged keep their ids (so local tool
+        namespaces stay stable); removed names are deleted.
         """

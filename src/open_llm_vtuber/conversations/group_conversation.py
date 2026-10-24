@@ -1,5 +1,6 @@
 from typing import Any, Dict, List, Optional, Union
 import asyncio
+import json
 from loguru import logger
 from fastapi import WebSocket
 import numpy as np
@@ -337,6 +338,12 @@ async def process_member_response(
     """Process group member's response, handling text/audio and tool status events."""
 
     async def send_text_delta(message: Dict[str, Any]) -> None:
+        if message.get("type") == "tool_call_status" and message.get("scoped"):
+            # User/browser-scoped MCP tools may expose personal files or
+            # credentials in their input/results; keep them on the owner's
+            # socket instead of broadcasting to the group.
+            await channels.text(json.dumps(message, ensure_ascii=False))
+            return
         if broadcast_func and group_members:
             await broadcast_func(group_members, message)
 

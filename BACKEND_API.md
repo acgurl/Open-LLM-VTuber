@@ -1,8 +1,8 @@
 # Open-LLM-VTuber 后端接口文档（面向新前端实现）
 
-基线：本仓库 `main` 分支，2026-10-23 代码状态（父仓库提交 `32840ac`），**含 2026-10-23 的服务端 VAD 采样归一化修复**（`websocket_handler.py:679-685`）。
+基线：本仓库 `main` 分支，2026-10-23 代码状态（父仓库提交 `32840ac`），**含 2026-10-23 的服务端 VAD 采样归一化修复**（`websocket_handler.py:679-685`）；**2026-10-25 增加按用户 MCP 与浏览器本地 MCP**（见[第 22 节](#22-用户-mcp-与浏览器本地-mcp2026-10-25)）。
 读者：要从零写一个 Web/桌面前端的人。本文只描述**后端对外契约**，不描述现有 React 前端的实现。
-所有字段名、常量、路径均与源码逐条核对，引用格式为 `文件:行号`。
+所有字段名、常量、路径均与源码逐条核对，引用格式为 `文件:行号`。**2026-10-25 的用户/本地 MCP 改动在部分文件顶部新增了 import、常量和 schema，旧章节的行号可能整体偏移；字段与常量语义未变，行号以当前源码为准。**
 
 ---
 
@@ -29,6 +29,7 @@
 19. [已知坑（实现前必读）](#19-已知坑实现前必读)
 20. [新前端实现清单](#20-新前端实现清单)
 21. [最小可用客户端伪代码](#21-最小可用客户端伪代码)
+22. [用户 MCP 与浏览器本地 MCP（2026-10-25）](#22-用户-mcp-与浏览器本地-mcp2026-10-25)
 - [附录 A：常量索引](#附录-a常量索引)
 - [附录 B：消息类型总索引](#附录-b消息类型总索引)
 
@@ -151,6 +152,9 @@ Cookie（`auth/manager.py`）：
 | GET | `/auth/login`、`/auth/callback`、`/auth/logout` | 公开 | 302 / JSON 错误 | `auth/routes.py` |
 | POST | `/asr` | oidc 下需会话 | multipart `file` → `{"text":"..."}`；错误见第 16 节 | `routes.py:344-382` |
 | GET | `/live2d-models/info` | 公开前缀 | `{"type":"live2d-models/info","count":N,"characters":[{"name","avatar","model_path"}]}` | `routes.py:299-342` |
+| GET | `/api/mcp/config` | oidc 下需会话 | 当前用户的统一 MCP 配置：`{"config":{"mcp_servers":{...}},"servers":[{id,name,url,headers,mode,enabled}]}`；headers 脱敏 | `mcp_routes.py` |
+| PUT | `/api/mcp/config` | oidc 下需会话 | 全量保存 `{"config":{"mcp_servers":{...}}}`；后端按 URL 分类 local/remote；见 22.2 | `mcp_routes.py` |
+| POST | `/api/mcp/config/test` | oidc 下需会话 | `{server_id}`；remote 返回 `{"mode":"remote","tools":[...]}`，local 返回 `{"mode":"local","tools":[]}` | `mcp_routes.py` |
 | GET | `/web-tool`、`/web_tool` | 公开 | 302 → `/web-tool/index.html` | `routes.py:289-297` |
 | WS | `/client-ws` | 见 3.4 | — | `routes.py:182` |
 | WS | `/audio-ws?client_uid=` | 见 3.4 | — | `routes.py:225` |
@@ -276,6 +280,20 @@ Cookie（`auth/manager.py`）：
 | `audio-play-start` | `display_text`: object | 仅群聊有效：告知服务端"我开始播放这句了"，服务端把一条静音载荷转发给其他成员用于口型/字幕同步 |
 
 详见[第 14 节](#14-群聊)。
+
+### 5.7 浏览器本地 MCP
+
+用户配置页只有**一份 JSON**（与 `mcp_servers.json` 同形状）。后端解析后判定每个条目是 `remote`（后端连接）还是 `local`（浏览器连接）；本地条目会通过服务端的 `local-mcp-config` 消息下发，浏览器再连自己的地址并注册工具。后端不会反向访问用户 localhost。完整流程见[第 22 节](#22-用户-mcp-与浏览器本地-mcp2026-10-25)。
+
+| type | 字段 | 说明 |
+| --- | --- | --- |
+| `register-local-mcp` | `server_id`: string（`[A-Za-z0-9_-]{1,64}`，**必须来自 `local-mcp-config` 的 `server_id`**）、`name`: string（≤64，仅展示）、`tools`: array | 注册/替换一个浏览器侧 MCP 的工具列表。每次 WS 连接/重连后都要重发。响应 `local-mcp-registered` 或 `local-mcp-error` |
+| `unregister-local-mcp` | `server_id`: string | 注销；响应 `local-mcp-unregistered` |
+| `local-tool-result` | `request_id`: string、`server_id`: string、`is_error`: bool、`content_items`: array | 对 `local-tool-call` 的回执。由 `MessageHandler` 按 `(type, request_id)` 关联，不进入普通路由；不要带错误 `request_id` |
+
+`tools` 元素：`{"name":"...","description":"...","inputSchema":{...}}`；单个 `inputSchema` ≤ 64 KiB，单次注册消息 ≤ 256 KiB。
+
+`content_items` 元素建议使用 `{"type":"text","text":"..."}` 或 `{"type":"image","data":"<base64>","mimeType":"image/png"}`；后端只保留 `text/data/mimeType/url/altText` 字段，最多 64 项，总文本/数据 ≤ 512 KiB。
 
 ---
 
@@ -414,8 +432,21 @@ Cookie（`auth/manager.py`）：
 | `timestamp` | UTC ISO-8601，尾部带 `Z` |
 | `name` | 角色名，转发前注入（`conversation_utils.py:163`） |
 | `browser_view` | **可选**，仅 `stagehand_navigate` 成功时携带（`tool_executor.py:282`） |
+| `scoped` | **可选**，`true` 表示用户 HTTP / 浏览器本地 MCP 工具；群聊中该状态只发给工具所有者，不群播 |
 
 内部的 `final_tool_results` 事件只给 LLM，**不会发给客户端**（`tool_executor.py:302`）。群聊中该消息群播。
+
+**用户/浏览器 MCP 的消息**（详见[第 22 节](#22-用户-mcp-与浏览器本地-mcp2026-10-25)）：
+
+| type | 字段 | 说明 |
+| --- | --- | --- |
+| `local-tool-call` | `request_id`、`server_id`、`tool_name`、`arguments` | 后端要求**这台浏览器**执行一次本地 MCP 工具调用。`tool_name` 是 MCP 原始工具名（不是 `l_...` 暴露名）；前端必须在 **30 s** 内回 `local-tool-result` |
+| `local-mcp-registered` | `server_id`、`server_name`、`tools`: string[] | 注册成功；`tools` 是后端实际暴露给 LLM 的前缀名（`l_<hash>_<name>`） |
+| `local-mcp-unregistered` | `server_id`、`success` | 注销结果 |
+| `local-mcp-error` | `server_id`、`message` | 注册失败（schema 非法、超限、会话无浏览器通道、server_id 不在配置中等） |
+| `local-mcp-config` | `servers`: array | 连接/重连后下发当前用户配置中 `mode=local` 的服务器：`[{server_id,name,url,headers}]`；`headers` 明文，仅发给该用户的已认证连接。没有本地服务器时也发空数组 |
+
+配置中 `mode=remote` 的用户 MCP 不产生额外 WS 消息；它的工具与全局工具一样通过 `tool_call_status` 展示。`mode=local` 的条目由 `local-mcp-config` 下发，并额外使用上面的本地消息。
 
 ### 6.6 历史记录
 
@@ -886,6 +917,14 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 | `/asr` 上传大小 | 10 MiB | `routes.py:23` |
 | `/tts-ws` 并发连接 | 16 | `routes.py:26` |
 | `/tts-ws` 文本 | 2000 字符 / 30 句 | `routes.py:24-25` |
+| 每用户 MCP 条目（remote + local） | 8 个 | `mcpp/user_servers.py` |
+| 单条目请求头 | 16 个 / 单值 4096 字符 | `mcpp/user_servers.py` |
+| 用户 MCP URL 长度 | 2048 字符 | `mcpp/user_servers.py` |
+| 单个远程 MCP 工具数 | 64 个 | `mcpp/user_servers.py` |
+| 单个本地 MCP 工具数 | 64 个 | `mcpp/user_servers.py` |
+| 单个工具 `inputSchema` | 64 KiB | `mcpp/user_servers.py` |
+| 单次本地注册消息 | 256 KiB | `websocket_handler.py` |
+| 工具结果（remote/local） | 512 KiB | `mcpp/user_servers.py` |
 
 ### 17.2 超时
 
@@ -895,6 +934,9 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 | TTS 单句合成 | 30 s（超时改发静音载荷） | `tts_manager.py:16` |
 | TTS 载荷投递等待 | 10 s | `tts_manager.py:17,208-218` |
 | 等待 `frontend-playback-complete` | 120 s | `conversation_utils.py:19` |
+| 远程 MCP 建连/工具发现 | 10 s（各服务器并发，失败跳过） | `mcpp/user_servers.py` |
+| 远程 MCP 单次工具调用 | 15 s | `mcpp/user_servers.py` |
+| 浏览器本地 MCP 工具调用 | 30 s（等待 `local-tool-result`） | `mcpp/local_bridge.py` |
 | OAuth state cookie | 600 s（默认） | `config_manager/auth.py` |
 | 会话 cookie | 7 天（默认） | `config_manager/auth.py` |
 
@@ -955,6 +997,11 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 18. `full-text` 是遗留的状态提示（"Thinking..." 等），**不是对话内容**，别追加进气泡。
 19. `mic-audio-end` 在缓冲为空时仍会跑一次 ASR（无空判护），可能产生一条空转写。前端应保证有音频才发。
 20. 没有历史重命名/分页/单条删除接口。
+21. **配置页只有一份 JSON，类型由后端判定。** 不要在前端让用户先选 remote/local；`mode` 来自 `GET /api/mcp/config` 的 `servers[]`。保存后当前会话不热更新，必须重连。
+22. **`local-mcp-config` 是本地服务器的唯一来源。** 它给出的 `server_id` 是数据库行 id，不是 JSON 里的名称；`register-local-mcp` / `local-tool-call` / `local-tool-result` 都用这个 id。每次 WS 连接/重连后都要重新连接并重发 `register-local-mcp`，以后端的 `local-mcp-registered` 为准。
+23. **浏览器本地 MCP 只在页面打开时可用。** 页面关闭/刷新时正在执行的 `local-tool-call` 会超时（30 s）并作为工具错误返回给 LLM；本地服务必须允许本站 Origin（含 CORS/PNA/`Mcp-Session-Id` 暴露），且页面保持打开。
+24. **`local-tool-call.tool_name` 是 MCP 原始工具名。** LLM 看到的是 `l_<hash>_<name>` 这样的暴露名，但服务端回传/调用时已经还原；前端不要再做前缀处理。
+25. **不要把 local 当成"服务器侧也能连"的捷径。** local 条目只下发给浏览器，后端不拨号；remote 条目强制公网 HTTPS（保存时和每次连接前重新解析 DNS），用户 `command/args` 一律拒绝。全局 `cuc-kb` 仍由部署方在 `mcp_servers.json` 管理，不受用户配置影响。
 
 ---
 
@@ -1136,6 +1183,170 @@ onUserBargeIn(() => { stopPlayback(); wsSend({ type: "interrupt-signal", text: h
 
 ---
 
+## 22. 用户 MCP 与浏览器本地 MCP（2026-10-25）
+
+### 22.1 边界与不可变约定
+
+- **全局 MCP 不动。** `mcp_servers.json` 里的服务器（例如 `cuc-kb`）仍是部署方配置，用户不可见、不可改、不可删；用户配置永远不能覆盖同名全局服务器（`ServerRegistry.merged_with` 会忽略冲突）。
+- **配置页只有一份 JSON。** 用户编辑与 `mcp_servers.json` 同形状的 `mcp_servers` 文档，后端逐条判定 `remote`（后端连接）或 `local`（浏览器连接），不要求用户先选类型。
+- **按用户隔离。** 配置存在 SQLite 的 `user_mcp_servers` 表里，每条都带 `user_id`；只有该用户的会话会加载。
+- **不接受 stdio。** 用户条目只能是 HTTP(S) `url`；`command/args/env/cwd` 会被拒绝（否则等于服务器 RCE）。
+- **remote 只允许公网 HTTPS。** 后端会真正建连，因此拒绝 localhost / 私网 / 链路本地 / 元数据地址（否则等于 SSRF）。本机、内网、`.local`、单标签主机名等由浏览器连接，后端不拨号。
+- **工具名命名空间。** 全局工具名保持不变；remote 工具暴露为 `u_<hash>_<name>`，local 工具为 `l_<hash>_<name>`。LLM 看到的是暴露名，后端调用 MCP 时用 `FormattedTool.remote_name` 还原成原始工具名。
+
+### 22.2 统一配置：存储、API 与分类
+
+配置 JSON（与部署方 `mcp_servers.json` 同形状）：
+
+```json
+{
+  "mcp_servers": {
+    "my-remote": {
+      "url": "https://mcp.example.com/mcp",
+      "headers": { "Authorization": "Bearer ..." },
+      "enabled": true
+    },
+    "my-pc": {
+      "url": "http://127.0.0.1:3001/mcp"
+    }
+  }
+}
+```
+
+- 顶层只允许 `mcp_servers`；每个条目只允许 `url` / `headers` / `enabled`。
+- `enabled` 缺省为 `true`；`headers` 缺省为 `{}`。
+- 每用户最多 **8** 个条目（local + remote 合计），其中 local 最多 **4** 个；名称 ≤64 字符且禁止控制字符。
+
+分类规则（`mcpp/user_servers.classify_mcp_url`）：
+
+| URL 情况 | mode | 谁连接 |
+| --- | --- | --- |
+| `localhost`、`127.0.0.1`、`::1`、私网/链路本地 IP、`.local` / `.lan` / `.internal` / `.home.arpa` / `.corp` / `.home`、无点单标签主机名 | `local` | 浏览器 |
+| 主机名解析后任一地址为私网/保留地址 | `local` | 浏览器 |
+| 公网 IP 或解析后全部为公网地址，且 scheme = `https` | `remote` | 后端 |
+| 公网地址但 scheme = `http` | 拒绝 | — |
+| 含 userinfo / fragment / 非法端口 / 解析失败 | 拒绝 | — |
+
+存储（`storage/sqlite.py`，schema version 4；v3 表会自动补 `mode` 列）：
+
+```sql
+CREATE TABLE user_mcp_servers (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  url TEXT NOT NULL,
+  headers_json TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  mode TEXT NOT NULL DEFAULT 'remote',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (user_id, name)
+);
+```
+
+接口（`mcp_routes.py`）：
+
+| 方法 | 路径 | 请求/响应 |
+| --- | --- | --- |
+| GET | `/api/mcp/config` | `{"config":{"mcp_servers":{...}},"servers":[{id,name,url,headers,enabled,mode}]}`；headers 值一律 `"***"` |
+| PUT | `/api/mcp/config` | body `{"config":{"mcp_servers":{...}}}`；全量替换，返回与 GET 相同结构 |
+| POST | `/api/mcp/config/test` | body `{"server_id":"..."}`；remote 返回 `{"mode":"remote","tools":[{name,description}]}`；local 返回 `{"mode":"local","tools":[]}`，不做服务端拨号 |
+
+- **PUT 是整份配置的原子替换**：未出现的名称会被删除；同名条目保留原 `id`（local 工具命名空间稳定），改名等于删除+新增。
+- `headers` 里的 `"***"` 表示保留同名条目已存的值；新名称/新键使用 `"***"` 会 400。省略某个 header 键等于删除它。
+- 错误码：400（JSON/字段/URL/headers/mode/数量校验失败，或 `***` 无法解析）、401（oidc 无会话）、404（`/test` 的 server_id 不存在）、502（remote `/test` 连不上）、503（存储未就绪）。
+
+校验与限额（`mcpp/user_servers.py`）：
+
+- URL：非空、≤2048 字符、`http`/`https`、无 userinfo、无 fragment、端口合法；remote 必须为公网 HTTPS，保存时和**每次建连前**都会重新解析 DNS，所有结果都必须是公网地址（`is_global` 且非 private/loopback/link-local/multicast/reserved/unspecified/site-local）。
+- headers：≤16 个；键 `[A-Za-z0-9-]{1,64}`；值 ≤4096 字符、禁止 CR/LF/NUL；禁止 hop-by-hop 头（`Host`、`Cookie`、`Content-Length`、`Transfer-Encoding`、`Connection`、`Upgrade` 等）。
+- local 工具：单服务器 ≤64 个、单个 `inputSchema` ≤64 KiB、单次注册消息 ≤256 KiB、结果 ≤512 KiB；remote 工具单服务器同样 ≤64 个、单 schema ≤64 KiB、总 schema ≤256 KiB、结果 ≤512 KiB。
+- remote 工具发现并发执行，每个 10s 超时；失败只跳过该服务器，不阻断会话。remote 单次工具调用 15s。
+- DNS 校验是 best-effort：保存时和每次建连前各解析一次，仍存在解析与连接之间的 TOCTOU 窗口（DNS rebinding）。更强保证需要网络层出站限制或固定解析结果。
+
+> 说明：`headers` 目前在 SQLite 中明文存储（数据库文件权限 600），API 只返回 `"***"`；local 条目的明文 headers 会通过已认证的 `/client-ws` 下发给同一用户的浏览器。后续如需静态加密，不要复用 `auth.signing_secret`（轮换会导致历史 token 不可解密）。
+
+### 22.3 会话加载与工具命名
+
+连接建立时（`WebSocketHandler._init_service_context`）按 `identity.user_id` 读取全部条目，`split_user_mcp_servers` 按**存储的 mode** 拆成两份：
+
+- `remote` → `ServiceContext.load_cache(user_mcp_servers=...)`，进入服务端 registry；
+- `local` → `load_cache(local_mcp_servers=...)`，连接后通过 `local-mcp-config` 下发给浏览器。
+
+`_init_mcp_components`：
+
+1. 只取 `enabled=true` 的 remote 条目，生成内部 key `user:<id>`；
+2. 与全局 `enabled_servers` 合并（全局在前，用户在后）；
+3. 若角色配置 `use_mcpp: false`，**全局工具仍不启用**，但只要该用户启用了 remote 或注册了 local 工具，会话仍会启用原生工具调用（用户显式 opt-in）；
+4. 全局服务器按原顺序串行发现（保持 stdio 行为不变），`user:` remote 服务器并发发现；
+5. remote 工具按 `u_<sha1("user:<id>")[:6]>_<sanitized>` 暴露，local 工具按 `l_<sha1("local:<id>")[:6]>_<sanitized>` 暴露，最长 64 字符；同一服务器内重名加 `_2`、`_3`……；全局工具名和 prompt 顺序保持不变。
+
+remote 服务器失败（DNS、TLS、超时、401）只影响该服务器：会话照常启动，只是少了这些工具。
+
+**保存配置不会热更新当前会话。** 保存/启用/删除/改名后需要重连（刷新页面）；local 条目在每次连接/重连后由 `local-mcp-config` 重新下发，浏览器必须重新注册。
+
+### 22.4 浏览器本地 MCP：完整流程
+
+1. 连接建立后，后端发送（在 `set-model-and-conf` 之后）：
+   ```json
+   {"type":"local-mcp-config","servers":[
+     {"server_id":"<db row id>","name":"my-pc",
+      "url":"http://127.0.0.1:3001/mcp","headers":{}}
+   ]}
+   ```
+   `server_id` 是数据库行 id，**不是** JSON 里的名称；`headers` 是该条目保存的明文值（仅发给该用户的已认证连接）。没有 local 条目时也发空数组。
+2. 页面为每个条目作为 MCP client 用 **Streamable HTTP** 连接：
+   - `POST initialize`，`Accept: application/json, text/event-stream`，请求体 `protocolVersion` / `capabilities` / `clientInfo`；
+   - 记录响应头 `Mcp-Session-Id`（如果服务端分配），之后每个请求都带上；初始化后带上 `MCP-Protocol-Version`；
+   - `POST notifications/initialized`（无 id，202 即可）；
+   - 自定义 headers 直接用于请求（`Content-Type` / `Accept` / `MCP-*` 由客户端保留）。
+3. `POST tools/list` 拿工具 schema，然后发：
+   ```json
+   {"type":"register-local-mcp","server_id":"<db row id>","name":"my-pc",
+    "tools":[{"name":"read_file","description":"...","inputSchema":{...}}]}
+   ```
+   `server_id` 必须来自 `local-mcp-config`；后端会拒绝未配置的 id。`name` 仅用于展示，后端以配置中的名称为准。
+4. 后端回 `local-mcp-registered`，`tools` 是 `l_...` 暴露名。**以这条 ack 为准**。
+5. LLM 要调用时，后端发：
+   ```json
+   {"type":"local-tool-call","request_id":"...","server_id":"<db row id>",
+    "tool_name":"read_file","arguments":{...}}
+   ```
+   `tool_name` 是原始 MCP 名。页面执行 `POST tools/call`，然后回：
+   ```json
+   {"type":"local-tool-result","request_id":"...","server_id":"<db row id>",
+    "is_error":false,"content_items":[{"type":"text","text":"..."}]}
+   ```
+6. 页面关闭/刷新 → 本地工具随会话消失；正在执行的调用在 30s 后变成工具错误返回给 LLM。重连后后端会再次下发 `local-mcp-config`，前端应重新连接并重发 `register-local-mcp`（新前端实现已自动处理）。
+
+本地服务要求：
+
+- 必须允许页面 Origin 的 CORS（包括 `POST`/`DELETE`、`Content-Type`、`Mcp-Session-Id`、`MCP-Protocol-Version` 预检），并 `Access-Control-Expose-Headers: Mcp-Session-Id`，否则浏览器读不到会话 id；
+- 多数 stdio MCP 需要用户先跑一个 HTTP 包装（例如 `npx supergateway --stdio "..."`），这属于"运行一个命令"，不是安装常驻软件；
+- HTTPS 页面访问 `http://127.0.0.1` 时，浏览器可能要求 Local Network Access 权限或受混合内容策略限制，上线前需在目标浏览器实测；
+- 本地工具结果总大小 ≤512 KiB，超过会作为工具错误返回。
+
+参考实现：`web/src/components/McpPanel.tsx`（统一 JSON 编辑器 + 解析结果列表）、`web/src/services/mcp.ts`（配置 API）、`web/src/services/localMcpClient.ts`（最小 Streamable HTTP client）、`web/src/services/localMcp.ts`（按 `local-mcp-config` 连接/注册/回传/重连）、`web/src/stores/mcp.ts`（本地状态）。这些是前端实现，不是后端契约。
+
+### 22.5 可观测与日志
+
+- 用户 MCP 配置：日志只记录 `user_id`、条目数、服务器名称/ID、工具数量、失败类型；**不记录 headers**。用户/本地工具的参数不写入服务器日志（`ToolExecutor` 对 `user:`/`local:` 只记录工具名）。
+- 本地 MCP：后端记录注册/注销/超时；`local-mcp-config` 的 headers 只发给该用户的已认证连接，`local-tool-call` 的参数只发给该会话的浏览器，均不落库。
+- `tool_call_status` 仍照常发给客户端，`tool_name` 为暴露名（`u_...`/`l_...`）；前端按现有工具块渲染即可。群聊中，带 `scoped: true` 的工具状态**只发给工具所有者**，避免把个人工具参数/结果广播给其他成员。
+
+### 22.6 验收清单
+
+- [ ] 全局 `cuc-kb` 的工具名、prompt、调用行为与改造前一致；
+- [ ] 用户 A 的服务器/工具不出现在用户 B 的会话；
+- [ ] 一份 JSON 同时包含 remote/local 时，GET 的 `servers[].mode` 正确；localhost/私网 → local，公网 HTTPS → remote，公网 HTTP 与 `command/args` → 400；
+- [ ] GET `/api/mcp/config` 不回明文 headers；PUT 中 `"***"` 保留旧值；
+- [ ] 连接/重连后收到 `local-mcp-config`，`server_id` 与 DB id 一致，浏览器重新注册；`local-mcp-registered` 的 `tools` 与 LLM 看到的名称一致；
+- [ ] 本地工具调用能完成 `local-tool-call → tools/call → local-tool-result → tool_call_status → 最终文本`；
+- [ ] 页面关闭后调用在 30s 内以工具错误结束，不挂起会话；
+- [ ] 用户服务器离线时只丢该服务器的工具，会话仍可正常聊天。
+
+---
+
 ## 附录 A：常量索引
 
 | 常量 | 值 | 位置 |
@@ -1168,11 +1379,11 @@ onUserBargeIn(() => { stopPlayback(); wsSend({ type: "interrupt-signal", text: h
 
 **客户端 → 服务端（`/client-ws`）**
 
-`text-input`、`mic-audio-data`、`mic-audio-end`、`raw-audio-data`、`interrupt-signal`、`frontend-playback-complete`、`ai-speak-signal`、`audio-play-start`、`fetch-configs`、`switch-config`、`request-init-config`、`fetch-backgrounds`、`fetch-history-list`、`fetch-and-set-history`、`create-new-history`、`delete-history`、`add-client-to-group`、`remove-client-from-group`、`request-group-info`、`heartbeat`
+`text-input`、`mic-audio-data`、`mic-audio-end`、`raw-audio-data`、`interrupt-signal`、`frontend-playback-complete`、`ai-speak-signal`、`audio-play-start`、`fetch-configs`、`switch-config`、`request-init-config`、`fetch-backgrounds`、`fetch-history-list`、`fetch-and-set-history`、`create-new-history`、`delete-history`、`add-client-to-group`、`remove-client-from-group`、`request-group-info`、`heartbeat`、`register-local-mcp`、`unregister-local-mcp`、`local-tool-result`
 
 **服务端 → 客户端（`/client-ws` 文本通道）**
 
-`full-text`、`set-model-and-conf`、`config-switched`、`config-files`、`background-files`、`control`、`text-delta`、`tool_call_status`、`user-input-transcription`、`force-new-message`、`interrupt-signal`、`group-update`、`group-operation-result`、`history-list`、`history-data`、`new-history-created`、`history-deleted`、`heartbeat-ack`、`error`
+`full-text`、`set-model-and-conf`、`config-switched`、`config-files`、`background-files`、`control`、`text-delta`、`tool_call_status`、`local-mcp-config`、`local-tool-call`、`local-mcp-registered`、`local-mcp-unregistered`、`local-mcp-error`、`user-input-transcription`、`force-new-message`、`interrupt-signal`、`group-update`、`group-operation-result`、`history-list`、`history-data`、`new-history-created`、`history-deleted`、`heartbeat-ack`、`error`
 
 **服务端 → 客户端（音频通道：`/audio-ws`，未连接时回落 `/client-ws`）**
 

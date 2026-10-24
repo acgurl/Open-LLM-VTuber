@@ -17,8 +17,28 @@ DEFAULT_CONFIG_PATH = "mcp_servers.json"
 class ServerRegistry:
     """MCP Server Manager for managing server files."""
 
-    def __init__(self, config_path: str | Path = DEFAULT_CONFIG_PATH) -> None:
-        """Initialize the MCP Server Manager."""
+    def __init__(
+        self,
+        config_path: str | Path = DEFAULT_CONFIG_PATH,
+        *,
+        servers: Dict[str, MCPServer] | None = None,
+    ) -> None:
+        """Initialize the MCP Server Manager.
+
+        ``servers`` builds an in-memory registry (used for per-session
+        overlays); otherwise the deployment-managed JSON file is loaded.
+        """
+        self.servers: Dict[str, MCPServer] = {}
+
+        self.npx_available = self._detect_runtime("npx")
+        self.uvx_available = self._detect_runtime("uvx")
+        self.node_available = self._detect_runtime("node")
+
+        if servers is not None:
+            self.config: Dict[str, Union[str, dict]] = {"mcp_servers": {}}
+            self.servers = dict(servers)
+            return
+
         try:
             config_path = validate_file(config_path, ".json")
         except ValueError:
@@ -29,17 +49,31 @@ class ServerRegistry:
                 f"MCPSR: File '{config_path}' does not exist, or is not a json file."
             )
 
-        self.config: Dict[str, Union[str, dict]] = json.loads(
-            config_path.read_text(encoding="utf-8")
-        )
-
-        self.servers: Dict[str, MCPServer] = {}
-
-        self.npx_available = self._detect_runtime("npx")
-        self.uvx_available = self._detect_runtime("uvx")
-        self.node_available = self._detect_runtime("node")
+        self.config = json.loads(config_path.read_text(encoding="utf-8"))
 
         self.load_servers()
+
+    @classmethod
+    def from_servers(cls, servers: Dict[str, MCPServer]) -> "ServerRegistry":
+        return cls(servers=servers)
+
+    def merged_with(self, additions: Dict[str, MCPServer]) -> "ServerRegistry":
+        """Return a session-only registry with global and user servers.
+
+        Global entries always win: user server keys are namespaced and an
+        accidental collision is ignored rather than overriding the deployment
+        configuration.
+        """
+        merged = dict(self.servers)
+        for name, server in additions.items():
+            if name in merged:
+                logger.warning(
+                    f"MCPSR: Ignoring user server '{name}' because it collides "
+                    "with a global server."
+                )
+                continue
+            merged[name] = server
+        return ServerRegistry(servers=merged)
 
     def _detect_runtime(self, target: str) -> bool:
         """Check if a runtime is available in the system PATH."""

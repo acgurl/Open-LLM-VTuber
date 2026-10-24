@@ -1,11 +1,22 @@
 """Constructs prompts for servers and tools, formats tool information for OpenAI API."""
 
+import asyncio
+import json
+
 from typing import Dict, Optional, List, Tuple, Any
 from loguru import logger
 
 from .types import FormattedTool
 from .mcp_client import MCPClient
 from .server_registry import ServerRegistry
+from .user_servers import (
+    MAX_TOOL_SCHEMA_BYTES,
+    MAX_USER_MCP_SCHEMA_BYTES,
+    MAX_USER_MCP_TOOLS,
+    USER_MCP_DISCOVERY_TIMEOUT_SECONDS,
+    make_exposed_tool_name,
+    unique_tool_name,
+)
 
 
 class ToolAdapter:
@@ -14,6 +25,19 @@ class ToolAdapter:
     def __init__(self, server_registry: Optional[ServerRegistry] = None) -> None:
         """Initialize with an ServerRegistry."""
         self.server_registry = server_registry or ServerRegistry()
+
+    async def _fetch_server_tools(self, client: MCPClient, server_name: str):
+        if server_name not in self.server_registry.servers:
+            logger.warning(
+                f"MC: Enabled server '{server_name}' not found in Server Manager. Skipping."
+            )
+            return None
+        if server_name.startswith(("user:", "local:")):
+            return await asyncio.wait_for(
+                client.list_tools(server_name),
+                timeout=USER_MCP_DISCOVERY_TIMEOUT_SECONDS,
+            )
+        return await client.list_tools(server_name)
 
     async def get_server_and_tool_info(
         self, enabled_servers: List[str]
@@ -30,52 +54,110 @@ class ToolAdapter:
 
         logger.debug(f"MC: Fetching tool info for enabled servers: {enabled_servers}")
 
-        # Use a single client instance for efficiency
+        # Deployment servers keep the original sequential path (some use stdio
+        # transports with task-scoped cleanup). User HTTP servers are fetched
+        # concurrently so one slow endpoint cannot multiply the session start
+        # time. Results are merged in the configured order so the prompt stays
+        # deterministic.
+        results: Dict[str, Any] = {}
         async with MCPClient(self.server_registry) as client:
+            scoped_servers = [
+                name for name in enabled_servers if name.startswith(("user:", "local:"))
+            ]
+            scoped_set = set(scoped_servers)
             for server_name in enabled_servers:
-                if server_name not in self.server_registry.servers:
-                    logger.warning(
-                        f"MC: Enabled server '{server_name}' not found in Server Manager. Skipping."
-                    )
+                if server_name in scoped_set:
                     continue
-
                 try:
-                    servers_info[server_name] = {}
-                    tools = await client.list_tools(server_name)
-                    logger.debug(
-                        f"MC: Found {len(tools)} tools on server '{server_name}'"
+                    results[server_name] = await self._fetch_server_tools(
+                        client, server_name
                     )
-                    for tool in tools:
-                        servers_info[server_name][tool.name] = {}
-                        tool_info = servers_info[server_name][tool.name]
-                        tool_info["description"] = tool.description
-                        tool_info["parameters"] = tool.inputSchema.get("properties", {})
-                        tool_info["required"] = tool.inputSchema.get("required", [])
+                except Exception as exc:
+                    results[server_name] = exc
 
-                        # Store the tool info in FormattedTool format
-                        formatted_tools[tool.name] = FormattedTool(
-                            input_schema=tool.inputSchema,
-                            related_server=server_name,
-                            description=tool.description,
-                            # Generic schema will be generated later if needed
-                            generic_schema=None,
+            scoped_results = await asyncio.gather(
+                *(
+                    self._fetch_server_tools(client, server_name)
+                    for server_name in scoped_servers
+                ),
+                return_exceptions=True,
+            )
+            results.update(zip(scoped_servers, scoped_results))
+
+        for server_name in enabled_servers:
+            result = results.get(server_name)
+            servers_info.setdefault(server_name, {})
+            if result is None:
+                continue
+            if isinstance(result, Exception):
+                logger.error(
+                    f"MC: Failed to get info for server '{server_name}': {result}"
+                )
+                continue
+
+            # User and browser-registered servers get a namespace prefix so
+            # they can never shadow a global tool. Global names stay exactly
+            # as before.
+            if server_name.startswith("user:"):
+                namespace_prefix = "u"
+            elif server_name.startswith("local:"):
+                namespace_prefix = "l"
+            else:
+                namespace_prefix = ""
+
+            tools = result
+            logger.debug(f"MC: Found {len(tools)} tools on server '{server_name}'")
+            scoped_tool_count = 0
+            scoped_schema_bytes = 0
+            for tool in tools:
+                schema = tool.inputSchema if isinstance(tool.inputSchema, dict) else {}
+                description = tool.description
+                exposed_name = tool.name
+                if namespace_prefix:
+                    if scoped_tool_count >= MAX_USER_MCP_TOOLS:
+                        logger.warning(
+                            f"MC: Server '{server_name}' exceeds "
+                            f"{MAX_USER_MCP_TOOLS} tools; extras ignored."
                         )
-                except (ValueError, RuntimeError, ConnectionError) as e:
-                    logger.error(
-                        f"MC: Failed to get info for server '{server_name}': {e}"
+                        break
+                    schema_size = len(
+                        json.dumps(schema, ensure_ascii=False).encode("utf-8")
                     )
-                    if (
-                        server_name not in servers_info
-                    ):  # Ensure entry exists even on error
-                        servers_info[server_name] = {}
-                    continue  # Continue to next server
-                except Exception as e:
-                    logger.error(
-                        f"MC: Unexpected error for server '{server_name}': {e}"
+                    if schema_size > MAX_TOOL_SCHEMA_BYTES:
+                        logger.warning(
+                            f"MC: Tool '{tool.name}' on '{server_name}' has an "
+                            "oversized input schema; ignored."
+                        )
+                        continue
+                    if scoped_schema_bytes + schema_size > MAX_USER_MCP_SCHEMA_BYTES:
+                        logger.warning(
+                            f"MC: Server '{server_name}' exceeds the total "
+                            "schema budget; extras ignored."
+                        )
+                        break
+                    scoped_schema_bytes += schema_size
+                    scoped_tool_count += 1
+                    description = (description or "")[:4096]
+                    candidate = make_exposed_tool_name(
+                        namespace_prefix, server_name, tool.name
                     )
-                    if server_name not in servers_info:
-                        servers_info[server_name] = {}
-                    continue  # Continue to next server
+                    exposed_name = unique_tool_name(candidate, set(formatted_tools))
+
+                servers_info[server_name][exposed_name] = {}
+                tool_info = servers_info[server_name][exposed_name]
+                tool_info["description"] = description
+                tool_info["parameters"] = schema.get("properties", {})
+                tool_info["required"] = schema.get("required", [])
+
+                # Store the tool info in FormattedTool format
+                formatted_tools[exposed_name] = FormattedTool(
+                    input_schema=schema,
+                    related_server=server_name,
+                    description=description,
+                    # Generic schema will be generated later if needed
+                    generic_schema=None,
+                    remote_name=tool.name,
+                )
 
         logger.debug(
             f"MC: Finished fetching tool info. Found {len(formatted_tools)} tools across enabled servers."
@@ -83,7 +165,9 @@ class ToolAdapter:
         return servers_info, formatted_tools
 
     def construct_mcp_prompt_string(
-        self, servers_info: Dict[str, Dict[str, str]]
+        self,
+        servers_info: Dict[str, Dict[str, str]],
+        display_names: Optional[Dict[str, str]] = None,
     ) -> str:
         """Build a single prompt string describing enabled servers and their tools."""
         full_prompt_content = ""
@@ -104,7 +188,13 @@ class ToolAdapter:
                 )
                 continue
 
-            prompt_content = f"Server: {server_name}\n"
+            server = self.server_registry.get_server(server_name)
+            label = server_name
+            if display_names and server_name in display_names:
+                label = display_names[server_name]
+            elif server is not None and server.is_user and server.display_name:
+                label = server.display_name
+            prompt_content = f"Server: {label}\n"
             prompt_content += "    Tools:\n"
             for tool_name, tool_info in tools.items():
                 prompt_content += f"        {tool_name}:\n"

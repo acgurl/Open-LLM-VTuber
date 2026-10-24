@@ -17,6 +17,7 @@ import {
 import { backgroundUrl } from '../utils/text';
 import i18n from '../i18n';
 import { usePresence } from '../hooks/usePresence';
+import { McpPanel } from './McpPanel';
 
 export function SettingsDrawer() {
   const { t } = useTranslation();
@@ -150,6 +151,8 @@ export function SettingsDrawer() {
               {t('settings.proactiveSpeak')}
             </button>
           </section>
+
+          <McpPanel />
 
           <GroupPanel />
 

@@ -16,6 +16,11 @@ from mcp.client.streamable_http import (
 
 from .server_registry import ServerRegistry
 from .types import MCPServer
+from .user_servers import (
+    MAX_MCP_RESULT_BYTES,
+    content_items_size,
+    validate_public_https_url_async,
+)
 
 DEFAULT_TIMEOUT = timedelta(seconds=30)
 
@@ -108,6 +113,11 @@ class MCPClient:
         disconnect cleanup runs in the WebSocket task; a cached session would
         therefore be closed from the wrong task.
         """
+        if server.is_user:
+            # Re-resolve immediately before connecting: the configuration may
+            # have pointed at a public address when it was saved.
+            await validate_public_https_url_async(server.url)
+
         logger.info(
             f"MCPC: Connecting to remote server '{server_name}' at {server.url}..."
         )
@@ -177,6 +187,7 @@ class MCPClient:
         Returns:
             Dict containing the metadata and content_items from the tool response.
         """
+        server = self._get_server(server_name)
         logger.info(f"MCPC: Calling tool '{tool_name}' on server '{server_name}'...")
         async with self._session(server_name) as session:
             response = await session.call_tool(tool_name, tool_args)
@@ -218,6 +229,17 @@ class MCPClient:
             content_items.append(
                 {"type": "text", "text": ""}
             )  # Ensure content_items is not empty
+
+        if server.is_user and content_items_size(content_items) > MAX_MCP_RESULT_BYTES:
+            return {
+                "metadata": {},
+                "content_items": [
+                    {
+                        "type": "error",
+                        "text": "User MCP tool result exceeded the size limit",
+                    }
+                ],
+            }
 
         result = {
             "metadata": getattr(response, "metadata", {}),

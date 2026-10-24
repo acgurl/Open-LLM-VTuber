@@ -56,6 +56,19 @@ export interface AudioPayload {
   streamed: boolean;
 }
 
+export interface LocalMcpToolPayload {
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, unknown>;
+}
+
+export interface LocalMcpServerConfig {
+  server_id: string;
+  name: string;
+  url: string;
+  headers: Record<string, string>;
+}
+
 export interface ToolCallStatus {
   type: 'tool_call_status';
   tool_id: string;
@@ -65,6 +78,7 @@ export interface ToolCallStatus {
   timestamp: string;
   name?: string;
   browser_view?: unknown;
+  scoped?: boolean; // 用户/本地 MCP 工具，群聊时只发给工具所有者
 }
 
 export interface HistoryMessage {
@@ -125,6 +139,22 @@ export type ServerMessage =
   | { type: 'new-history-created'; history_uid: string }
   | { type: 'history-deleted'; success: boolean; history_uid: string }
   | { type: 'heartbeat-ack' }
+  | {
+      type: 'local-tool-call';
+      request_id: string;
+      server_id: string;
+      tool_name: string;
+      arguments?: Record<string, unknown>;
+    }
+  | {
+      type: 'local-mcp-registered';
+      server_id: string;
+      server_name: string;
+      tools: string[];
+    }
+  | { type: 'local-mcp-unregistered'; server_id: string; success: boolean }
+  | { type: 'local-mcp-error'; server_id: string; message: string }
+  | { type: 'local-mcp-config'; servers: LocalMcpServerConfig[] }
   | { type: 'error'; message: string };
 
 export type ClientMessage =
@@ -147,7 +177,21 @@ export type ClientMessage =
   | { type: 'add-client-to-group'; invitee_uid: string }
   | { type: 'remove-client-from-group'; target_uid: string }
   | { type: 'request-group-info' }
-  | { type: 'audio-play-start'; display_text: DisplayText };
+  | { type: 'audio-play-start'; display_text: DisplayText }
+  | {
+      type: 'register-local-mcp';
+      server_id: string;
+      name: string;
+      tools: LocalMcpToolPayload[];
+    }
+  | { type: 'unregister-local-mcp'; server_id: string }
+  | {
+      type: 'local-tool-result';
+      request_id: string;
+      server_id: string;
+      is_error: boolean;
+      content_items: Array<Record<string, unknown>>;
+    };
 
 export interface SessionInfo {
   authenticated: boolean;

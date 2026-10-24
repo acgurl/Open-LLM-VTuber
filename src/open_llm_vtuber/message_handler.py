@@ -1,5 +1,6 @@
-from typing import Dict, Optional, Tuple
+from typing import Awaitable, Dict, Optional, Tuple, AsyncIterator, Callable
 import asyncio
+from contextlib import asynccontextmanager
 from loguru import logger
 from collections import defaultdict
 
@@ -12,6 +13,42 @@ class MessageHandler:
         self._response_data: Dict[str, Dict[Tuple[str, Optional[str]], dict]] = (
             defaultdict(dict)
         )
+
+    @asynccontextmanager
+    async def response_waiter(
+        self,
+        client_uid: str,
+        response_type: str,
+        request_id: str | None = None,
+    ) -> AsyncIterator[Callable[[float | None], Awaitable[Optional[dict]]]]:
+        """Register a response slot before the request is sent.
+
+        Registering first closes the race where the client answers in the same
+        event-loop turn as the request (for example a browser-side MCP tool).
+        """
+        event = asyncio.Event()
+        response_key = (response_type, request_id)
+        self._response_events[client_uid][response_key] = event
+
+        async def wait(timeout: float | None = None) -> Optional[dict]:
+            try:
+                if timeout is not None:
+                    await asyncio.wait_for(event.wait(), timeout)
+                else:
+                    await event.wait()
+                return self._response_data[client_uid].pop(response_key, None)
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"Timeout waiting for {response_type} "
+                    f"(ID: {request_id}) from {client_uid}"
+                )
+                return None
+
+        try:
+            yield wait
+        finally:
+            self._response_events[client_uid].pop(response_key, None)
+            self._response_data[client_uid].pop(response_key, None)
 
     async def wait_for_response(
         self,
@@ -32,26 +69,8 @@ class MessageHandler:
         Returns:
             Optional[dict]: Response data if received, None if timeout
         """
-        event = asyncio.Event()
-        response_key = (response_type, request_id)
-        self._response_events[client_uid][response_key] = event
-
-        try:
-            if timeout is not None:
-                # Wait with timeout
-                await asyncio.wait_for(event.wait(), timeout)
-            else:
-                # Wait indefinitely
-                await event.wait()
-
-            return self._response_data[client_uid].pop(response_key, None)
-        except asyncio.TimeoutError:
-            logger.warning(
-                f"Timeout waiting for {response_type} (ID: {request_id}) from {client_uid}"
-            )
-            return None
-        finally:
-            self._response_events[client_uid].pop(response_key, None)
+        async with self.response_waiter(client_uid, response_type, request_id) as wait:
+            return await wait(timeout)
 
     def handle_message(self, client_uid: str, message: dict) -> None:
         """

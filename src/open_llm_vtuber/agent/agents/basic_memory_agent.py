@@ -124,6 +124,7 @@ class BasicMemoryAgent(AgentInterface):
         tool_manager: Optional[ToolManager] = None,
         tool_executor: Optional[ToolExecutor] = None,
         mcp_prompt_string: str = "",
+        use_mcpp: Optional[bool] = None,
     ) -> "BasicMemoryAgent":
         """Create an agent with independent memory that reuses this agent's LLM client."""
         return BasicMemoryAgent(
@@ -139,12 +140,32 @@ class BasicMemoryAgent(AgentInterface):
             ),
             faster_first_response=self._faster_first_response,
             segment_method=self._segment_method,
-            use_mcpp=self._use_mcpp,
+            use_mcpp=self._use_mcpp if use_mcpp is None else use_mcpp,
             interrupt_method=self.interrupt_method,
             tool_prompts=self._tool_prompts,
             tool_manager=tool_manager,
             tool_executor=tool_executor,
             mcp_prompt_string=mcp_prompt_string,
+        )
+
+    def set_tooling(
+        self,
+        tool_manager: Optional[ToolManager],
+        tool_executor: Optional[ToolExecutor],
+        mcp_prompt_string: str = "",
+        *,
+        enabled: bool = True,
+    ) -> None:
+        """Replace the tool set, e.g. after a browser registered a local MCP."""
+        self._tool_manager = tool_manager
+        self._tool_executor = tool_executor
+        self._mcp_prompt_string = mcp_prompt_string
+        self._use_mcpp = enabled
+        self._formatted_tools_openai = (
+            tool_manager.get_formatted_tools("OpenAI") if tool_manager else []
+        )
+        self._formatted_tools_claude = (
+            tool_manager.get_formatted_tools("Claude") if tool_manager else []
         )
 
     def set_system(self, system: str):

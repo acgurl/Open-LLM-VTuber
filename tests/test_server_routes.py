@@ -40,6 +40,7 @@ class ServerRouteTests(unittest.TestCase):
         self.assertIn("/auth/callback", paths)
         self.assertIn("/auth/logout", paths)
         self.assertIn("/api/session", paths)
+        self.assertIn("/api/mcp/config", paths)
         for name in (
             "cache",
             "live2d-models",

@@ -61,7 +61,32 @@
     "live2d": "Live2D",
     "pointerInteractive": "Pointer interaction",
     "scrollToResize": "Scroll to zoom",
-    "proactiveSpeak": "Let AI speak first"
+    "proactiveSpeak": "Let AI speak first",
+    "mcp": {
+      "title": "MCP configuration",
+      "jsonHint": "Same JSON shape as mcp_servers.json. The backend classifies each URL: public HTTPS is connected by the server (remote); loopback/LAN addresses are connected by the browser (local).",
+      "headersHint": "*** keeps a stored secret; new servers must provide real values.",
+      "reconnectHint": "Reconnect (refresh the page) to apply a saved configuration.",
+      "save": "Save",
+      "saving": "Saving…",
+      "format": "Format",
+      "reload": "Reload",
+      "invalidJson": "Invalid JSON",
+      "mustBeObject": "Configuration must be a JSON object",
+      "saved": "Saved; reconnect to apply",
+      "modeRemote": "Remote",
+      "modeLocal": "Local",
+      "disabled": "Disabled",
+      "noServers": "No MCP servers configured",
+      "test": "Test",
+      "testing": "Testing…",
+      "testOk": "Connected · {{count}} tools",
+      "noTools": "No tools",
+      "localPending": "The browser connects after reconnect",
+      "localConnecting": "Browser connecting…",
+      "localConnected": "Connected · {{count}} tools",
+      "localError": "Browser connection failed"
+    }
   },
   "group": {
     "title": "Group chat",

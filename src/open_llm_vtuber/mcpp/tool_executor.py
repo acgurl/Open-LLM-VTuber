@@ -13,16 +13,19 @@ from typing import (
 from .types import ToolCallObject
 from .mcp_client import MCPClient
 from .tool_manager import ToolManager
+from .user_servers import MAX_MCP_RESULT_BYTES, content_items_size
 
 
 class ToolExecutor:
     def __init__(
         self,
-        mcp_client: MCPClient,
+        mcp_client: MCPClient | None,
         tool_manager: ToolManager,
+        local_bridge=None,
     ):
         self._mcp_client = mcp_client
         self._tool_manager = tool_manager
+        self._local_bridge = local_bridge
 
     def parse_tool_call(self, call: Union[Dict[str, Any], ToolCallObject]) -> tuple:
         """Parse tool call from different formats.
@@ -226,7 +229,20 @@ class ToolExecutor:
                 parse_error,
             ) = self.parse_tool_call(call)
 
-            logger.info(f"Executing tool: {call}")
+            tool_info = self._tool_manager.get_tool(tool_name)
+            is_scoped_tool = bool(
+                tool_info and tool_info.related_server.startswith(("user:", "local:"))
+            )
+            # Marks the status event so group chat can keep it on the owner's
+            # socket instead of broadcasting personal tool input/results.
+            scoped_extra = {"scoped": True} if is_scoped_tool else {}
+            # Arguments of user-scoped tools can contain personal data; keep
+            # them out of server logs.
+            logger.info(
+                f"Executing tool: {tool_name}"
+                if is_scoped_tool
+                else f"Executing tool: {call}"
+            )
 
             if parse_error:
                 logger.warning(
@@ -241,6 +257,7 @@ class ToolExecutor:
                     tool_name or "Unknown Tool",
                     "error",
                     result_content,
+                    **scoped_extra,
                 )
                 formatted_result = self.format_tool_result(
                     caller_mode,
@@ -258,6 +275,7 @@ class ToolExecutor:
                 tool_name,
                 "running",
                 f"Input: {json.dumps(tool_input)}",
+                **scoped_extra,
             )
 
             # Execute the tool
@@ -272,7 +290,7 @@ class ToolExecutor:
                 caller_mode, text_content, content_items
             )
 
-            extra = {}
+            extra = dict(scoped_extra)
             if tool_name == "stagehand_navigate" and not is_error:
                 live_view_data = metadata.get("liveViewData", {})
                 if live_view_data:
@@ -332,14 +350,40 @@ class ToolExecutor:
             is_error = True
         else:
             try:
-                result_dict = await self._mcp_client.call_tool(
-                    server_name=tool_info.related_server,
-                    tool_name=tool_name,
-                    tool_args=tool_input,
-                )
+                remote_name = tool_info.remote_name or tool_name
+                if tool_info.related_server.startswith("local:"):
+                    if self._local_bridge is None:
+                        raise RuntimeError("Local MCP bridge is not available")
+                    result_dict = await self._local_bridge.call_tool(
+                        server_key=tool_info.related_server,
+                        tool_name=remote_name,
+                        tool_args=tool_input,
+                    )
+                elif self._mcp_client is not None:
+                    result_dict = await self._mcp_client.call_tool(
+                        server_name=tool_info.related_server,
+                        tool_name=remote_name,
+                        tool_args=tool_input,
+                    )
+                else:
+                    raise RuntimeError("MCP client is not available")
 
                 metadata = result_dict.get("metadata", {})
                 content_items = result_dict.get("content_items", [])
+
+                is_scoped_tool = tool_info.related_server.startswith(
+                    ("user:", "local:")
+                )
+                if (
+                    is_scoped_tool
+                    and content_items_size(content_items) > MAX_MCP_RESULT_BYTES
+                ):
+                    content_items = [
+                        {
+                            "type": "error",
+                            "text": "Tool result exceeded the size limit",
+                        }
+                    ]
 
                 # Check if the first content item is an error reported by MCPClient
                 if content_items and content_items[0].get("type") == "error":

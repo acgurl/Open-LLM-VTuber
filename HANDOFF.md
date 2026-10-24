@@ -386,3 +386,42 @@ ssh oracle "docker restart open-llm-vtuber"
 - 验证：本地 mock WS + 浏览器连续打开抽屉 4 次均触发 `fetch-history-list`，模拟其他设备新增的会话即时出现，当前会话不被切走，手动切换历史正常；生产 `/healthz` 200、`assets/main-qaAmbYPB.js` 200 且 sha256 与本地一致（公网经 CF 命中缓存，哈希一致）、旧 `main-DS8X0Aex.js` 源站 404、镜像内 `/app/frontend` 含新包，启动日志无 ERROR/WARNING。
 - 回滚：把 `run-container.sh` 镜像改回 `open-llm-vtuber:1.2.1-refactor-20261023` 并执行 `bash run-container.sh`；前端文件可从未部署前的备份目录恢复。
 - 注意：Cloudflare 边缘仍可能对旧 hash 资源返回缓存的 200，但新 index 不再引用，无影响；已打开页面的用户需刷新一次。
+
+## 18. 2026-10-25 用户 MCP 与浏览器本地 MCP（本地实现完成，未部署）
+
+### 能力
+
+- **配置页只有一份 JSON**：与 `mcp_servers.json` 同形状的 `mcp_servers` 文档；后端逐条判定 `remote`（公网 HTTPS，后端连接）或 `local`（本机/内网，浏览器连接），用户不需要先选类型。
+- **remote**：存 SQLite `user_mcp_servers`，只对本人会话生效；保存时与每次建连前做公网 HTTPS/SSRF 校验。
+- **local**：后端在连接/重连后通过 `local-mcp-config` 把条目下发给该用户的浏览器；网页连自己的地址、注册工具，LLM 调用时经 `/client-ws` 转发。后端不访问用户 localhost。
+- **不接收 stdio**：用户条目的 `command/args/env/cwd` 一律 400（避免服务器 RCE）。
+- **全局 MCP 不动**：`mcp_servers.json` / cuc-kb 的配置、部署和行为完全不变；用户条目不能覆盖同名全局服务器。
+
+### 关键实现
+
+- 存储：`user_mcp_servers`（schema v4 增加 `mode`，v3 表启动时自动 `ALTER`）；`replace_user_mcp_servers` 原子替换整份配置，同名条目保留 id（local 工具命名空间稳定），删除缺失项。
+- API：`GET/PUT /api/mcp/config`、`POST /api/mcp/config/test`；PUT 全量替换，headers `***` 保留旧值；GET 返回 `config` + `servers[]`（含 `mode`）。
+- 分类：`mcpp/user_servers.classify_mcp_url`——localhost/私网/链路本地/`.local`/`.lan`/`.internal`/单标签主机名 → local；主机名解析到私网 → local；公网 HTTPS → remote；公网 HTTP、stdio、URL 内凭证/fragment → 400。
+- 会话：`split_user_mcp_servers` 按 mode 拆分；remote 进 `ServiceContext` registry，local 进 `local-mcp-config`；`register_local_mcp_server` 只接受配置里存在的 `server_id`。
+- 本地转发：`mcpp/local_bridge.py` + `message_handler.response_waiter`（先注册 waiter 再发送）；30s 超时、按会话 socket 返回；群聊 `scoped` 状态只发给所有者。
+- WebSocket：客户端 `register-local-mcp` / `unregister-local-mcp` / `local-tool-result`；服务端 `local-mcp-config` / `local-tool-call` / `local-mcp-registered` / `local-mcp-unregistered` / `local-mcp-error`。
+- 前端：`McpPanel.tsx` 统一 JSON 编辑器 + 解析结果列表（模式/状态/远程测试）；`localMcp.ts` 按 `local-mcp-config` 多服务器连接、注册、重连；不再用 localStorage 存本地 URL。
+
+### 验证
+
+- `uv run --frozen python -m unittest discover -s tests`：**259 个测试通过**。新增/更新 `tests/test_user_mcp.py`（分类、统一 JSON、拆分、存储隔离、本地桥、工具路由、命名空间、上限）与 `tests/test_user_mcp_routes.py`（config GET/PUT、脱敏、`***` 回填、删除、限额、local test 不拨号、401/503）。
+- 真实浏览器冒烟：JSON 里只放 `"my-pc": {"url": "http://127.0.0.1:8766/mcp"}` → 保存 → 重连 → 列表显示 `本地` + `已连接 · 2 个工具`（`l_b97892_echo` / `l_b97892_add`）；假 OpenAI 兼容 LLM 触发调用，后端日志与 UI 均显示 `echo: hello from unified config`。
+- `npx vite build` 成功；`tsc` 在改动文件上无新增错误。
+- 测试产生的本地历史与 `my-pc` 配置已从 `data/storage/open_llm_vtuber.db` 删除，原有 2026-10-21 历史未动；未写 `mcp_servers.json`。
+
+### 部署注意
+
+- 需重建镜像（schema v4 在启动时自动建表/补列）；前端按现有流程构建 `web/dist` 并同步 `frontend/`；本次未部署。
+- 反向代理需放行 `/api/mcp/*`（已受 OIDC 中间件保护）。
+- **必须在目标浏览器实测**：HTTPS 页面访问 `http://127.0.0.1` 的混合内容 / Local Network Access 权限；本地 MCP 必须允许站点 Origin 的 CORS 并 `Access-Control-Expose-Headers: Mcp-Session-Id`。
+- 配置修改只在下次连接生效；本地 MCP 只在页面打开时可用；`local-mcp-config` 的 headers 会经已认证 WS 下发给同一用户。
+- headers 目前明文存 SQLite（600）；后续加密不要复用 `auth.signing_secret`（轮换会使历史 token 无法解密）。
+
+### 回滚
+
+- 回退代码即可；`user_mcp_servers` 表与 `mode` 列均为新增，旧代码不会读写/依赖，无需删表。未改 `mcp_servers.json`、`conf.yaml` 或现有全局 MCP 行为。

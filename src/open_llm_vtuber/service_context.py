@@ -19,6 +19,18 @@ from .mcpp.tool_manager import ToolManager
 from .mcpp.mcp_client import MCPClient
 from .mcpp.tool_executor import ToolExecutor
 from .mcpp.tool_adapter import ToolAdapter
+from .mcpp.local_bridge import LocalMCPBridge
+from .mcpp.types import FormattedTool
+from .mcpp.user_servers import (
+    MAX_LOCAL_MCP_SERVERS,
+    MAX_LOCAL_MCP_TOOLS,
+    build_user_mcp_servers,
+    local_mcp_config_payload,
+    local_server_key,
+    make_exposed_tool_name,
+    unique_tool_name,
+    validate_local_tool,
+)
 from .storage import (
     DEFAULT_USER_ID,
     HistoryMessage,
@@ -70,6 +82,19 @@ class ServiceContext:
         self.mcp_client: MCPClient | None = None
         self.tool_executor: ToolExecutor | None = None
 
+        # Per-session MCP state. ``user_mcp_records`` is loaded from the
+        # database at connection time; browser-local tools are registered over
+        # the WebSocket after the session is established.
+        self._user_mcp_records: list[dict] = []
+        self._local_mcp_config: dict[str, dict] = {}
+        self._base_mcp_tools: dict[str, FormattedTool] = {}
+        self._base_mcp_prompt: str = ""
+        self.local_mcp_bridge: LocalMCPBridge | None = None
+        self.local_mcp_servers: dict[str, dict] = {}
+        self.local_mcp_tools: dict[str, FormattedTool] = {}
+        self._local_mcp_servers_info: dict[str, dict[str, dict]] = {}
+        self.mcp_active: bool = False
+
         # the system prompt is a combination of the persona prompt and live2d expression prompt
         self.system_prompt: str = None
 
@@ -113,11 +138,16 @@ class ServiceContext:
     # ==== Initializers
 
     def _reset_mcp_components(self) -> None:
+        # Local (browser-side) registrations survive a character switch; only
+        # the deployment/user HTTP base is rebuilt.
         self.mcp_server_registry = None
         self.tool_manager = None
         self.mcp_client = None
         self.tool_executor = None
         self.mcp_prompt = ""
+        self._base_mcp_tools = {}
+        self._base_mcp_prompt = ""
+        self.mcp_active = False
 
     async def _init_mcp_tools(self, enabled_servers) -> None:
         try:
@@ -128,6 +158,10 @@ class ServiceContext:
                 raw_tools_dict,
             ) = await self.tool_adapter.build_tools(enabled_servers)
             self.mcp_prompt = mcp_prompt_string
+            self._base_mcp_prompt = mcp_prompt_string
+            self._base_mcp_tools = (
+                dict(raw_tools_dict) if isinstance(raw_tools_dict, dict) else {}
+            )
             logger.info(
                 f"Dynamically generated MCP prompt string (length: {len(self.mcp_prompt)})."
             )
@@ -146,6 +180,8 @@ class ServiceContext:
                 f"Failed during dynamic MCP tool construction: {e}", exc_info=True
             )
             self.tool_manager = None
+            self._base_mcp_tools = {}
+            self._base_mcp_prompt = ""
             self.mcp_prompt = "[Error constructing MCP tools/prompt]"
 
     def _init_mcp_client(self) -> None:
@@ -165,7 +201,12 @@ class ServiceContext:
 
     def _init_tool_executor(self) -> None:
         if self.mcp_client and self.tool_manager:
-            self.tool_executor = ToolExecutor(self.mcp_client, self.tool_manager)
+            if self.local_mcp_bridge is not None:
+                self.tool_executor = ToolExecutor(
+                    self.mcp_client, self.tool_manager, self.local_mcp_bridge
+                )
+            else:
+                self.tool_executor = ToolExecutor(self.mcp_client, self.tool_manager)
             logger.info("ToolExecutor initialized for this session.")
         else:
             logger.warning(
@@ -180,20 +221,33 @@ class ServiceContext:
         )
         self._reset_mcp_components()
 
-        if use_mcpp and enabled_servers:
-            self.mcp_server_registry = ServerRegistry()
-            logger.info("ServerRegistry initialized or referenced.")
+        user_servers = build_user_mcp_servers(self._user_mcp_records)
+        # Global tools remain gated by the character config. Enabled user
+        # servers are always included for this user, even when the character
+        # disables its deployment-level MCP list.
+        global_enabled = list(enabled_servers or []) if use_mcpp else []
+        effective_servers = global_enabled + list(user_servers.keys())
 
-            if not self.tool_adapter:
-                logger.error(
-                    "ToolAdapter not initialized before calling _init_mcp_components."
+        if effective_servers:
+            base_registry = ServerRegistry()
+            if user_servers:
+                self.mcp_server_registry = base_registry.merged_with(user_servers)
+                self.tool_adapter = ToolAdapter(
+                    server_registry=self.mcp_server_registry
                 )
-                self.mcp_prompt = "[Error: ToolAdapter not initialized]"
-                return
+            else:
+                self.mcp_server_registry = base_registry
+                if not self.tool_adapter:
+                    logger.error(
+                        "ToolAdapter not initialized before calling _init_mcp_components."
+                    )
+                    self.mcp_prompt = "[Error: ToolAdapter not initialized]"
+                    return
 
-            await self._init_mcp_tools(enabled_servers)
+            await self._init_mcp_tools(effective_servers)
             self._init_mcp_client()
             self._init_tool_executor()
+            self.mcp_active = self.tool_manager is not None
         elif use_mcpp:
             logger.warning(
                 "use_mcpp is True, but mcp_enabled_servers list is empty. "
@@ -202,6 +256,156 @@ class ServiceContext:
         else:
             logger.debug(
                 "MCP components not initialized (use_mcpp is False or no enabled servers)."
+            )
+
+        if self.local_mcp_tools:
+            self._rebuild_tooling()
+
+    def _remove_local_mcp_server(self, server_id: str) -> None:
+        key = local_server_key(server_id)
+        metadata = self.local_mcp_servers.pop(key, None)
+        if metadata:
+            for tool_name in metadata.get("tool_names", []):
+                self.local_mcp_tools.pop(tool_name, None)
+        self._local_mcp_servers_info.pop(key, None)
+
+    def get_local_mcp_config(self) -> list[dict]:
+        """Return the browser-facing local server config for this session."""
+        return local_mcp_config_payload(list(self._local_mcp_config.values()))
+
+    def register_local_mcp_server(
+        self,
+        *,
+        server_id: str,
+        tools: list[dict],
+    ) -> list[str]:
+        """Register tools from an MCP server running in this user's browser."""
+        if self.channels is None or getattr(self.channels, "text", None) is None:
+            raise ValueError("This session has no browser connection")
+        config = self._local_mcp_config.get(server_id)
+        if config is None:
+            raise ValueError("Unknown local MCP server")
+        name = config.get("name") or server_id
+        if not isinstance(tools, list):
+            raise ValueError("tools must be a list")
+        if len(tools) > MAX_LOCAL_MCP_TOOLS:
+            raise ValueError(f"At most {MAX_LOCAL_MCP_TOOLS} tools are allowed")
+
+        key = local_server_key(server_id)
+        if (
+            key not in self.local_mcp_servers
+            and len(self.local_mcp_servers) >= MAX_LOCAL_MCP_SERVERS
+        ):
+            raise ValueError(
+                f"At most {MAX_LOCAL_MCP_SERVERS} local MCP servers are allowed"
+            )
+
+        formatted: dict[str, FormattedTool] = {}
+        server_info: dict[str, dict] = {}
+        previous = self.local_mcp_servers.get(key, {})
+        previous_names = set(previous.get("tool_names", []))
+        taken = (set(self._base_mcp_tools) | set(self.local_mcp_tools)) - previous_names
+        for tool in tools:
+            remote_name, description, schema = validate_local_tool(tool)
+            candidate = make_exposed_tool_name("l", key, remote_name)
+            exposed_name = unique_tool_name(candidate, taken)
+            taken.add(exposed_name)
+            formatted[exposed_name] = FormattedTool(
+                input_schema=schema,
+                related_server=key,
+                description=description,
+                remote_name=remote_name,
+            )
+            server_info[exposed_name] = {
+                "description": description,
+                "parameters": schema.get("properties", {}),
+                "required": schema.get("required", []),
+            }
+
+        # Only touch the live registration after every tool validated.
+        self._remove_local_mcp_server(server_id)
+        self.local_mcp_tools.update(formatted)
+        self._local_mcp_servers_info[key] = server_info
+        self.local_mcp_servers[key] = {
+            "id": server_id,
+            "name": name,
+            "tool_names": list(formatted),
+        }
+        if self.local_mcp_bridge is None:
+            self.local_mcp_bridge = LocalMCPBridge(self.client_uid, self.channels.text)
+        self._rebuild_tooling()
+        return list(formatted)
+
+    def unregister_local_mcp_server(self, server_id: str) -> bool:
+        if local_server_key(server_id) not in self.local_mcp_servers:
+            return False
+        self._remove_local_mcp_server(server_id)
+        self._rebuild_tooling()
+        return True
+
+    def _rebuild_tooling(self) -> None:
+        """Merge base (global/user HTTP) and browser-local tools into the agent."""
+        merged: dict[str, FormattedTool] = dict(self._base_mcp_tools)
+        merged.update(self.local_mcp_tools)
+
+        adapter = self.tool_adapter
+        if adapter is None:
+            # Temporary formatter for sessions that only have browser-local
+            # tools. Do not cache it on the context: a later config switch may
+            # need a registry-aware adapter for deployment servers.
+            adapter = ToolAdapter(ServerRegistry.from_servers({}))
+
+        local_prompt = ""
+        if self._local_mcp_servers_info:
+            local_prompt = adapter.construct_mcp_prompt_string(
+                self._local_mcp_servers_info,
+                display_names={
+                    key: metadata.get("name", key)
+                    for key, metadata in self.local_mcp_servers.items()
+                },
+            )
+        self.mcp_prompt = "\n\n".join(
+            part for part in (self._base_mcp_prompt, local_prompt) if part
+        )
+
+        if merged:
+            openai_tools, claude_tools = adapter.format_tools_for_api(merged)
+            self.tool_manager = ToolManager(
+                formatted_tools_openai=openai_tools,
+                formatted_tools_claude=claude_tools,
+                initial_tools_dict=merged,
+            )
+            if self.mcp_client is None:
+                self.mcp_server_registry = (
+                    self.mcp_server_registry or ServerRegistry.from_servers({})
+                )
+                self.mcp_client = MCPClient(
+                    self.mcp_server_registry,
+                    self.channels.text if self.channels else None,
+                    self.client_uid,
+                )
+            if self.local_mcp_bridge is None and self.channels is not None:
+                self.local_mcp_bridge = LocalMCPBridge(
+                    self.client_uid, self.channels.text
+                )
+            if self.local_mcp_bridge is not None:
+                self.tool_executor = ToolExecutor(
+                    self.mcp_client, self.tool_manager, self.local_mcp_bridge
+                )
+            else:
+                self.tool_executor = ToolExecutor(self.mcp_client, self.tool_manager)
+            self.mcp_active = True
+        else:
+            self.tool_manager = None
+            self.tool_executor = None
+            self.mcp_active = False
+
+        if isinstance(self.agent_engine, BasicMemoryAgent):
+            self.agent_engine.set_tooling(
+                self.tool_manager,
+                self.tool_executor,
+                self.mcp_prompt,
+                enabled=bool(merged),
             )
 
     async def close(self):
@@ -303,6 +507,8 @@ class ServiceContext:
         client_uid: str = None,
         history_repository: HistoryRepository | None = None,
         user_id: str | None = DEFAULT_USER_ID,
+        user_mcp_servers: list[dict] | None = None,
+        local_mcp_servers: list[dict] | None = None,
     ) -> None:
         """
         Load the ServiceContext with the reference of the provided instances.
@@ -327,6 +533,12 @@ class ServiceContext:
         self.tool_adapter = tool_adapter
         self.channels = channels
         self.client_uid = client_uid
+        self._user_mcp_records = list(user_mcp_servers or [])
+        self._local_mcp_config = {
+            record["id"]: record
+            for record in (local_mcp_servers or [])
+            if isinstance(record.get("id"), str)
+        }
         # Engines passed in by load_cache are shared with the default context.
         self._owns_tts_engine = False
         self.set_history_storage(history_repository, user_id)
@@ -347,6 +559,14 @@ class ServiceContext:
             system_prompt = await self.construct_system_prompt(
                 self.character_config.persona_prompt
             )
+            basic_settings = getattr(
+                self.character_config.agent_config.agent_settings,
+                "basic_memory_agent",
+                None,
+            )
+            effective_use_mcpp = self.mcp_active or bool(
+                getattr(basic_settings, "use_mcpp", False)
+            )
             self.agent_engine = shared_agent.clone_for_session(
                 system=system_prompt,
                 live2d_model=self.live2d_model,
@@ -354,6 +574,7 @@ class ServiceContext:
                 tool_manager=self.tool_manager,
                 tool_executor=self.tool_executor,
                 mcp_prompt_string=self.mcp_prompt,
+                use_mcpp=effective_use_mcpp,
             )
             self.system_prompt = system_prompt
         else:
@@ -500,11 +721,16 @@ class ServiceContext:
 
         # Pass avatar to agent factory
         avatar = self.character_config.avatar or ""  # Get avatar from config
+        agent_settings = agent_config.agent_settings.model_dump()
+        # User/local MCP tools are an explicit opt-in and may need to enable
+        # tool calling even when the character's deployment config disables it.
+        if self.mcp_active and agent_settings.get("basic_memory_agent") is not None:
+            agent_settings["basic_memory_agent"]["use_mcpp"] = True
 
         try:
             self.agent_engine = AgentFactory.create_agent(
                 conversation_agent_choice=agent_config.conversation_agent_choice,
-                agent_settings=agent_config.agent_settings.model_dump(),
+                agent_settings=agent_settings,
                 llm_configs=agent_config.llm_configs.model_dump(),
                 system_prompt=system_prompt,
                 live2d_model=self.live2d_model,

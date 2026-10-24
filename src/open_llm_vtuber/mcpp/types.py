@@ -27,6 +27,10 @@ class MCPServer:
     description: str = "No description available."
     url: Optional[str] = None
     headers: Optional[dict[str, str]] = None
+    # User-added servers are untrusted input: their URL is validated before
+    # every connection and their tools are namespaced away from global ones.
+    is_user: bool = False
+    display_name: Optional[str] = None
 
 
 @dataclass
@@ -38,12 +42,15 @@ class FormattedTool:
         related_server (str): The name of the server that contains the tool.
         generic_schema (Optional[dict[str, Any]], optional): Generic schema for the tool. Defaults to None.
         description (str, optional): Description of the tool, usually from the server's tool definition. Defaults to "No description available.".
+        remote_name (Optional[str], optional): Name to send to the MCP server when
+            the exposed name was namespaced. Defaults to the exposed name.
     """
 
     input_schema: dict[str, Any]
     related_server: str
     generic_schema: Optional[dict[str, Any]] = None
     description: str = "No description available."
+    remote_name: Optional[str] = None
 
 
 @dataclass
