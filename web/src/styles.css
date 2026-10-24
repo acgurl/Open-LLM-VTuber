@@ -269,6 +269,41 @@ body,
   font-size: 0.9em;
 }
 
+.bubble-text a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: rgba(138, 180, 255, 0.4);
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  transition:
+    color 140ms,
+    text-decoration-color 140ms;
+}
+
+.bubble-text a:visited {
+  color: var(--accent);
+}
+
+.bubble-text a[target='_blank']::after {
+  content: '↗';
+  margin-left: 2px;
+  font-size: 0.8em;
+  opacity: 0.6;
+}
+
+@media (hover: hover) {
+  .bubble-text a:hover {
+    color: #b6cdff;
+    text-decoration-color: currentColor;
+  }
+}
+
+.bubble-text a:focus-visible {
+  outline: 2px solid rgba(138, 180, 255, 0.5);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
 .bubble-text.plain {
   white-space: pre-wrap;
 }

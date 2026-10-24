@@ -1,9 +1,19 @@
-import ReactMarkdown from 'react-markdown';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useConnection } from '../stores/connection';
 import { buildTagSet, splitByTags, splitThink, avatarUrl } from '../utils/text';
 import type { ChatTextEntry } from '../stores/chat';
 import { ThinkBlock } from './ThinkBlock';
+
+// 模型输出的链接一律新标签页打开，避免整页被打断。
+const markdownComponents: Components = {
+  p: 'span',
+  a: ({ children, href, title }) => (
+    <a href={href} title={title} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+};
 
 // AI 气泡：流式增量合并进同一个气泡；[tag] 渲染为动作块；<think> 折叠。
 export function MessageBubble({ entry }: { entry: ChatTextEntry }) {
@@ -58,7 +68,7 @@ function TaggedMarkdown({ text, tagSet }: { text: string; tagSet: Set<string> })
             {tok.value}
           </span>
         ) : (
-          <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} components={{ p: 'span' }}>
+          <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} components={markdownComponents}>
             {tok.value}
           </ReactMarkdown>
         ),
