@@ -387,7 +387,7 @@ ssh oracle "docker restart open-llm-vtuber"
 - 回滚：把 `run-container.sh` 镜像改回 `open-llm-vtuber:1.2.1-refactor-20261023` 并执行 `bash run-container.sh`；前端文件可从未部署前的备份目录恢复。
 - 注意：Cloudflare 边缘仍可能对旧 hash 资源返回缓存的 200，但新 index 不再引用，无影响；已打开页面的用户需刷新一次。
 
-## 18. 2026-10-25 用户 MCP 与浏览器本地 MCP（本地实现完成，未部署）
+## 18. 2026-10-25 用户 MCP 与浏览器本地 MCP（已部署）
 
 ### 能力
 
@@ -422,6 +422,20 @@ ssh oracle "docker restart open-llm-vtuber"
 - 配置修改只在下次连接生效；本地 MCP 只在页面打开时可用；`local-mcp-config` 的 headers 会经已认证 WS 下发给同一用户。
 - headers 目前明文存 SQLite（600）；后续加密不要复用 `auth.signing_secret`（轮换会使历史 token 无法解密）。
 
+### 部署结果（2026-10-24，服务器本地时间）
+
+- 代码已提交并推送：源码 `a7a209a`、父仓库 bundle 指针 `36440d3`（origin/main）、前端子模块 `383ddff`（origin/build-motion）。
+- 生产镜像 `open-llm-vtuber:1.2.1-user-mcp-20261024`，`run-container.sh` 已切换；旧镜像 `1.2.1-history-refresh-20261023` 保留回滚。`run-container.sh.bak.usermcp.20261024` 在部署目录。
+- 备份 `data/backups/user-mcp-20261024-170303/`：`run-container.sh.bak`、`conf.yaml.bak`、`model_dict.json.bak`、`mcp_servers.json.bak`、`frontend.tar.gz`、`source-before.tar.gz`、SQLite 备份、`counts-before.txt`、`sha256-before.txt`。
+- 同步：`git archive HEAD` 排除 `conf/characters/avatars/backgrounds/live2d-models/models/data/cache/logs/chat_history/mcp_servers.json/model_dict.json/frontend` 后解包；前端 tar 覆盖 `frontend/`（保留旧 hash 资源）。`mcp_servers.json` 保持 `fdcc0fce…`，`conf/conf.yaml` 保持 `7918b34b…`。
+- 镜像内 `uv run --frozen python -m unittest discover -s tests`：**259 个测试通过**（注意要用 `uv run`，镜像的系统 Python 没有项目依赖）。
+- 启动：`/healthz` 200（本机与公网）、未登录 `/api/mcp/config` 与 `/api/session` 均 401；cuc-kb 成功连接，MCP prompt 长度 1829；schema `[1,2,3,4]`，`user_mcp_servers` 已有 `mode` 列；users 3 / messages 417 未变，histories 206→208（重启期间活跃客户端新增 2 条空历史，0 消息）。
+- 生产签名会话冒烟（用户 `deploy_mcp_smoke_20261024`，测试后已删除）：`GET /api/mcp/config` 200、`PUT` 本地条目 200 且 `mode=local`、WS 收到 `local-mcp-config`（1 个 `http://127.0.0.1:8766/mcp`）、临时配置清空 200；带会话访问 `/` 200 且引用新入口 `assets/index-CUMe6bnS.js`。
+- 公网新资源 `/assets/index-CUMe6bnS.js`、`/assets/index-C8VRA23Y.css` 均 200；容器日志无 ERROR/Traceback。新前端产物：入口 `index-CUMe6bnS.js`、VAD chunk `index-BYcNb3V_.js`、CSS `index-C8VRA23Y.css`。
+- 未做：浏览器端在 HTTPS 生产域下访问 `http://127.0.0.1` 的 Local Network Access / CORS 实测（本地开发域已通过），需要真实用户环境授权后验证；CF HTML 入口缓存未手动 purge（匿名入口仍 401/BYPASS）。
+
 ### 回滚
 
-- 回退代码即可；`user_mcp_servers` 表与 `mode` 列均为新增，旧代码不会读写/依赖，无需删表。未改 `mcp_servers.json`、`conf.yaml` 或现有全局 MCP 行为。
+- 恢复 `run-container.sh.bak.usermcp.20261024`（或把镜像改回 `1.2.1-history-refresh-20261023`）并 `bash run-container.sh`。
+- `user_mcp_servers` 表与 `mode` 列均为新增，旧镜像不会读写/依赖，无需删表；如需完全恢复数据库，用备份目录的 `open_llm_vtuber.db`。
+- 前端可回退到备份 `frontend.tar.gz`；旧 hash 资源仍在服务器，打开中的页面不受影响。
