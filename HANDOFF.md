@@ -502,4 +502,4 @@ ssh oracle "docker restart open-llm-vtuber"
 - 备份 `data/backups/live2d-webp-20261025-073636/`（`frontend/index.html`、`conf/model_dict.json`、`Caddyfile.bak`）；第二份 Caddy 备份 `/etc/caddy/Caddyfile.bak.live2dwebp2.20261025`。
 - 模型与 model3 经 scp 到 bind mount，`conf/model_dict.json` 同步后 `docker restart open-llm-vtuber`；前端 `index.html` + 两个新 hash 用 `docker cp` 热更新，镜像仍为 `1.2.1-oidc-cache-20261025`。`scripts/warm_live2d_cache.py` 已上传服务器。
 - 回滚：恢复备份的 `frontend/index.html` 与 `conf/model_dict.json`（或把 mao URL 指回 `mao_pro.model3.json`），`docker cp` 回旧入口并重启；Caddy 用上述备份恢复后 `caddy validate` + `systemctl reload caddy`。WebP 为新增文件，无需删除。
-- 注意：mao/shizuku 的新 URL 在 Caddy 修正前已被预热，其边缘条目仍带旧合并头（7 天）直到边缘 TTL 到期；当前无 CF API Token，未 purge。hiyori 等新发起的 MISS 已返回 30 天 immutable。若需要让这批条目立即生效 30 天，用 Dashboard 或 Token purge `/live2d-models/*` 后重跑预热脚本即可。
+- 补充 purge：用本机 User 级环境变量里的 Global API Key（`CLOUDFLARE_EMAIL` + `CLOUDFLARE_API_KEY`）对 model_dict 的 80 个 URL 与 shizuku 的 14 个 URL 执行 `purge_cache`，随后在服务器重跑预热。抽查 6 个模型与 shizuku 的 model3/贴图，均返回 `Cache-Control: public, max-age=2592000, immutable`；model3 全部 HIT，本机 colo 未预热的贴图首次 MISS、之后 HIT。`warm_live2d_cache.py` 只按 model_dict 预热，未启用的模型（如 shizuku）需单独处理。
