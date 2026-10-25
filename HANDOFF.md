@@ -504,7 +504,7 @@ ssh oracle "docker restart open-llm-vtuber"
 - 回滚：恢复备份的 `frontend/index.html` 与 `conf/model_dict.json`（或把 mao URL 指回 `mao_pro.model3.json`），`docker cp` 回旧入口并重启；Caddy 用上述备份恢复后 `caddy validate` + `systemctl reload caddy`。WebP 为新增文件，无需删除。
 - 补充 purge：用本机 User 级环境变量里的 Global API Key（`CLOUDFLARE_EMAIL` + `CLOUDFLARE_API_KEY`）对 model_dict 的 80 个 URL 与 shizuku 的 14 个 URL 执行 `purge_cache`，随后在服务器重跑预热。抽查 6 个模型与 shizuku 的 model3/贴图，均返回 `Cache-Control: public, max-age=2592000, immutable`；model3 全部 HIT，本机 colo 未预热的贴图首次 MISS、之后 HIT。`warm_live2d_cache.py` 只按 model_dict 预热，未启用的模型（如 shizuku）需单独处理。
 
-## 21. 2026-10-25 移除老前端子模块（未部署）
+## 21. 2026-10-25 移除老前端子模块（已部署）
 
 ### 变更
 
@@ -519,12 +519,19 @@ ssh oracle "docker restart open-llm-vtuber"
 - `cd web && npm run build`：通过；产物 `index-BJvEhV-b.js` / `index-DXZ6JaN6.js` / `index-BT7NIenF.css` 与移除前一致（构建幂等）。
 - `uv run --frozen python -m unittest discover -s tests`：**274 个测试通过**（原 275；删除子模块错误插值用例，改为断言新的构建提示）。
 - `starlette.testclient` 直连后端：`/` 200 且引用新入口，`/assets/index-BJvEhV-b.js` 200，`/libs/live2d.min.js` 200（`public, max-age=2592000`）。
-- 本机无 Docker，未执行镜像构建；多阶段 Dockerfile 需在服务器实测。
+- 服务器 ARM64 多阶段构建通过；镜像内 `uv run --frozen python -m unittest discover -s tests` **274 个通过**，`/app/web/dist` 存在且 `/app/frontend` 不存在，构建产物 hash 与本机一致。
 
 ### 部署注意（必须重建镜像）
 
 - 镜像内前端路径从 `/app/frontend` 变为 `/app/web/dist`，旧镜像无法只靠 `docker cp` 获得新页面，**必须重建镜像**后切换 `run-container.sh`。
 - 服务器 `docker build -t open-llm-vtuber:<tag> .` 会在 `web` 阶段执行 `npm ci`（需外网）；`web/` 与 `web/public/libs` 随源码包进入构建上下文。
 - 新镜像后的热更新：本地 `cd web && npm run build`，再 `docker cp web/dist/. open-llm-vtuber:/app/web/dist/`；无需重启（静态文件按请求读取）。旧 hash 资源会留在容器里，不影响打开中的页面。
-- 回滚：源码侧 `git revert` 本提交可恢复 `.gitmodules` 与 gitlink（再 `git submodule update --init`）；生产可切回上一镜像 `1.2.1-oidc-cache-20261025`，其 `/app/frontend` 内容仍在。
-- 本次改动尚未提交、未部署。
+- 回滚：源码侧 `git revert` 本提交可恢复 `.gitmodules` 与 gitlink（再 `git submodule update --init`）；生产可切回上一镜像 `1.2.1-oidc-cache-20261025`，其 `/app/frontend` 内容仍在；服务器旧 `frontend/` 已打包在本次备份目录。
+
+### 部署结果（2026-10-25，服务器本地时间）
+
+- 提交 `6f77a67` 已推送 `origin/main`。生产镜像 `open-llm-vtuber:1.2.1-web-dist-20261025`，`run-container.sh` 已切换，旧 `1.2.1-oidc-cache-20261025` 保留回滚。
+- 备份 `data/backups/frontend-submodule-removal-20261025-085508/`：`run-container.sh.bak`、`dockerfile.bak`、`dockerignore.bak`、`run_server.py.bak`、`server.py.bak`、`frontend.tar.gz`（61MB 旧产物）、`web-before.tar.gz`、`runtime-sha-before/after.txt`。
+- 同步：服务器旧 `web/`（Oct 24 源码）与 `frontend/`（61MB）先整目录备份再删除，`git archive HEAD` 解包（无 `frontend/`，含 `web/public/libs`）；`conf.yaml`（`7918b34b…`）与 `conf/model_dict.json`（`39caa841…`）未变。
+- **事故与恢复**：`mcp_servers.json` 仍被 git 跟踪（尽管在 `.gitignore`），归档解包把生产配置覆盖成本地默认（`fdcc0fce…` → `46adaa83…`）；随后从 `data/backups/user-mcp-sse-20261024-172827/mcp_servers.json.bak` 恢复并 `chmod 600`，哈希回到 `fdcc0fce…`。**以后同步必须显式排除 `mcp_servers.json`**，或先 `git rm --cached` 解除跟踪。
+- 验证：容器 `Up`、`/healthz` 200；匿名浏览器 `/` 302 到 `/auth/login`（curl 默认 `Accept: */*` 为 401，属既有行为）；公网 `/assets/index-BJvEhV-b.js` 200 且 sha256 `24572931…` 与本地一致，`/libs/live2d.min.js` 200；`assets` 仍 `immutable`、`libs` 仍 30 天；`cuc-kb` MCP 正常连接，日志无 ERROR/WARNING/Traceback；DB 3 users / 295 histories / 464 messages，部署未改动数据库。新镜像内无 `/app/frontend`，页面由 `/app/web/dist` 提供，外部用户仅需普通刷新（产物 hash 未变，无缓存失效问题）。
