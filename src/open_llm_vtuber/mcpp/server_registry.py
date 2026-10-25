@@ -5,11 +5,14 @@ import json
 
 from pathlib import Path
 from typing import Dict, Optional, Union, Any
-from urllib.parse import urlparse
 from loguru import logger
 
 from .types import MCPServer
-from .user_servers import normalize_mcp_transport
+from .user_servers import (
+    headers_are_string_pairs,
+    normalize_mcp_transport,
+    parse_mcp_url,
+)
 from .utils.path import validate_file
 
 DEFAULT_CONFIG_PATH = "mcp_servers.json"
@@ -174,15 +177,15 @@ class ServerRegistry:
 
     @staticmethod
     def _is_valid_http_url(url: Any) -> bool:
-        parsed = urlparse(url) if isinstance(url, str) else None
-        return bool(parsed and parsed.scheme in ("http", "https") and parsed.netloc)
+        try:
+            parse_mcp_url(url)
+        except ValueError:
+            return False
+        return True
 
     @staticmethod
     def _is_valid_headers(headers: Any) -> bool:
-        return isinstance(headers, dict) and all(
-            isinstance(key, str) and isinstance(value, str)
-            for key, value in headers.items()
-        )
+        return headers_are_string_pairs(headers)
 
     def remove_server(self, server_name: str) -> None:
         """Remove a server from the available servers."""

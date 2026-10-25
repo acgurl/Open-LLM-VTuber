@@ -8,6 +8,7 @@ import sqlite3
 import threading
 import uuid
 
+from ..mcpp.user_servers import headers_are_string_pairs, parse_mcp_url
 from .base import (
     HistoryMessage,
     HistoryNotFoundError,
@@ -108,9 +109,6 @@ def _load_json(value: str | None) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-_MCP_URL_MAX_LENGTH = 2048
-
-
 def _validate_mcp_fields(
     name: str,
     url: str,
@@ -120,19 +118,8 @@ def _validate_mcp_fields(
     transport: str,
 ) -> None:
     validate_key(name, "name")
-    if (
-        not isinstance(url, str)
-        or not url
-        or url != url.strip()
-        or len(url) > _MCP_URL_MAX_LENGTH
-    ):
-        raise ValueError(
-            f"url must be a non-empty string up to {_MCP_URL_MAX_LENGTH} characters"
-        )
-    if not isinstance(headers, dict) or not all(
-        isinstance(key, str) and isinstance(value, str)
-        for key, value in headers.items()
-    ):
+    parse_mcp_url(url)
+    if not headers_are_string_pairs(headers):
         raise ValueError("headers must be a mapping of strings to strings")
     if not isinstance(enabled, bool):
         raise ValueError("enabled must be a boolean")

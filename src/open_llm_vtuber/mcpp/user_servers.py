@@ -110,6 +110,13 @@ def validate_server_id(server_id: Any) -> str:
     return server_id
 
 
+def headers_are_string_pairs(headers: Any) -> bool:
+    return isinstance(headers, dict) and all(
+        isinstance(key, str) and isinstance(value, str)
+        for key, value in headers.items()
+    )
+
+
 def validate_headers(headers: Any) -> dict[str, str]:
     if headers is None:
         return {}
@@ -153,7 +160,8 @@ def _is_public_address(address: str) -> bool:
     )
 
 
-def _parse_mcp_url(url: Any):
+def parse_mcp_url(url: Any):
+    """Validate URL syntax shared by user and deployment MCP configs."""
     if not isinstance(url, str) or not url or url != url.strip() or len(url) > 2048:
         raise ValueError("url must be a non-empty string up to 2048 characters")
 
@@ -193,7 +201,7 @@ def classify_mcp_url(url: Any) -> str:
     Local entries may use plain http: the backend never dials them. Remote
     entries must be public HTTPS so the server cannot be used as an SSRF proxy.
     """
-    parsed = _parse_mcp_url(url)
+    parsed = parse_mcp_url(url)
     host = parsed.hostname.rstrip(".").lower()
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
@@ -228,7 +236,7 @@ def validate_public_https_url(url: Any) -> str:
     DNS is resolved here and again before every MCP connection. Hostname
     allow-listing is not used because users bring their own endpoints.
     """
-    parsed = _parse_mcp_url(url)
+    parsed = parse_mcp_url(url)
     if parsed.scheme != "https":
         raise ValueError("url must use https")
 
