@@ -1,9 +1,11 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+import open_llm_vtuber.utils.tts_preprocessor as preprocessor  # noqa: E402
 from open_llm_vtuber.utils.tts_preprocessor import (  # noqa: E402
     markdown_to_plain_text,
     tts_filter,
@@ -48,6 +50,20 @@ class MarkdownToPlainTextTests(unittest.TestCase):
             "*wave* hello",
         )
         self.assertEqual(markdown_to_plain_text("*wave* hello"), "wave hello")
+
+    def test_failed_filter_keeps_the_unfiltered_text(self) -> None:
+        with patch.object(
+            preprocessor, "filter_brackets", side_effect=RuntimeError("boom")
+        ):
+            result = tts_filter(
+                "[跳过] 保留",
+                remove_special_char=False,
+                ignore_brackets=True,
+                ignore_parentheses=False,
+                ignore_asterisks=False,
+                ignore_angle_brackets=False,
+            )
+        self.assertEqual(result, "[跳过] 保留")
 
     def test_role_play_actions_are_removed_only_when_requested(self) -> None:
         self.assertEqual(filter_for_tts("**你好**", ignore_asterisks=True), "你好")

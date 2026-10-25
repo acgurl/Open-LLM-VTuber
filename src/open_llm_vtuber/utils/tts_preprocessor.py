@@ -1,6 +1,7 @@
 import html
 import re
 import unicodedata
+from typing import Callable
 from loguru import logger
 
 
@@ -96,6 +97,22 @@ def markdown_to_plain_text(text: str, keep_single_asterisk_content: bool = True)
     return re.sub(r"[ \t]{2,}", " ", text).strip()
 
 
+def _apply_filter(
+    text: str,
+    label: str,
+    func: Callable[..., str],
+    **kwargs,
+) -> str:
+    """Run one speech filter, keeping the input when the filter fails."""
+    try:
+        return func(text, **kwargs)
+    except Exception as e:
+        logger.warning(f"Error {label}: {e}")
+        logger.warning(f"Text: {text}")
+        logger.warning("Skipping...")
+        return text
+
+
 def tts_filter(
     text: str,
     remove_special_char: bool,
@@ -117,57 +134,29 @@ def tts_filter(
         ignore_asterisks (bool): Whether to ignore text within single asterisks
             (role-play actions). Markdown emphasis is flattened beforehand, so its
             content is still spoken.
-        translator (TranslateInterface, optional):
-            The translator to use. If None, we'll skip the translation. Defaults to None.
 
     Returns:
         str: The filtered text.
     """
-    try:
-        text = markdown_to_plain_text(
-            text, keep_single_asterisk_content=not ignore_asterisks
-        )
-    except Exception as e:
-        logger.warning(f"Error flattening markdown: {e}")
-        logger.warning(f"Text: {text}")
-        logger.warning("Skipping...")
+    text = _apply_filter(
+        text,
+        "flattening markdown",
+        markdown_to_plain_text,
+        keep_single_asterisk_content=not ignore_asterisks,
+    )
 
     if ignore_asterisks:
-        try:
-            text = filter_asterisks(text)
-        except Exception as e:
-            logger.warning(f"Error ignoring asterisks: {e}")
-            logger.warning(f"Text: {text}")
-            logger.warning("Skipping...")
-
+        text = _apply_filter(text, "ignoring asterisks", filter_asterisks)
     if ignore_brackets:
-        try:
-            text = filter_brackets(text)
-        except Exception as e:
-            logger.warning(f"Error ignoring brackets: {e}")
-            logger.warning(f"Text: {text}")
-            logger.warning("Skipping...")
+        text = _apply_filter(text, "ignoring brackets", filter_brackets)
     if ignore_parentheses:
-        try:
-            text = filter_parentheses(text)
-        except Exception as e:
-            logger.warning(f"Error ignoring parentheses: {e}")
-            logger.warning(f"Text: {text}")
-            logger.warning("Skipping...")
+        text = _apply_filter(text, "ignoring parentheses", filter_parentheses)
     if ignore_angle_brackets:
-        try:
-            text = filter_angle_brackets(text)
-        except Exception as e:
-            logger.warning(f"Error ignoring angle brackets: {e}")
-            logger.warning(f"Text: {text}")
-            logger.warning("Skipping...")
+        text = _apply_filter(text, "ignoring angle brackets", filter_angle_brackets)
     if remove_special_char:
-        try:
-            text = remove_special_characters(text)
-        except Exception as e:
-            logger.warning(f"Error removing special characters: {e}")
-            logger.warning(f"Text: {text}")
-            logger.warning("Skipping...")
+        text = _apply_filter(
+            text, "removing special characters", remove_special_characters
+        )
     logger.debug(f"Filtered text: {text}")
     return text
 
