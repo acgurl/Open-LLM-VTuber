@@ -41,6 +41,11 @@ class AudioPlayer {
     this.maybeAck();
   }
 
+  // 静音只掐声音，不动播放进度；取消静音时当前句从原位置继续出声
+  setMuted(muted: boolean) {
+    if (this.currentAudio) this.currentAudio.muted = muted;
+  }
+
   stopAll() {
     this.epoch += 1;
     this.synthComplete = false;
@@ -82,7 +87,6 @@ class AudioPlayer {
 
   private async playOne(p: AudioPayload, epoch: number) {
     if (epoch !== this.epoch) return;
-    const ttsOn = useSettings.getState().ttsOn;
     const modelInfo = useConnection.getState().modelInfo;
     const tagSet = buildTagSet(modelInfo);
     const rawText = p.display_text?.text ?? '';
@@ -98,16 +102,16 @@ class AudioPlayer {
 
     if (p.actions) live2d.applyActions(p.actions);
 
-    if (ttsOn && p.audio && p.display_text && useGroup.getState().members.length > 1) {
+    if (p.audio && p.display_text && useGroup.getState().members.length > 1) {
       wsClient.send({ type: 'audio-play-start', display_text: p.display_text });
     }
 
     const showSubtitle = clean.length > 0;
     if (showSubtitle) {
-      useSubtitle.getState().show(name, avatar, clean, ttsOn && p.audio ? 0 : clean.length);
+      useSubtitle.getState().show(name, avatar, clean, p.audio ? 0 : clean.length);
     }
 
-    if (ttsOn && p.audio && p.audio_mime) {
+    if (p.audio && p.audio_mime) {
       live2d.setSpeaking(true);
       const bytes = base64ToBytes(p.audio);
       const blob = new Blob([bytes.buffer as ArrayBuffer], { type: p.audio_mime });
@@ -122,7 +126,7 @@ class AudioPlayer {
       this.heardBase += clean;
       this.heardPartial = '';
     } else if (clean) {
-      // 静音载荷：只显示不播，按长度短暂停留并允许被打断
+      // 无音频载荷：只显示不播，按长度短暂停留并允许被打断
       await this.holdDisplay(Math.min(3000, 600 + clean.length * 45), epoch);
       if (epoch !== this.epoch) return;
     }
@@ -150,6 +154,7 @@ class AudioPlayer {
     return new Promise((resolve) => {
       const url = URL.createObjectURL(blob);
       const el = new Audio(url);
+      el.muted = !useSettings.getState().ttsOn;
       this.currentAudio = el;
       let done = false;
       const finish = () => {

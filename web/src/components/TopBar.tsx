@@ -25,7 +25,7 @@ export function TopBar() {
   const toggleTts = () => {
     const enabled = !ttsOn;
     setTtsOn(enabled);
-    if (!enabled) audioPlayer.stopAll();
+    audioPlayer.setMuted(!enabled);
   };
 
   return (
