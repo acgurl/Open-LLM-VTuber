@@ -38,9 +38,12 @@ export function TopBar() {
       >
         <MenuIcon />
       </button>
-      <div className="topbar-center">
-        <span className={DOT_CLASS[status] ?? 'dot'} />
-        <span className="topbar-name">{confName || t('app.title')}</span>
+      <div className="topbar-middle">
+        <div className="topbar-center">
+          <span className={DOT_CLASS[status] ?? 'dot'} />
+          <span className="topbar-name">{confName || t('app.title')}</span>
+          {statusText && <span className="topbar-status">{statusText}</span>}
+        </div>
         <button
           className={`icon-btn tts-toggle${ttsOn ? '' : ' off'}`}
           aria-label={t(ttsOn ? 'settings.ttsOn' : 'settings.ttsOff')}
@@ -50,7 +53,6 @@ export function TopBar() {
         >
           <VolumeIcon muted={!ttsOn} />
         </button>
-        {statusText && <span className="topbar-status">{statusText}</span>}
       </div>
       <button
         className="icon-btn"
@@ -74,7 +76,7 @@ function MenuIcon() {
 
 function VolumeIcon({ muted }: { muted: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M11 5 6 9H3v6h3l5 4z" />
       {muted ? (
         <path d="m16 9 5 6m0-6-5 6" />
