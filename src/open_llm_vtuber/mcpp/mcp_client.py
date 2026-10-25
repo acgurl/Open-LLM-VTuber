@@ -18,8 +18,8 @@ from mcp.client.streamable_http import (
 from .server_registry import ServerRegistry
 from .types import MCPServer
 from .user_servers import (
-    MAX_MCP_RESULT_BYTES,
-    content_items_size,
+    error_tool_result,
+    result_size_exceeded,
     validate_public_https_url_async,
 )
 
@@ -274,16 +274,8 @@ class MCPClient:
                 {"type": "text", "text": ""}
             )  # Ensure content_items is not empty
 
-        if server.is_user and content_items_size(content_items) > MAX_MCP_RESULT_BYTES:
-            return {
-                "metadata": {},
-                "content_items": [
-                    {
-                        "type": "error",
-                        "text": "User MCP tool result exceeded the size limit",
-                    }
-                ],
-            }
+        if server.is_user and result_size_exceeded(content_items):
+            return error_tool_result("User MCP tool result exceeded the size limit")
 
         result = {
             "metadata": getattr(response, "metadata", {}),

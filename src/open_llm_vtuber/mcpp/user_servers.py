@@ -478,3 +478,15 @@ def content_items_size(content_items: list[dict[str, Any]] | None) -> int:
             if isinstance(value, str):
                 total += len(value)
     return total
+
+
+def result_size_exceeded(content_items: list[dict[str, Any]] | None) -> bool:
+    return content_items_size(content_items) > MAX_MCP_RESULT_BYTES
+
+
+def error_content_items(message: str) -> list[dict[str, Any]]:
+    return [{"type": "error", "text": message}]
+
+
+def error_tool_result(message: str) -> dict[str, Any]:
+    return {"metadata": {}, "content_items": error_content_items(message)}

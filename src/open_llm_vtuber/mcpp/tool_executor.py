@@ -13,7 +13,7 @@ from typing import (
 from .types import ToolCallObject
 from .mcp_client import MCPClient
 from .tool_manager import ToolManager
-from .user_servers import MAX_MCP_RESULT_BYTES, content_items_size
+from .user_servers import error_content_items, result_size_exceeded
 
 
 class ToolExecutor:
@@ -374,16 +374,10 @@ class ToolExecutor:
                 is_scoped_tool = tool_info.related_server.startswith(
                     ("user:", "local:")
                 )
-                if (
-                    is_scoped_tool
-                    and content_items_size(content_items) > MAX_MCP_RESULT_BYTES
-                ):
-                    content_items = [
-                        {
-                            "type": "error",
-                            "text": "Tool result exceeded the size limit",
-                        }
-                    ]
+                if is_scoped_tool and result_size_exceeded(content_items):
+                    content_items = error_content_items(
+                        "Tool result exceeded the size limit"
+                    )
 
                 # Check if the first content item is an error reported by MCPClient
                 if content_items and content_items[0].get("type") == "error":
