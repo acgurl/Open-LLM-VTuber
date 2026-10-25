@@ -154,6 +154,58 @@ def _websocket_origin_allowed(websocket: WebSocket, auth: AuthManager | None) ->
     return origin_host == request_host
 
 
+async def _reject_websocket(websocket: WebSocket, code: int, reason: str) -> None:
+    await websocket.accept()
+    await websocket.close(code=code, reason=reason)
+
+
+async def _require_websocket_identity(
+    websocket: WebSocket,
+    auth: AuthManager | None,
+    default_user_id: str,
+) -> Identity | None:
+    """Reject an unauthenticated or cross-site socket before it is served."""
+    if not _websocket_origin_allowed(websocket, auth):
+        await _reject_websocket(websocket, 1008, "Origin not allowed")
+        return None
+    identity = _websocket_identity(websocket, auth, default_user_id)
+    if identity is None:
+        await _reject_websocket(websocket, 4401, "Authentication required")
+        return None
+    return identity
+
+
+def _scan_live2d_models(live2d_dir: str) -> list[dict]:
+    """List model folders that contain the matching .model3.json file."""
+    supported_extensions = [".png", ".jpg", ".jpeg"]
+    valid_characters = []
+    for entry in os.scandir(live2d_dir):
+        if not entry.is_dir():
+            continue
+        folder_name = entry.name.replace("\\", "/")
+        model3_file = os.path.join(
+            live2d_dir, folder_name, f"{folder_name}.model3.json"
+        ).replace("\\", "/")
+        if not os.path.isfile(model3_file):
+            continue
+
+        avatar_file = None
+        for ext in supported_extensions:
+            avatar_path = os.path.join(live2d_dir, folder_name, f"{folder_name}{ext}")
+            if os.path.isfile(avatar_path):
+                avatar_file = avatar_path.replace("\\", "/")
+                break
+
+        valid_characters.append(
+            {
+                "name": folder_name,
+                "avatar": avatar_file,
+                "model_path": model3_file,
+            }
+        )
+    return valid_characters
+
+
 def init_client_ws_route(
     default_context_cache: ServiceContext,
     auth: AuthManager | None = None,
@@ -182,17 +234,12 @@ def init_client_ws_route(
     @router.websocket("/client-ws")
     async def websocket_endpoint(websocket: WebSocket):
         """WebSocket endpoint for client connections"""
-        if not _websocket_origin_allowed(websocket, auth):
-            await websocket.accept()
-            await websocket.close(code=1008, reason="Origin not allowed")
-            return
-
-        identity = _websocket_identity(
-            websocket, auth, getattr(default_context_cache, "user_id", None) or "local"
+        identity = await _require_websocket_identity(
+            websocket,
+            auth,
+            getattr(default_context_cache, "user_id", None) or "local",
         )
         if identity is None:
-            await websocket.accept()
-            await websocket.close(code=4401, reason="Authentication required")
             return
 
         client_uid = str(uuid4())
@@ -305,34 +352,7 @@ def init_webtool_routes(
                 {"error": "Live2D models directory not found"}, status_code=404
             )
 
-        valid_characters = []
-        supported_extensions = [".png", ".jpg", ".jpeg"]
-
-        for entry in os.scandir(live2d_dir):
-            if entry.is_dir():
-                folder_name = entry.name.replace("\\", "/")
-                model3_file = os.path.join(
-                    live2d_dir, folder_name, f"{folder_name}.model3.json"
-                ).replace("\\", "/")
-
-                if os.path.isfile(model3_file):
-                    # Find avatar file if it exists
-                    avatar_file = None
-                    for ext in supported_extensions:
-                        avatar_path = os.path.join(
-                            live2d_dir, folder_name, f"{folder_name}{ext}"
-                        )
-                        if os.path.isfile(avatar_path):
-                            avatar_file = avatar_path.replace("\\", "/")
-                            break
-
-                    valid_characters.append(
-                        {
-                            "name": folder_name,
-                            "avatar": avatar_file,
-                            "model_path": model3_file,
-                        }
-                    )
+        valid_characters = _scan_live2d_models(live2d_dir)
         return JSONResponse(
             {
                 "type": "live2d-models/info",
@@ -384,17 +404,12 @@ def init_webtool_routes(
     @router.websocket("/tts-ws")
     async def tts_endpoint(websocket: WebSocket):
         """WebSocket endpoint for TTS generation"""
-        if not _websocket_origin_allowed(websocket, auth):
-            await websocket.accept()
-            await websocket.close(code=1008, reason="Origin not allowed")
-            return
-
-        identity = _websocket_identity(
-            websocket, auth, getattr(default_context_cache, "user_id", None) or "local"
+        identity = await _require_websocket_identity(
+            websocket,
+            auth,
+            getattr(default_context_cache, "user_id", None) or "local",
         )
         if identity is None:
-            await websocket.accept()
-            await websocket.close(code=4401, reason="Authentication required")
             return
 
         if tts_slots.locked():
