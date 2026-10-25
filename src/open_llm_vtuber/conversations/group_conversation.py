@@ -11,6 +11,7 @@ from .conversation_utils import (
     process_user_input,
     finalize_conversation_turn,
     cleanup_conversation,
+    should_store_history,
     EMOJI_LIST,
 )
 from .types import (
@@ -89,15 +90,15 @@ async def process_group_conversation(
         # Check if we should skip storing this input to history
         skip_history = metadata and metadata.get("skip_history", False)
 
-        if not skip_history:
-            for member_uid in group_members:
-                member_context = client_contexts[member_uid]
+        for member_uid in group_members:
+            member_context = client_contexts[member_uid]
+            if should_store_history(member_context, skip_history):
                 await member_context.store_history_message(
                     role="human",
                     content=input_text,
                     name=human_name,
                 )
-        else:
+        if skip_history:
             logger.debug("Skipping storing proactive speak input to group history")
 
         state.conversation_history = [f"{human_name}: {input_text}"]
@@ -281,9 +282,9 @@ async def handle_group_member_turn(
         should_skip_history = skip_history or bool(
             metadata and metadata.get("skip_history", False)
         )
-        if not should_skip_history:
-            for member_uid in group_members:
-                member_context = client_contexts[member_uid]
+        for member_uid in group_members:
+            member_context = client_contexts[member_uid]
+            if should_store_history(member_context, should_skip_history):
                 await member_context.store_history_message(
                     role="ai",
                     content=full_response,

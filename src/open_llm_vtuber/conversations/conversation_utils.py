@@ -104,6 +104,11 @@ class TextDeltaBuffer:
 
 
 # Convert class methods to standalone functions
+def should_store_history(context: Any, skip_history: bool = False) -> bool:
+    """Persist a turn only for an open history that is not a proactive turn."""
+    return bool(context.history_uid) and not skip_history
+
+
 def _to_image_data(img: Dict[str, Any]) -> ImageData:
     """Wire payload -> ImageData.
 

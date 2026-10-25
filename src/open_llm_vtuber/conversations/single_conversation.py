@@ -11,6 +11,7 @@ from .conversation_utils import (
     process_user_input,
     finalize_conversation_turn,
     cleanup_conversation,
+    should_store_history,
     EMOJI_LIST,
 )
 from .types import OutboundChannels
@@ -65,14 +66,13 @@ async def process_single_conversation(
 
         # Store user message (check if we should skip storing to history)
         skip_history = metadata and metadata.get("skip_history", False)
-        if context.history_uid and not skip_history:
+        if should_store_history(context, skip_history):
             await context.store_history_message(
                 role="human",
                 content=input_text,
                 name=context.character_config.human_name,
             )
-
-        if skip_history:
+        elif skip_history:
             logger.debug("Skipping storing user input to history (proactive speak)")
 
         logger.info(f"User input: {input_text}")
@@ -96,7 +96,7 @@ async def process_single_conversation(
             client_uid=client_uid,
         )
 
-        if context.history_uid and full_response:  # Check full_response before storing
+        if full_response and should_store_history(context):
             await context.store_history_message(
                 role="ai",
                 content=full_response,
