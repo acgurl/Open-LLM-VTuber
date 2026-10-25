@@ -34,7 +34,9 @@ from .storage import (
 _STATIC_CACHE_POLICIES = (
     ("/assets/", "public, max-age=31536000, immutable"),
     ("/libs/", "public, max-age=2592000"),
-    ("/live2d-models/", "public, max-age=604800, stale-while-revalidate=86400"),
+    # Models are versioned by filename (new entry JSON when assets change), so
+    # they can be cached as immutable. Keep in sync with the Caddy site block.
+    ("/live2d-models/", "public, max-age=2592000, immutable"),
     ("/bg/", "public, max-age=604800, stale-while-revalidate=86400"),
     ("/avatars/", "public, max-age=604800, stale-while-revalidate=86400"),
     ("/web-tool/", "no-store"),

@@ -1,7 +1,9 @@
 import * as PIXI from 'pixi.js';
 import { Live2DModel, MotionPriority } from 'pixi-live2d-display-lipsyncpatch';
 import type { Actions, ModelInfo } from '../protocol/types';
+import { cacheModelAssets } from '../services/modelCache';
 import { useSettings } from '../stores/settings';
+import { readSetting, writeSetting } from '../utils/storage';
 
 (window as unknown as { PIXI: typeof PIXI }).PIXI = PIXI;
 
@@ -74,7 +76,8 @@ class Live2DController {
       resizeTo: window,
       backgroundAlpha: 0,
       autoDensity: true,
-      resolution: window.devicePixelRatio || 1,
+      // 4K 屏按 DPR 2 出图已足够；再高只是放大离屏画布和逐像素扫描成本。
+      resolution: Math.min(window.devicePixelRatio || 1, 2),
     });
     this.app.ticker.add(() => this.stepZoom());
     window.addEventListener('resize', this.resizeHandler);
@@ -163,6 +166,7 @@ class Live2DController {
       }
       this.measureContent();
       this.layout();
+      void cacheModelAssets(url);
     } catch (err) {
       if (seq === this.loadSeq) console.error('Live2D load failed', err);
     } finally {
@@ -325,6 +329,13 @@ class Live2DController {
       this.drawableCount = 0;
     }
 
+    // 轮廓只取决于模型本身，算一次即可；否则每次刷新都要回读整张画布。
+    const cached = this.readCachedBounds();
+    if (cached) {
+      this.contentBounds = cached;
+      return;
+    }
+
     // 先整幅缩放塞进视口，保证轮廓不被裁掉
     const probeScale = Math.min((w * 0.9) / canvasW, (h * 0.9) / canvasH);
     model.anchor.set(0, 0);
@@ -334,6 +345,33 @@ class Live2DController {
 
     const pixelBounds = this.scanVisiblePixels(probeScale);
     this.contentBounds = pixelBounds ?? this.geometryBounds(canvasW, canvasH);
+    if (pixelBounds) this.writeCachedBounds(pixelBounds);
+  }
+
+  private boundsKey(): string | null {
+    const url = this.info?.url;
+    return url ? `bounds.v1.${url}` : null;
+  }
+
+  private readCachedBounds(): Rect | null {
+    const key = this.boundsKey();
+    if (!key) return null;
+    try {
+      const raw = readSetting(key);
+      if (!raw) return null;
+      const b = JSON.parse(raw) as Rect;
+      const values = [b.x, b.y, b.width, b.height];
+      if (!values.every((v) => Number.isFinite(v)) || b.width <= 0 || b.height <= 0) return null;
+      return b;
+    } catch {
+      return null;
+    }
+  }
+
+  private writeCachedBounds(bounds: Rect) {
+    const key = this.boundsKey();
+    if (!key) return;
+    writeSetting(key, JSON.stringify(bounds));
   }
 
   private scanVisiblePixels(scale: number): Rect | null {

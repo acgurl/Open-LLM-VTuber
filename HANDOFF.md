@@ -482,3 +482,24 @@ ssh oracle "docker restart open-llm-vtuber"
 - 前端产物 `index-BiqjDyMf.js`、`index-BJiath1D.js`、`index-BT7NIenF.css`（旧 hash 资源保留）；`frontend/` 子模块提交 `eba3249`。源码父仓 `49640e2`、子模块 `eba3249` 均已推送 `origin`（main / build-motion）。
 - 回滚：把 `run-container.sh` 镜像改回 `1.2.1-refactor-20261025` 并 `bash run-container.sh`；前端可在备份目录恢复 `index.html`。恢复 Caddy 用 `.bak.oidccache*.20261025`。
 - 未做：Cloudflare HTML 入口（`/`、`/index.html`，`respect_origin`）未手动 purge，最多 60s 后自然刷新；旧 hash 资源仍在，不影响打开中的页面。
+
+## 20. 2026-10-25 Live2D 加载加速（A+B+C，已热部署）
+
+### 变更
+
+- **B 贴图无损 WebP**：`mao_pro.4096/texture_00.png` 8.21MB → 4.52MB，`shizuku.1024/texture_0{0..4}.png` 4.45MB → 2.48MB，合计 12.66MB → 6.98MB（−45%）。用 Pillow `lossless=True, exact=True, method=6` 编码（libwebp 默认会改写全透明像素 RGB，`exact` 才严格一致）；6 张图解码后 RGBA 原始 md5 与原 PNG 完全相同，原 PNG 保留。新增版本化入口 `mao_pro.webp.model3.json`、`shizuku.webp.model3.json`，`conf/model_dict.json`（及本地根 `model_dict.json`）的 mao_pro URL 指向新入口；shizuku 未进 model_dict，仅保留版本化入口备用。
+- **A 缓存与预加载**：Caddy vtuber 站点把 `/live2d-models/*` 从 7 天 + SWR 改为 `public, max-age=2592000, immutable`，并把 static_immutable/libs/models/media/root 五条规则改成 `>Cache-Control` 覆盖式（此前 Caddy 与后端各写一份，Cloudflare 会把两个值合并成旧 max-age）；`server.py` 的 `_STATIC_CACHE_POLICIES` 同步改为 30 天 immutable（随下次镜像生效）。新增 `scripts/warm_live2d_cache.py`：从 model_dict 递归解析 model3 引用并并发预热边缘，80 个资源二次运行全部 HIT。
+- **A 前端预加载**：`modelCache.cacheModelAssets()` 在模型加载后解析 model3 的 Textures 并写入 `ollmvt[.u<uid>].model.assets`；`web/index.html` 内联脚本按同一 uid 规则读取该键，注入 `<link rel=preload as=image fetchpriority=high>`，贴图下载与主包并行。仅当缓存里 `model.url` 与 assets.url 一致时才预加载，避免切换模型后预热错资源。
+- **C 渲染侧**：`measureContent()` 的轮廓像素扫描结果按 `bounds.v1.<model3 url>` 缓存到 localStorage，二次加载跳过整屏 `extract.pixels()`；渲染 `resolution` 上限设为 2（4K 屏不再按 DPR>2 放大离屏画布）。
+
+### 验证
+
+- 本地 headless Edge（500×320，冷缓存）实测：贴图 preload `start=8ms`、主包 `start=6ms`，两者并行；模型加载器复用 preload（第二次 texture 请求 `transferSize=0`）；首次加载写入 bounds 并扫描，二次加载 `readPixels` 调用数为 **0**；`index-C0pWF5dv.js` 正常渲染 mao_pro 无损贴图，无 JS 异常。构建产物入口 `index-C0pWF5dv.js`、VAD `index-AFjc5Yoa.js`，CSS 不变（`index-BT7NIenF.css`）。
+- 生产：宿主/容器/公网 sha256 一致；`/healthz` 200，容器日志无 ERROR/Traceback；新 model3 与 WebP 公网 200、`Content-Type: image/webp`、`cf-cache-status` HIT；原站 Caddy 直连返回单个 `Cache-Control: public, max-age=2592000, immutable`。
+
+### 部署
+
+- 备份 `data/backups/live2d-webp-20261025-073636/`（`frontend/index.html`、`conf/model_dict.json`、`Caddyfile.bak`）；第二份 Caddy 备份 `/etc/caddy/Caddyfile.bak.live2dwebp2.20261025`。
+- 模型与 model3 经 scp 到 bind mount，`conf/model_dict.json` 同步后 `docker restart open-llm-vtuber`；前端 `index.html` + 两个新 hash 用 `docker cp` 热更新，镜像仍为 `1.2.1-oidc-cache-20261025`。`scripts/warm_live2d_cache.py` 已上传服务器。
+- 回滚：恢复备份的 `frontend/index.html` 与 `conf/model_dict.json`（或把 mao URL 指回 `mao_pro.model3.json`），`docker cp` 回旧入口并重启；Caddy 用上述备份恢复后 `caddy validate` + `systemctl reload caddy`。WebP 为新增文件，无需删除。
+- 注意：mao/shizuku 的新 URL 在 Caddy 修正前已被预热，其边缘条目仍带旧合并头（7 天）直到边缘 TTL 到期；当前无 CF API Token，未 purge。hiyori 等新发起的 MISS 已返回 30 天 immutable。若需要让这批条目立即生效 30 天，用 Dashboard 或 Token purge `/live2d-models/*` 后重跑预热脚本即可。

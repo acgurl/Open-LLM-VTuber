@@ -4,6 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Open-LLM-VTuber</title>
+    <!-- 上次模型的贴图提前入队，与主包下载并行；键名与 src/utils/storage.ts 保持一致。 -->
+    <script>
+      (function () {
+        try {
+          var match = document.cookie.match(/(?:^|;\s*)vtuber_uid=([^;]+)/);
+          var uid = match ? decodeURIComponent(match[1]) : '';
+          var prefix = uid ? 'ollmvt.u' + uid + '.' : 'ollmvt.';
+          var model = JSON.parse(localStorage.getItem(prefix + 'model') || 'null');
+          var assets = JSON.parse(localStorage.getItem(prefix + 'model.assets') || 'null');
+          if (!model || !assets || model.url !== assets.url || !Array.isArray(assets.images)) return;
+          assets.images.slice(0, 8).forEach(function (href) {
+            if (typeof href !== 'string' || href.charAt(0) !== '/') return;
+            var link = document.createElement('link');
+            link.rel = 'preload';
+            link.as = 'image';
+            link.setAttribute('fetchpriority', 'high');
+            link.href = href;
+            document.head.appendChild(link);
+          });
+        } catch (e) {
+          /* localStorage 不可用时忽略 */
+        }
+      })();
+    </script>
     <script src="./libs/live2d.min.js"></script>
     <script src="./libs/live2dcubismcore.min.js"></script>
   </head>
