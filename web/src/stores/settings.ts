@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { ConfigFileEntry } from '../protocol/types';
+import { readSetting, writeSetting } from '../utils/storage';
 
 interface SettingsState {
   subtitlesOn: boolean;
@@ -26,43 +27,28 @@ interface SettingsState {
   setScrollToResize: (v: boolean) => void;
 }
 
-const persisted = (key: string): string | null => {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-};
-
 export const useSettings = create<SettingsState>((set) => ({
-  subtitlesOn: persisted('ollmvt.subtitles') !== '0',
-  ttsOn: persisted('ollmvt.tts') !== '0',
-  background: persisted('ollmvt.bg'),
+  subtitlesOn: readSetting('subtitles') !== '0',
+  ttsOn: readSetting('tts') !== '0',
+  background: readSetting('bg'),
   backgroundFiles: [],
   configs: [],
   micOn: false,
   historyOpen: false,
   settingsOpen: false,
   switching: false,
-  pointerInteractive: persisted('ollmvt.l2d.pointer') !== '0',
-  scrollToResize: persisted('ollmvt.l2d.scroll') !== '0',
+  pointerInteractive: readSetting('l2d.pointer') !== '0',
+  scrollToResize: readSetting('l2d.scroll') !== '0',
   setSubtitlesOn: (subtitlesOn) => {
-    try {
-      localStorage.setItem('ollmvt.subtitles', subtitlesOn ? '1' : '0');
-    } catch { /* ignore */ }
+    writeSetting('subtitles', subtitlesOn ? '1' : '0');
     set({ subtitlesOn });
   },
   setTtsOn: (ttsOn) => {
-    try {
-      localStorage.setItem('ollmvt.tts', ttsOn ? '1' : '0');
-    } catch { /* ignore */ }
+    writeSetting('tts', ttsOn ? '1' : '0');
     set({ ttsOn });
   },
   setBackground: (background) => {
-    try {
-      if (background) localStorage.setItem('ollmvt.bg', background);
-      else localStorage.removeItem('ollmvt.bg');
-    } catch { /* ignore */ }
+    writeSetting('bg', background);
     set({ background });
   },
   setBackgroundFiles: (backgroundFiles) => set({ backgroundFiles }),
@@ -72,15 +58,11 @@ export const useSettings = create<SettingsState>((set) => ({
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setSwitching: (switching) => set({ switching }),
   setPointerInteractive: (pointerInteractive) => {
-    try {
-      localStorage.setItem('ollmvt.l2d.pointer', pointerInteractive ? '1' : '0');
-    } catch { /* ignore */ }
+    writeSetting('l2d.pointer', pointerInteractive ? '1' : '0');
     set({ pointerInteractive });
   },
   setScrollToResize: (scrollToResize) => {
-    try {
-      localStorage.setItem('ollmvt.l2d.scroll', scrollToResize ? '1' : '0');
-    } catch { /* ignore */ }
+    writeSetting('l2d.scroll', scrollToResize ? '1' : '0');
     set({ scrollToResize });
   },
 }));

@@ -1,6 +1,7 @@
 """Audio helpers."""
 
 import io
+import re
 import uuid
 import wave
 from datetime import datetime
@@ -8,9 +9,13 @@ from datetime import datetime
 import numpy as np
 
 
-def new_audio_file_stem() -> str:
-    """Build a unique cache file stem for a generated audio file."""
-    return f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+def new_audio_file_stem(scope: str | None = None) -> str:
+    """Build a unique cache file stem, optionally inside a per-user directory."""
+    stem = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+    if not scope:
+        return stem
+    safe_scope = re.sub(r"[^A-Za-z0-9_-]", "_", scope)[:64]
+    return f"{safe_scope}/{stem}" if safe_scope else stem
 
 
 ASR_SAMPLE_RATE = 16000

@@ -19,6 +19,11 @@ class AuthError(RuntimeError):
     """Raised when a login cannot be completed safely."""
 
 
+# Readable by the frontend so localStorage keys can be scoped per account.
+# It only carries the opaque internal user id; the session cookie stays HttpOnly.
+UID_COOKIE_NAME = "vtuber_uid"
+
+
 class AuthManager:
     def __init__(self, config: AuthConfig, default_user_id: str) -> None:
         self.config = config
@@ -109,6 +114,16 @@ class AuthManager:
 
     def session_cookie_delete_kwargs(self) -> dict[str, Any]:
         return self._cookie_kwargs(self.config.session_cookie_name)
+
+    def uid_cookie_kwargs(self, user_id: str) -> dict[str, Any]:
+        kwargs = self._cookie_kwargs(UID_COOKIE_NAME, user_id, self.session_max_age)
+        kwargs["httponly"] = False
+        return kwargs
+
+    def uid_cookie_delete_kwargs(self) -> dict[str, Any]:
+        kwargs = self._cookie_kwargs(UID_COOKIE_NAME)
+        kwargs["httponly"] = False
+        return kwargs
 
     def issue_state(self, *, state: str, nonce: str, next_path: str) -> str:
         if self._signer is None:

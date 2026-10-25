@@ -457,3 +457,28 @@ ssh oracle "docker restart open-llm-vtuber"
 - 再往前回退到 `run-container.sh.bak.usermcp.20261024` / `1.2.1-history-refresh-20261023`，可撤销整个用户 MCP 功能。
 - `user_mcp_servers` 表及 `mode`/`transport` 列均为新增，旧镜像不会读写/依赖，无需删表；如需完全恢复数据库，用对应备份目录的 `open_llm_vtuber.db`。
 - 前端可回退到备份 `frontend.tar.gz`；旧 hash 资源仍在服务器，打开中的页面不受影响。
+
+## 19. 2026-10-25 OIDC 缓存适配（已部署）
+
+### 变更
+
+- **HTTP 缓存**：`AuthRedirectMiddleware` 对 `/auth/*`、`/api/*`、`/cache/*`、`/web-tool/*`、`/model_dict.json` 统一补 `Cache-Control: no-store`，覆盖 401/302 与正常响应。Caddy vtuber 站点用 `header @session_scoped >Cache-Control "no-store"` 强制覆盖（不加 `>` 会出现两个同名头）。入口 HTML 仍由后端给 `public, max-age=0, must-revalidate, s-maxage=60`，静态资源策略不变；`/web-tool/*` 从 `public, max-age=3600` 改为 `no-store`（它本身需要登录）。
+- **TTS 缓存**：`new_audio_file_stem(scope)` 生成 `cache/<user_id>/<stem>`（scope 只保留 `[A-Za-z0-9_-]`）；`TTSInterface.generate_cache_file_name` 递归建目录；`TTSTaskManager(cache_scope=...)` 由 `ServiceContext.user_id` 注入（单聊/群聊都传）。`/cache` 挂载改为 `UserCacheStaticFiles`：只允许访问 `cache/<自己 user_id>/...`，他人目录与根目录旧文件返回 404，single 模式（无身份）不限制。
+- **前端 localStorage**：新增 `web/src/utils/storage.ts`，按 `vtuber_uid` cookie 命名空间化，键形如 `ollmvt.u<uid>.model`；`settings.ts`、`services/modelCache.ts`、`i18n`、`CameraWindow` 全部改走 `readSetting/writeSetting`。服务端在 `/auth/callback` 设置 `vtuber_uid`（非 HttpOnly，只含内部 user_id，Secure/SameSite=Lax，与 session 同寿命），`/auth/logout` 删除，`/api/session` 给老会话补种。
+- **不做迁移**：升级后旧的无前缀键（`ollmvt.model`、`ollmvt.lang`、`ollmvt.bg` 等）不再读取，避免共享浏览器把上一个用户的设置带给新账号；需要的话手动删除即可。
+
+### 验证
+
+- 本地 `uv run --frozen python -m unittest discover -s tests`：**275 个测试通过**。新增 `tests/test_cache_isolation.py`（stem 作用域/清洗、嵌套目录、`/cache` 归属、TTS manager 传参）；`tests/test_auth_routes.py` 增加 no-store 与 `vtuber_uid` 断言。
+- 线上（经 Cloudflare）：
+  - `/auth/login`、`/api/session`、`/model_dict.json`、`/cache/*`、`/web-tool/*` 均为单个 `Cache-Control: no-store`，`cf-cache-status` 为 `DYNAMIC`/`BYPASS`；匿名 `/` 仍 302 到登录页；`/assets/*` 仍 immutable。
+  - 浏览器登录后 `document.cookie` 含 `vtuber_uid=<32 位 uid>`；刷新后 localStorage 写入 `ollmvt.u<uid>.model`，旧 `ollmvt.model` 不再更新。
+  - `/cache/<uid>/probe.mp3` 本人 200，他人目录与 `cache/` 根目录均 404；真实对话中 TTS 文件在 `data/cache/<uid>/` 生成并在投递后清理，页面语音/Live2D 正常。
+
+### 部署
+
+- 镜像 `open-llm-vtuber:1.2.1-oidc-cache-20261025`，`run-container.sh` 已切换；旧镜像 `1.2.1-refactor-20261025` 保留回滚。
+- 备份 `data/backups/oidc-cache-20261025-064723/`：9 个后端源文件、`frontend/index.html`、`run-container.sh`；Caddyfile 备份 `/etc/caddy/Caddyfile.bak.oidccache.20261025`、`/etc/caddy/Caddyfile.bak.oidccache2.20261025`。
+- 前端产物 `index-BiqjDyMf.js`、`index-BJiath1D.js`、`index-BT7NIenF.css`（旧 hash 资源保留）；`frontend/` 子模块提交 `eba3249`。
+- 回滚：把 `run-container.sh` 镜像改回 `1.2.1-refactor-20261025` 并 `bash run-container.sh`；前端可在备份目录恢复 `index.html`。恢复 Caddy 用 `.bak.oidccache*.20261025`。
+- 未做：Cloudflare HTML 入口（`/`、`/index.html`，`respect_origin`）未手动 purge，最多 60s 后自然刷新；旧 hash 资源仍在，不影响打开中的页面。

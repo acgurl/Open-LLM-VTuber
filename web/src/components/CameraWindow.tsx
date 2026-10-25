@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCamera } from '../stores/camera';
 import { camera } from '../services/camera';
+import { readSetting, writeSetting } from '../utils/storage';
 
-const POS_KEY = 'ollmvt.camPos';
 const EDGE = 8;
 const DRAG_THRESHOLD = 4;
 
@@ -21,7 +21,7 @@ function clampTo(pos: Pos, width = 0, height = 0): Pos {
 
 function loadPos(): Pos | null {
   try {
-    const raw = localStorage.getItem(POS_KEY);
+    const raw = readSetting('camPos');
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<Pos> | null;
     if (typeof parsed?.left !== 'number' || typeof parsed?.top !== 'number') return null;
@@ -32,11 +32,7 @@ function loadPos(): Pos | null {
 }
 
 function savePos(pos: Pos) {
-  try {
-    localStorage.setItem(POS_KEY, JSON.stringify(pos));
-  } catch {
-    /* ignore */
-  }
+  writeSetting('camPos', JSON.stringify(pos));
 }
 
 export function CameraWindow() {

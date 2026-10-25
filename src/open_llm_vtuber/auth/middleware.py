@@ -24,6 +24,14 @@ _PUBLIC_PREFIXES = (
     "/bg/",
     "/avatars/",
 )
+# Session-scoped responses: never store them in the browser or a shared edge
+# cache. /cache holds per-user TTS audio, /api and /auth carry session state,
+# /web-tool sits behind login.
+_NO_STORE_PREFIXES = ("/auth/", "/api/", "/cache/", "/web-tool/")
+_NO_STORE_PATHS = {"/model_dict.json"}
+
+# Set on the ASGI scope so static file handlers can enforce ownership.
+IDENTITY_SCOPE_KEY = "vtuber_identity"
 
 
 class AuthRedirectMiddleware(BaseHTTPMiddleware):
@@ -32,16 +40,23 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
         self.auth = auth
 
     async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        response = await self._authorize(request, call_next, path)
+        if self._is_no_store(path):
+            response.headers["Cache-Control"] = "no-store"
+        return response
+
+    async def _authorize(self, request: Request, call_next, path: str):
         if not self.auth.enabled or request.method == "OPTIONS":
             return await call_next(request)
 
-        path = request.url.path
         if self._is_public(path):
             return await call_next(request)
 
         identity = self.auth.resolve_identity(request.cookies)
         if identity is not None:
             request.state.identity = identity
+            request.scope[IDENTITY_SCOPE_KEY] = identity
             return await call_next(request)
 
         if self._wants_html(request):
@@ -58,6 +73,10 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
     @staticmethod
     def _is_public(path: str) -> bool:
         return path in _PUBLIC_PATHS or path.startswith(_PUBLIC_PREFIXES)
+
+    @staticmethod
+    def _is_no_store(path: str) -> bool:
+        return path in _NO_STORE_PATHS or path.startswith(_NO_STORE_PREFIXES)
 
     @staticmethod
     def _wants_html(request: Request) -> bool:

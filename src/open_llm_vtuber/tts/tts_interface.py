@@ -86,10 +86,11 @@ class TTSInterface(metaclass=abc.ABCMeta):
         str: the path to the generated cache file
         """
         cache_dir = "cache"
-        os.makedirs(cache_dir, exist_ok=True)
-
         if file_name_no_ext is None:
             file_name_no_ext = "temp"
 
         file_name = f"{file_name_no_ext}.{file_extension}"
-        return os.path.join(cache_dir, file_name)
+        file_path = os.path.join(cache_dir, file_name)
+        # Per-user stems live one directory deeper.
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        return file_path

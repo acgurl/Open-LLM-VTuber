@@ -20,9 +20,11 @@ TTS_DELIVERY_TIMEOUT_SECONDS = 10.0
 class TTSTaskManager:
     """Manages TTS tasks and ensures ordered delivery to frontend while allowing parallel TTS generation"""
 
-    def __init__(self) -> None:
+    def __init__(self, cache_scope: str | None = None) -> None:
         self.task_list: List[asyncio.Task] = []
         self._lock = asyncio.Lock()
+        # Per-user subdirectory for generated audio (None in single-user mode).
+        self.cache_scope = cache_scope
         # Queue to store ordered payloads
         self._payload_queue: asyncio.Queue[Dict] = asyncio.Queue()
         # Task to handle sending payloads in order
@@ -202,7 +204,7 @@ class TTSTaskManager:
         logger.debug(f"🏃Generating audio for '''{text}'''...")
         return await tts_engine.async_generate_audio(
             text=text,
-            file_name_no_ext=new_audio_file_stem(),
+            file_name_no_ext=new_audio_file_stem(self.cache_scope),
         )
 
     async def wait_for_delivery(

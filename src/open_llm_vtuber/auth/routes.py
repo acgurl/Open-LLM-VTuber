@@ -4,7 +4,7 @@ from fastapi import APIRouter, Request
 from loguru import logger
 from starlette.responses import JSONResponse, RedirectResponse
 
-from .manager import AuthError, AuthManager, safe_next_path
+from .manager import UID_COOKIE_NAME, AuthError, AuthManager, safe_next_path
 from .oidc import OIDCError
 
 
@@ -78,6 +78,7 @@ def init_auth_routes(auth: AuthManager) -> APIRouter:
         )
         response.delete_cookie(**auth.state_cookie_delete_kwargs())
         response.set_cookie(**auth.session_cookie_kwargs(auth.issue_session(identity)))
+        response.set_cookie(**auth.uid_cookie_kwargs(identity.user_id))
         logger.info(
             f"OIDC login succeeded for user {identity.user_id} "
             f"({identity.display_name or 'unnamed'})"
@@ -88,6 +89,7 @@ def init_auth_routes(auth: AuthManager) -> APIRouter:
     async def logout(request: Request):
         response = RedirectResponse("/", status_code=302)
         response.delete_cookie(**auth.session_cookie_delete_kwargs())
+        response.delete_cookie(**auth.uid_cookie_delete_kwargs())
         if not auth.enabled or not auth.config.oidc.post_logout_redirect_uri:
             return response
 
@@ -103,6 +105,7 @@ def init_auth_routes(auth: AuthManager) -> APIRouter:
             return response
         provider_response = RedirectResponse(end_session_url, status_code=302)
         provider_response.delete_cookie(**auth.session_cookie_delete_kwargs())
+        provider_response.delete_cookie(**auth.uid_cookie_delete_kwargs())
         return provider_response
 
     @router.get("/api/session")
@@ -113,11 +116,18 @@ def init_auth_routes(auth: AuthManager) -> APIRouter:
                 {"authenticated": False, "mode": auth.config.mode},
                 status_code=401,
             )
-        return {
-            "authenticated": True,
-            "mode": auth.config.mode,
-            "user_id": identity.user_id,
-            "display_name": identity.display_name,
-        }
+        response = JSONResponse(
+            {
+                "authenticated": True,
+                "mode": auth.config.mode,
+                "user_id": identity.user_id,
+                "display_name": identity.display_name,
+            }
+        )
+        # Sessions issued before the uid cookie existed keep it in sync so the
+        # frontend can scope localStorage on the next load.
+        if auth.enabled and request.cookies.get(UID_COOKIE_NAME) != identity.user_id:
+            response.set_cookie(**auth.uid_cookie_kwargs(identity.user_id))
+        return response
 
     return router

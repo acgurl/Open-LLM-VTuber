@@ -2,14 +2,9 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import zh from './zh.json';
 import en from './en.json';
+import { readSetting, writeSetting } from '../utils/storage';
 
-const saved = (() => {
-  try {
-    return localStorage.getItem('ollmvt.lang') ?? undefined;
-  } catch {
-    return undefined;
-  }
-})();
+const saved = readSetting('lang') ?? undefined;
 
 void i18n.use(initReactI18next).init({
   resources: {
@@ -23,11 +18,7 @@ void i18n.use(initReactI18next).init({
 
 export function setLanguage(lang: string) {
   void i18n.changeLanguage(lang);
-  try {
-    localStorage.setItem('ollmvt.lang', lang);
-  } catch {
-    /* ignore */
-  }
+  writeSetting('lang', lang);
 }
 
 export default i18n;

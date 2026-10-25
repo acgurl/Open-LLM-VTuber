@@ -130,12 +130,60 @@ class AuthRouteTests(unittest.IsolatedAsyncioTestCase):
 
         response = self.client.get("/api/private")
         self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.headers["cache-control"], "no-store")
 
         response = self.client.get("/assets/app.js")
         self.assertEqual(response.status_code, 200)
 
         response = self.client.get("/cache/audio.mp3")
         self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+
+    def test_session_scoped_responses_are_never_cached(self):
+        response = self.client.get("/auth/login", follow_redirects=False)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        state = parse_qs(urlsplit(response.headers["location"]).query)["state"][0]
+
+        response = self.client.get("/api/session")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+
+        response = self.client.get(
+            f"/auth/callback?code=code-1&state={state}",
+            follow_redirects=False,
+        )
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertIn("vtuber_uid=", response.headers.get("set-cookie", ""))
+
+        response = self.client.get("/api/session")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        self.assertEqual(
+            self.client.cookies.get("vtuber_uid"), response.json()["user_id"]
+        )
+
+        response = self.client.get("/auth/logout", follow_redirects=False)
+        self.assertEqual(response.headers["cache-control"], "no-store")
+        set_cookie = response.headers.get("set-cookie", "")
+        self.assertIn("vtuber_uid=", set_cookie)
+        self.assertIn("Max-Age=0", set_cookie)
+        self.assertIsNone(self.client.cookies.get("vtuber_uid"))
+
+    def test_session_endpoint_backfills_uid_cookie(self):
+        state = self._login()
+        self.client.get(
+            f"/auth/callback?code=code-1&state={state}",
+            follow_redirects=False,
+        )
+        self.client.cookies.delete("vtuber_uid")
+
+        response = self.client.get("/api/session")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("vtuber_uid=", response.headers.get("set-cookie", ""))
+        self.assertEqual(
+            self.client.cookies.get("vtuber_uid"), response.json()["user_id"]
+        )
 
     def test_login_callback_sets_session_and_logout_clears_it(self):
         state = self._login()

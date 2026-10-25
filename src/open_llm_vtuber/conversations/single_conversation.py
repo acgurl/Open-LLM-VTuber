@@ -43,7 +43,7 @@ async def process_single_conversation(
         str: Complete response text
     """
     # Create TTSTaskManager for this conversation
-    tts_manager = TTSTaskManager()
+    tts_manager = TTSTaskManager(cache_scope=getattr(context, "user_id", None))
     full_response = ""
 
     try:

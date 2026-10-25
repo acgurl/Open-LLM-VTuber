@@ -1,8 +1,10 @@
 import type { ModelInfo } from '../protocol/types';
-
-const KEY = 'ollmvt.model';
+import { storageKey } from '../utils/storage';
 
 // 上次的模型配置仅用于首屏秒开，服务端 set-model-and-conf 仍是最终来源。
+// Key is per-account so a shared browser does not warm-start another user's model.
+const KEY = storageKey('model');
+
 export function loadCachedModel(): ModelInfo | null {
   try {
     const raw = localStorage.getItem(KEY);

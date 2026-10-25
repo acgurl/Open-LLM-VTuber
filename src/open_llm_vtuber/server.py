@@ -16,6 +16,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.staticfiles import StaticFiles as StarletteStaticFiles
 
 from .auth import AuthManager, AuthRedirectMiddleware, init_auth_routes
+from .auth.middleware import IDENTITY_SCOPE_KEY
 from .routes import init_client_ws_route, init_webtool_routes, init_proxy_route
 from .mcp_routes import init_user_mcp_routes
 from .service_context import ServiceContext
@@ -36,7 +37,7 @@ _STATIC_CACHE_POLICIES = (
     ("/live2d-models/", "public, max-age=604800, stale-while-revalidate=86400"),
     ("/bg/", "public, max-age=604800, stale-while-revalidate=86400"),
     ("/avatars/", "public, max-age=604800, stale-while-revalidate=86400"),
-    ("/web-tool/", "public, max-age=3600"),
+    ("/web-tool/", "no-store"),
     ("/cache/", "no-store"),
 )
 
@@ -94,6 +95,22 @@ class AvatarStaticFiles(CORSStaticFiles):
             return Response("Forbidden file type", status_code=403)
         response = await super().get_response(path, scope)
         return response
+
+
+class UserCacheStaticFiles(CORSStaticFiles):
+    """Serve /cache/<user_id>/ only to the user that owns the directory.
+
+    TTS audio is ephemeral, but a leaked URL must not let another logged-in
+    user fetch it. Missing identity means auth is disabled (single-user mode).
+    """
+
+    async def get_response(self, path: str, scope):
+        identity = scope.get(IDENTITY_SCOPE_KEY)
+        if identity is not None:
+            user_id = getattr(identity, "user_id", None)
+            if not user_id or not path.startswith(f"{user_id}/"):
+                return Response("Not Found", status_code=404)
+        return await super().get_response(path, scope)
 
 
 class WebSocketServer:
@@ -189,7 +206,7 @@ class WebSocketServer:
             os.makedirs("cache")
         self.app.mount(
             "/cache",
-            CORSStaticFiles(directory="cache"),
+            UserCacheStaticFiles(directory="cache"),
             name="cache",
         )
         self.app.mount(

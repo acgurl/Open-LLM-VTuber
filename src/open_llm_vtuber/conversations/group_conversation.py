@@ -51,7 +51,12 @@ async def process_group_conversation(
         metadata: Optional metadata for special processing flags
     """
     # Create TTSTaskManager for each member
-    tts_managers = {uid: TTSTaskManager() for uid in group_members}
+    tts_managers = {
+        uid: TTSTaskManager(
+            cache_scope=getattr(client_contexts.get(uid), "user_id", None)
+        )
+        for uid in group_members
+    }
 
     try:
         logger.info(f"Group Conversation Chain {session_emoji} started!")
