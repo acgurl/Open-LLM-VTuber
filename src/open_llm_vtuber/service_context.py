@@ -192,27 +192,37 @@ class ServiceContext:
             self.mcp_client = None
             return
 
-        self.mcp_client = MCPClient(
+        self.mcp_client = self._build_mcp_client()
+        logger.info("MCPClient initialized for this session.")
+
+    def _ensure_mcp_client(self) -> None:
+        if self.mcp_client is None:
+            if self.mcp_server_registry is None:
+                self.mcp_server_registry = ServerRegistry.from_servers({})
+            self._init_mcp_client()
+
+    def _build_mcp_client(self) -> MCPClient:
+        return MCPClient(
             self.mcp_server_registry,
             self.channels.text if self.channels else None,
             self.client_uid,
         )
-        logger.info("MCPClient initialized for this session.")
+
+    def _build_tool_executor(self) -> ToolExecutor | None:
+        if not (self.mcp_client and self.tool_manager):
+            return None
+        if self.local_mcp_bridge is None:
+            return ToolExecutor(self.mcp_client, self.tool_manager)
+        return ToolExecutor(self.mcp_client, self.tool_manager, self.local_mcp_bridge)
 
     def _init_tool_executor(self) -> None:
-        if self.mcp_client and self.tool_manager:
-            if self.local_mcp_bridge is not None:
-                self.tool_executor = ToolExecutor(
-                    self.mcp_client, self.tool_manager, self.local_mcp_bridge
-                )
-            else:
-                self.tool_executor = ToolExecutor(self.mcp_client, self.tool_manager)
-            logger.info("ToolExecutor initialized for this session.")
-        else:
+        self.tool_executor = self._build_tool_executor()
+        if self.tool_executor is None:
             logger.warning(
                 "MCPClient or ToolManager not available. ToolExecutor not created."
             )
-            self.tool_executor = None
+        else:
+            logger.info("ToolExecutor initialized for this session.")
 
     async def _init_mcp_components(self, use_mcpp, enabled_servers):
         """Initializes MCP components based on configuration, dynamically fetching tool info."""
@@ -381,25 +391,12 @@ class ServiceContext:
                 formatted_tools_claude=claude_tools,
                 initial_tools_dict=merged,
             )
-            if self.mcp_client is None:
-                self.mcp_server_registry = (
-                    self.mcp_server_registry or ServerRegistry.from_servers({})
-                )
-                self.mcp_client = MCPClient(
-                    self.mcp_server_registry,
-                    self.channels.text if self.channels else None,
-                    self.client_uid,
-                )
+            self._ensure_mcp_client()
             if self.local_mcp_bridge is None and self.channels is not None:
                 self.local_mcp_bridge = LocalMCPBridge(
                     self.client_uid, self.channels.text
                 )
-            if self.local_mcp_bridge is not None:
-                self.tool_executor = ToolExecutor(
-                    self.mcp_client, self.tool_manager, self.local_mcp_bridge
-                )
-            else:
-                self.tool_executor = ToolExecutor(self.mcp_client, self.tool_manager)
+            self.tool_executor = self._build_tool_executor()
             self.mcp_active = True
         else:
             self.tool_manager = None
