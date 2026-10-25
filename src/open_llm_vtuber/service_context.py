@@ -20,7 +20,7 @@ from .mcpp.mcp_client import MCPClient
 from .mcpp.tool_executor import ToolExecutor
 from .mcpp.tool_adapter import ToolAdapter
 from .mcpp.local_bridge import LocalMCPBridge
-from .mcpp.types import FormattedTool
+from .mcpp.types import FormattedTool, MCPServer
 from .mcpp.user_servers import (
     MAX_LOCAL_MCP_SERVERS,
     MAX_LOCAL_MCP_TOOLS,
@@ -224,6 +224,26 @@ class ServiceContext:
         else:
             logger.info("ToolExecutor initialized for this session.")
 
+    def _prepare_tool_adapter(self, user_servers: dict[str, MCPServer]) -> bool:
+        """Build the registry and adapter this session's tools come from.
+
+        User servers need a session-local registry and a matching adapter.
+        Deployment-only sessions keep the shared adapter from the default
+        context; without one there is nothing to fetch tools with.
+        """
+        base_registry = ServerRegistry()
+        if user_servers:
+            self.mcp_server_registry = base_registry.merged_with(user_servers)
+            self.tool_adapter = ToolAdapter(server_registry=self.mcp_server_registry)
+            return True
+
+        self.mcp_server_registry = base_registry
+        if self.tool_adapter is not None:
+            return True
+        logger.error("ToolAdapter not initialized before calling _init_mcp_components.")
+        self.mcp_prompt = "[Error: ToolAdapter not initialized]"
+        return False
+
     async def _init_mcp_components(self, use_mcpp, enabled_servers):
         """Initializes MCP components based on configuration, dynamically fetching tool info."""
         logger.debug(
@@ -239,21 +259,8 @@ class ServiceContext:
         effective_servers = global_enabled + list(user_servers.keys())
 
         if effective_servers:
-            base_registry = ServerRegistry()
-            if user_servers:
-                self.mcp_server_registry = base_registry.merged_with(user_servers)
-                self.tool_adapter = ToolAdapter(
-                    server_registry=self.mcp_server_registry
-                )
-            else:
-                self.mcp_server_registry = base_registry
-                if not self.tool_adapter:
-                    logger.error(
-                        "ToolAdapter not initialized before calling _init_mcp_components."
-                    )
-                    self.mcp_prompt = "[Error: ToolAdapter not initialized]"
-                    return
-
+            if not self._prepare_tool_adapter(user_servers):
+                return
             await self._init_mcp_tools(effective_servers)
             self._init_mcp_client()
             self._init_tool_executor()
