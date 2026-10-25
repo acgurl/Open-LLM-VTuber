@@ -1,5 +1,6 @@
 import json
 import datetime
+from dataclasses import dataclass, field
 from loguru import logger
 from typing import (
     Dict,
@@ -16,6 +17,24 @@ from .tool_manager import ToolManager
 from .user_servers import error_content_items, result_size_exceeded
 
 
+@dataclass
+class ParsedToolCall:
+    tool_name: str = ""
+    tool_id: str = ""
+    tool_input: Any = None
+    is_error: bool = False
+    result_content: str | dict = ""
+    parse_error: bool = False
+
+
+@dataclass
+class ToolRunResult:
+    is_error: bool
+    text_content: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    content_items: List[Dict[str, Any]] = field(default_factory=list)
+
+
 class ToolExecutor:
     def __init__(
         self,
@@ -27,12 +46,10 @@ class ToolExecutor:
         self._tool_manager = tool_manager
         self._local_bridge = local_bridge
 
-    def parse_tool_call(self, call: Union[Dict[str, Any], ToolCallObject]) -> tuple:
-        """Parse tool call from different formats.
-
-        Returns:
-            tuple: (tool_name, tool_id, tool_input, is_error, result_content, parse_error)
-        """
+    def parse_tool_call(
+        self, call: Union[Dict[str, Any], ToolCallObject]
+    ) -> ParsedToolCall:
+        """Parse a tool call from either provider's wire format."""
         tool_name: str = ""
         tool_id: str = ""
         tool_input: Any = None
@@ -76,7 +93,14 @@ class ToolExecutor:
             is_error = True
             parse_error = True
 
-        return tool_name, tool_id, tool_input, is_error, result_content, parse_error
+        return ParsedToolCall(
+            tool_name=tool_name,
+            tool_id=tool_id,
+            tool_input=tool_input,
+            is_error=is_error,
+            result_content=result_content,
+            parse_error=parse_error,
+        )
 
     def format_tool_result(
         self,
@@ -210,6 +234,67 @@ class ToolExecutor:
                 )
         return status_content, claude_blocks if claude_blocks else ""
 
+    def _scoped_status_extra(self, tool_name: str) -> Dict[str, Any]:
+        """Mark status events group chat must keep on the owner's socket."""
+        tool_info = self._tool_manager.get_tool(tool_name)
+        is_scoped_tool = bool(
+            tool_info and tool_info.related_server.startswith(("user:", "local:"))
+        )
+        return {"scoped": True} if is_scoped_tool else {}
+
+    @staticmethod
+    def _log_tool_start(parsed: ParsedToolCall, call: Any, is_scoped: bool) -> None:
+        # Arguments of user-scoped tools can contain personal data; keep
+        # them out of server logs.
+        logger.info(
+            f"Executing tool: {parsed.tool_name}"
+            if is_scoped
+            else f"Executing tool: {call}"
+        )
+
+    def _report_parse_error(
+        self,
+        parsed: ParsedToolCall,
+        caller_mode: Literal["Claude", "OpenAI", "Prompt"],
+        scoped_extra: Dict[str, Any],
+    ) -> tuple[Dict[str, Any], Dict[str, Any] | None]:
+        logger.warning(
+            f"Skipping tool call due to parsing error: {parsed.result_content}"
+        )
+        parse_error_id = parsed.tool_id or (
+            f"parse_error_{datetime.datetime.now(datetime.timezone.utc).isoformat()}"
+        )
+        status = self._tool_status(
+            parse_error_id,
+            parsed.tool_name or "Unknown Tool",
+            "error",
+            parsed.result_content,
+            **scoped_extra,
+        )
+        formatted = self.format_tool_result(
+            caller_mode,
+            parse_error_id,
+            parsed.result_content,
+            True,
+        )
+        return status, formatted
+
+    @staticmethod
+    def _completed_status_extra(
+        tool_name: str,
+        result: ToolRunResult,
+        scoped_extra: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        extra = dict(scoped_extra)
+        if tool_name == "stagehand_navigate" and not result.is_error:
+            live_view_data = result.metadata.get("liveViewData", {})
+            if live_view_data:
+                logger.info(
+                    f"Found live view data for stagehand_navigate: {live_view_data}"
+                )
+                extra["browser_view"] = live_view_data
+        return extra
+
     async def execute_tools(
         self,
         tool_calls: Union[List[Dict[str, Any]], List[ToolCallObject]],
@@ -220,96 +305,50 @@ class ToolExecutor:
 
         logger.info(f"Executing {len(tool_calls)} tool(s) for {caller_mode} caller.")
         for call in tool_calls:
-            (
-                tool_name,
-                tool_id,
-                tool_input,
-                is_error,
-                result_content,
-                parse_error,
-            ) = self.parse_tool_call(call)
+            parsed = self.parse_tool_call(call)
+            scoped_extra = self._scoped_status_extra(parsed.tool_name)
+            self._log_tool_start(parsed, call, bool(scoped_extra))
 
-            tool_info = self._tool_manager.get_tool(tool_name)
-            is_scoped_tool = bool(
-                tool_info and tool_info.related_server.startswith(("user:", "local:"))
-            )
-            # Marks the status event so group chat can keep it on the owner's
-            # socket instead of broadcasting personal tool input/results.
-            scoped_extra = {"scoped": True} if is_scoped_tool else {}
-            # Arguments of user-scoped tools can contain personal data; keep
-            # them out of server logs.
-            logger.info(
-                f"Executing tool: {tool_name}"
-                if is_scoped_tool
-                else f"Executing tool: {call}"
-            )
-
-            if parse_error:
-                logger.warning(
-                    f"Skipping tool call due to parsing error: {result_content}"
+            if parsed.parse_error:
+                status, formatted_result = self._report_parse_error(
+                    parsed, caller_mode, scoped_extra
                 )
-                parse_error_id = tool_id or (
-                    f"parse_error_"
-                    f"{datetime.datetime.now(datetime.timezone.utc).isoformat()}"
-                )
-                yield self._tool_status(
-                    parse_error_id,
-                    tool_name or "Unknown Tool",
-                    "error",
-                    result_content,
-                    **scoped_extra,
-                )
-                formatted_result = self.format_tool_result(
-                    caller_mode,
-                    parse_error_id,
-                    result_content,
-                    True,
-                )
+                yield status
                 if formatted_result:
                     tool_results_for_llm.append(formatted_result)
                 continue
 
             # Yield 'running' status before execution
             yield self._tool_status(
-                tool_id,
-                tool_name,
+                parsed.tool_id,
+                parsed.tool_name,
                 "running",
-                f"Input: {json.dumps(tool_input)}",
+                f"Input: {json.dumps(parsed.tool_input)}",
                 **scoped_extra,
             )
 
-            # Execute the tool
-            (
-                is_error,
-                text_content,
-                metadata,
-                content_items,
-            ) = await self.run_single_tool(tool_name, tool_id, tool_input)
-
+            result = await self.run_single_tool(
+                parsed.tool_name, parsed.tool_id, parsed.tool_input
+            )
             status_content, llm_formatted_content = self._split_image_content(
-                caller_mode, text_content, content_items
+                caller_mode, result.text_content, result.content_items
             )
 
-            extra = dict(scoped_extra)
-            if tool_name == "stagehand_navigate" and not is_error:
-                live_view_data = metadata.get("liveViewData", {})
-                if live_view_data:
-                    logger.info(
-                        f"Found live view data for stagehand_navigate: {live_view_data}"
-                    )
-                    extra["browser_view"] = live_view_data
-
             yield self._tool_status(
-                tool_id,
-                tool_name,
-                "error" if is_error else "completed",
-                status_content if not is_error else f"Error: {text_content}",
-                **extra,
+                parsed.tool_id,
+                parsed.tool_name,
+                "error" if result.is_error else "completed",
+                (
+                    status_content
+                    if not result.is_error
+                    else f"Error: {result.text_content}"
+                ),
+                **self._completed_status_extra(parsed.tool_name, result, scoped_extra),
             )
 
             # Format result for LLM and add to list
             formatted_result = self.format_tool_result(
-                caller_mode, tool_id, llm_formatted_content, is_error
+                caller_mode, parsed.tool_id, llm_formatted_content, result.is_error
             )
             if formatted_result:
                 tool_results_for_llm.append(formatted_result)
@@ -319,103 +358,104 @@ class ToolExecutor:
         )
         yield {"type": "final_tool_results", "results": tool_results_for_llm}
 
+    @staticmethod
+    def _error_run(message: str) -> ToolRunResult:
+        return ToolRunResult(True, message, {}, error_content_items(message))
+
+    async def _call_server_tool(
+        self,
+        tool_info: Any,
+        tool_name: str,
+        tool_input: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        remote_name = tool_info.remote_name or tool_name
+        if tool_info.related_server.startswith("local:"):
+            if self._local_bridge is None:
+                raise RuntimeError("Local MCP bridge is not available")
+            return await self._local_bridge.call_tool(
+                server_key=tool_info.related_server,
+                tool_name=remote_name,
+                tool_args=tool_input,
+            )
+        if self._mcp_client is None:
+            raise RuntimeError("MCP client is not available")
+        return await self._mcp_client.call_tool(
+            server_name=tool_info.related_server,
+            tool_name=remote_name,
+            tool_args=tool_input,
+        )
+
+    @staticmethod
+    def _first_result_text(
+        content_items: List[Dict[str, Any]],
+    ) -> tuple[bool, str]:
+        """Read the first content item the MCP server reported."""
+        if content_items and content_items[0].get("type") == "error":
+            return True, content_items[0].get(
+                "text", "Unknown error from tool execution."
+            )
+        if content_items and content_items[0].get("type") == "text":
+            return False, content_items[0].get("text", "")
+        return False, ""
+
+    @staticmethod
+    def _log_content_items(tool_name: str, content_items: List[Dict[str, Any]]) -> None:
+        logger.info(f"Content items from tool '{tool_name}':")
+        for item in content_items:
+            item_type = item.get("type", "unknown")
+            logger.info(f"  Type: {item_type}")
+            for key, value in item.items():
+                if key != "type" and key != "data":  # Avoid logging large data
+                    log_value = (
+                        f"(length: {len(value)})"
+                        if isinstance(value, str) and len(value) > 100
+                        else value
+                    )
+                    logger.info(f"    {key}: {log_value}")
+
     async def run_single_tool(
         self, tool_name: str, tool_id: str, tool_input: Any
-    ) -> tuple[bool, str, Dict[str, Any], List[Dict[str, Any]]]:
-        """Run a single tool using MCPClient.
-
-        Returns:
-            tuple: (is_error, text_content, metadata, content_items)
-        """
+    ) -> ToolRunResult:
+        """Run a single tool using MCPClient."""
         logger.info(f"Executing tool: {tool_name} (ID: {tool_id})")
         tool_info = self._tool_manager.get_tool(tool_name)
-
-        is_error = False
-        text_content = ""
-        metadata = {}
-        content_items = []
-
         if tool_input is None:
             tool_input = {}
 
         if not tool_info:
             logger.error(f"Tool '{tool_name}' not found in ToolManager.")
-            text_content = f"Error: Tool '{tool_name}' is not available."
-            content_items = [{"type": "error", "text": text_content}]
-            is_error = True
-        elif not tool_info.related_server:
+            return self._error_run(f"Error: Tool '{tool_name}' is not available.")
+        if not tool_info.related_server:
             logger.error(f"Tool '{tool_name}' does not have a related server defined.")
-            text_content = f"Error: Configuration error for tool '{tool_name}'. No server specified."
-            content_items = [{"type": "error", "text": text_content}]
-            is_error = True
-        else:
-            try:
-                remote_name = tool_info.remote_name or tool_name
-                if tool_info.related_server.startswith("local:"):
-                    if self._local_bridge is None:
-                        raise RuntimeError("Local MCP bridge is not available")
-                    result_dict = await self._local_bridge.call_tool(
-                        server_key=tool_info.related_server,
-                        tool_name=remote_name,
-                        tool_args=tool_input,
-                    )
-                elif self._mcp_client is not None:
-                    result_dict = await self._mcp_client.call_tool(
-                        server_name=tool_info.related_server,
-                        tool_name=remote_name,
-                        tool_args=tool_input,
-                    )
-                else:
-                    raise RuntimeError("MCP client is not available")
+            return self._error_run(
+                f"Error: Configuration error for tool '{tool_name}'. "
+                "No server specified."
+            )
 
-                metadata = result_dict.get("metadata", {})
-                content_items = result_dict.get("content_items", [])
+        try:
+            result_dict = await self._call_server_tool(tool_info, tool_name, tool_input)
+            metadata = result_dict.get("metadata", {})
+            content_items = result_dict.get("content_items", [])
 
-                is_scoped_tool = tool_info.related_server.startswith(
-                    ("user:", "local:")
+            is_scoped_tool = tool_info.related_server.startswith(("user:", "local:"))
+            if is_scoped_tool and result_size_exceeded(content_items):
+                content_items = error_content_items(
+                    "Tool result exceeded the size limit"
                 )
-                if is_scoped_tool and result_size_exceeded(content_items):
-                    content_items = error_content_items(
-                        "Tool result exceeded the size limit"
-                    )
 
-                # Check if the first content item is an error reported by MCPClient
-                if content_items and content_items[0].get("type") == "error":
-                    is_error = True
-                    text_content = content_items[0].get(
-                        "text", "Unknown error from tool execution."
-                    )
-                elif content_items and content_items[0].get("type") == "text":
-                    text_content = content_items[0].get("text", "")
-                # If no text item is first, text_content remains ""
+            is_error, text_content = self._first_result_text(content_items)
+            if not is_error:
+                logger.info(f"Tool '{tool_name}' executed successfully.")
+                if content_items:
+                    self._log_content_items(tool_name, content_items)
 
-                if not is_error:
-                    logger.info(f"Tool '{tool_name}' executed successfully.")
-                    if content_items:
-                        logger.info(f"Content items from tool '{tool_name}':")
-                        for item in content_items:
-                            item_type = item.get("type", "unknown")
-                            logger.info(f"  Type: {item_type}")
-                            for key, value in item.items():
-                                if (
-                                    key != "type" and key != "data"
-                                ):  # Avoid logging large data
-                                    log_value = (
-                                        f"(length: {len(value)})"
-                                        if isinstance(value, str) and len(value) > 100
-                                        else value
-                                    )
-                                    logger.info(f"    {key}: {log_value}")
+            return ToolRunResult(is_error, text_content, metadata, content_items)
 
-            except (ValueError, RuntimeError, ConnectionError) as e:
-                logger.exception(f"Error executing tool '{tool_name}': {e}")
-                text_content = f"Error executing tool '{tool_name}': {e}"
-                content_items = [{"type": "error", "text": text_content}]
-                is_error = True
-            except Exception as e:
-                logger.exception(f"Unexpected error executing tool '{tool_name}': {e}")
-                text_content = f"Unexpected error executing tool '{tool_name}': {e}"
-                content_items = [{"type": "error", "text": text_content}]
-                is_error = True
-
-        return is_error, text_content, metadata, content_items
+        except (ValueError, RuntimeError, ConnectionError) as e:
+            logger.exception(f"Error executing tool '{tool_name}': {e}")
+            return self._error_run(f"Error executing tool '{tool_name}': {e}")
+        except Exception as e:
+            logger.exception(f"Unexpected error executing tool '{tool_name}': {e}")
+            return self._error_run(
+                f"Unexpected error executing tool '{tool_name}': {e}"
+            )
