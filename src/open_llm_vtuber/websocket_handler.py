@@ -18,7 +18,7 @@ from .utils.async_utils import cancel_and_wait
 from .utils.stream_audio import prepare_audio_payload
 from .utils.audio import MAX_AUDIO_SAMPLES
 from .config_manager.utils import scan_config_alts_directory, scan_bg_directory
-from .storage import HistoryNotFoundError
+from .storage import HistoryNotFoundError, HistoryRepository
 from .mcpp.user_servers import split_user_mcp_servers, validate_server_id
 from .conversations.conversation_handler import (
     handle_conversation_trigger,
@@ -300,6 +300,22 @@ class WebSocketHandler:
         # Send initial group status
         await self.send_group_update(websocket, client_uid)
 
+    async def _load_user_mcp_servers(
+        self,
+        repository: HistoryRepository | None,
+        user_id: str,
+    ) -> tuple[list[dict], list[dict]]:
+        """Split this user's enabled MCP rows into remote and browser-local."""
+        if repository is None:
+            return [], []
+        try:
+            return split_user_mcp_servers(
+                await repository.list_user_mcp_servers(user_id=user_id)
+            )
+        except Exception:
+            logger.exception("Failed to load per-user MCP servers")
+            return [], []
+
     async def _init_service_context(
         self,
         channels: OutboundChannels,
@@ -311,15 +327,9 @@ class WebSocketHandler:
         if repository is not None:
             await repository.ensure_user(identity.user_id, identity.display_name)
 
-        remote_mcp_servers: list[dict] = []
-        local_mcp_servers: list[dict] = []
-        if repository is not None:
-            try:
-                remote_mcp_servers, local_mcp_servers = split_user_mcp_servers(
-                    await repository.list_user_mcp_servers(user_id=identity.user_id)
-                )
-            except Exception:
-                logger.exception("Failed to load per-user MCP servers")
+        remote_mcp_servers, local_mcp_servers = await self._load_user_mcp_servers(
+            repository, identity.user_id
+        )
 
         session_service_context = ServiceContext()
         await session_service_context.load_cache(
