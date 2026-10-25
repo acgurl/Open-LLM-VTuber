@@ -3,7 +3,6 @@ import sys
 import atexit
 import asyncio
 import argparse
-import subprocess
 from pathlib import Path
 import tomli
 import uvicorn
@@ -49,63 +48,25 @@ def init_logger(console_log_level: str = "INFO") -> None:
 
 _FRONTEND_MESSAGES = {
     "missing": {
-        "zh": "未找到前端子模块，正在尝试初始化子模块...",
-        "en": "Frontend submodule not found, attempting to initialize submodules...",
-    },
-    "success": {
-        "zh": "👍 前端子模块（和其他子模块）初始化成功。",
-        "en": "👍 Frontend submodule (and other submodules) initialized successfully.",
-    },
-    "still_missing_critical": {
-        "zh": '子模块初始化失败。\n你之后可能会在浏览器中看到 {{"detail":"Not Found"}} 的错误提示。请检查我们的快速入门指南和常见问题页面以获取更多信息。',
-        "en": 'Failed to initialize submodules. \nYou might see {{"detail":"Not Found"}} in your browser. Please check our quick start guide and common issues page from our documentation.',
-    },
-    "still_missing_hint": {
-        "zh": "初始化子模块后，前端文件仍然缺失。\n"
-        "你是否手动更改或删除了 `frontend` 文件夹？\n"
-        "它是一个 Git 子模块 - 你不应该直接修改它。\n"
-        "如果你这样做了，请使用 `git restore frontend` 丢弃你的更改，然后再试一次。\n",
-        "en": "Frontend files are still missing after submodule initialization.\n"
-        "Did you manually change or delete the `frontend` folder?  \n"
-        "It's a Git submodule — you shouldn't modify it directly.  \n"
-        "If you did, discard your changes with `git restore frontend`, then try again.\n",
-    },
-    "init_failed": {
-        "zh": '初始化子模块失败: {error}。\n怀疑你跟 GitHub 之间有网络问题。你之后可能会在浏览器中看到 {{"detail":"Not Found"}} 的错误提示。请检查我们的快速入门指南和常见问题页面以获取更多信息。\n',
-        "en": 'Failed to initialize submodules: {error}. \nYou might see {{"detail":"Not Found"}} in your browser. Please check our quick start guide and common issues page from our documentation.\n',
+        "zh": "未找到前端构建产物（web/dist）。请先在 web/ 目录运行 `npm ci && npm run build`。",
+        "en": "Frontend build is missing (web/dist). Run `npm ci && npm run build` in web/ first.",
     },
 }
 
 
-def _frontend_message(lang, key: str, **kwargs) -> str:
+def _frontend_message(lang, key: str) -> str:
     messages = _FRONTEND_MESSAGES[key]
-    template = messages.get(lang or "", messages["en"])
-    return template.replace("{error}", str(kwargs.get("error", "")))
+    return messages.get(lang or "", messages["en"])
 
 
-def check_frontend_submodule(lang=None):
-    """
-    Check if the frontend submodule is initialized. If not, attempt to initialize it.
-    If initialization fails, log an error message.
-    """
+def check_frontend_build(lang=None):
+    """Warn when the frontend has not been built into web/dist."""
     if lang is None:
         lang = upgrade_manager.lang
 
-    frontend_path = Path(__file__).parent / "frontend" / "index.html"
+    frontend_path = Path(__file__).parent / "web" / "dist" / "index.html"
     if not frontend_path.exists():
         logger.warning(_frontend_message(lang, "missing"))
-
-        try:
-            subprocess.run(
-                ["git", "submodule", "update", "--init", "--recursive"], check=True
-            )
-            if frontend_path.exists():
-                logger.info(_frontend_message(lang, "success"))
-            else:
-                logger.critical(_frontend_message(lang, "still_missing_critical"))
-                logger.error(_frontend_message(lang, "still_missing_hint"))
-        except Exception as e:
-            logger.critical(_frontend_message(lang, "init_failed", error=e))
 
 
 def parse_args():
@@ -125,8 +86,8 @@ def run(console_log_level: str):
     # Get selected language
     lang = upgrade_manager.lang
 
-    # Check if the frontend submodule is initialized
-    check_frontend_submodule(lang)
+    # Check if the frontend has been built
+    check_frontend_build(lang)
 
     # Sync user config with default config
     try:

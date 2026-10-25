@@ -13,15 +13,9 @@ except ImportError as exc:
 
 class FrontendMessageTests(unittest.TestCase):
     def test_selects_language_with_english_fallback(self):
-        self.assertIn("前端", _frontend_message("zh", "missing"))
-        self.assertIn("Frontend", _frontend_message("en", "missing"))
-        self.assertIn("Frontend", _frontend_message("jp", "missing"))
-
-    def test_interpolates_error(self):
-        message = _frontend_message("en", "init_failed", error=RuntimeError("boom"))
-
-        self.assertIn("boom", message)
-        self.assertIn('{"detail":"Not Found"}', message)
+        self.assertIn("npm run build", _frontend_message("zh", "missing"))
+        self.assertIn("Frontend build", _frontend_message("en", "missing"))
+        self.assertIn("Frontend build", _frontend_message("jp", "missing"))
 
 
 if __name__ == "__main__":

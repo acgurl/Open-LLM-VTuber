@@ -1,5 +1,2 @@
 node_modules/
 dist/
-
-# 第三方运行时二进制（Live2D / VAD），构建前从 frontend/libs 拷入
-public/libs/

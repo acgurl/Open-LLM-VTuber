@@ -112,7 +112,7 @@ The codebase uses the missing `_cleanup_failed_connection` method pattern - when
 - **Main server**: `src/open_llm_vtuber/server.py`
 - **WebSocket routing**: `src/open_llm_vtuber/routes.py`
 - **Configuration**: `conf.yaml` (user), `config_templates/` (defaults)
-- **Frontend source**: `web/` (React 18 + Vite + TypeScript; `npm run build` → `web/dist`, copied into the `frontend/` submodule for serving). Run `cp -r ../frontend/libs public/libs` once before the first build — those binaries are not tracked.
+- **Frontend source**: `web/` (React 18 + Vite + TypeScript; `npm ci && npm run build` → `web/dist`, which the backend serves directly). Third-party runtime binaries live in `web/public/libs/` and are tracked. The Docker build compiles the frontend in a `node` stage; hot deploys copy `web/dist` into the container at `/app/web/dist`.
 - **Live2D models**: `live2d-models/`
 - **Character definitions**: `characters/`
 - **Chat history**: `data/storage/open_llm_vtuber.db` (SQLite; legacy `chat_history/` JSON is imported and moved to `data/storage/legacy_history/` on first start)

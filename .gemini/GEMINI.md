@@ -20,7 +20,7 @@ Some key files and directories:
 
 ```
 doc/                 # A deprecated directory
-frontend/            # Compiled web frontend artifacts (from git submodule)
+web/                 # React + Vite frontend source; build output web/dist is served by the backend
 config_templates/
     conf.default.yaml    # Configuration template for English users
     conf.ZH.default.yaml # Configuration template for Chinese users
@@ -33,7 +33,7 @@ conf.yaml            # User's configuration file, generated from a template
 
 ### 1.1. Repository Structure
 
-- Frontend Repository: The frontend is a React application developed in a separate repository: `Open-LLM-VTuber-Web`. Its built artifacts are integrated into the `frontend/` directory of this backend repository via a git submodule.
+- Frontend: the React application lives in `web/` (React 18 + Vite + TypeScript). Its build output `web/dist/` is served by the backend at `/`; the Docker image compiles it in a `node` stage.
 
 - Documentation Repository: The official documentation site is hosted in the `open-llm-vtuber.github.io` repository. When asked to generate documentation, create Markdown files in the project root. The user will be responsible for migrating them to the documentation site.
 

@@ -1,3 +1,10 @@
+FROM node:24-slim AS web
+WORKDIR /app/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
 FROM python:3.10-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -26,6 +33,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Copy source & install project
 COPY . /app
 RUN uv pip install --no-deps .
+
+# Frontend build output (served from web/dist)
+COPY --from=web /app/web/dist /app/web/dist
 
 # Startup script
 RUN printf '%s\n' \

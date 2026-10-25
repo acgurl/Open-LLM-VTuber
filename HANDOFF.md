@@ -503,3 +503,28 @@ ssh oracle "docker restart open-llm-vtuber"
 - 模型与 model3 经 scp 到 bind mount，`conf/model_dict.json` 同步后 `docker restart open-llm-vtuber`；前端 `index.html` + 两个新 hash 用 `docker cp` 热更新，镜像仍为 `1.2.1-oidc-cache-20261025`。`scripts/warm_live2d_cache.py` 已上传服务器。
 - 回滚：恢复备份的 `frontend/index.html` 与 `conf/model_dict.json`（或把 mao URL 指回 `mao_pro.model3.json`），`docker cp` 回旧入口并重启；Caddy 用上述备份恢复后 `caddy validate` + `systemctl reload caddy`。WebP 为新增文件，无需删除。
 - 补充 purge：用本机 User 级环境变量里的 Global API Key（`CLOUDFLARE_EMAIL` + `CLOUDFLARE_API_KEY`）对 model_dict 的 80 个 URL 与 shizuku 的 14 个 URL 执行 `purge_cache`，随后在服务器重跑预热。抽查 6 个模型与 shizuku 的 model3/贴图，均返回 `Cache-Control: public, max-age=2592000, immutable`；model3 全部 HIT，本机 colo 未预热的贴图首次 MISS、之后 HIT。`warm_live2d_cache.py` 只按 model_dict 预热，未启用的模型（如 shizuku）需单独处理。
+
+## 21. 2026-10-25 移除老前端子模块（未部署）
+
+### 变更
+
+- **删除老前端载体**：移除 `frontend/` git submodule 与 `.gitmodules`（`Open-LLM-VTuber-Web` 的 `build`/`build-motion` 分支仅存构建产物）、`frontend-streaming.patch`（旧补丁流程已废弃），以及 `run_server.py` 里的子模块自动初始化逻辑。
+- **单一来源**：前端只保留 `web/`（React 18 + Vite + TypeScript）。运行时二进制（Live2D / ONNX Runtime / Silero VAD）从原子模块 `frontend/libs` 迁入并纳入版本管理的 `web/public/libs/`（42MB，10 个文件）。
+- **构建**：`web/public/libs` 不再被 `.gitignore` 排除；`web/dist` 仍不入库。`dockerfile` 增加 `node:24-slim` 多阶段构建（`npm ci && npm run build`），产物复制到镜像内 `/app/web/dist`。
+- **服务**：`server.py` 的兜底挂载从 `frontend` 改为 `web/dist`（`check_dir=False`，未构建时返回 404 而不是启动失败）。`run_server.py` 启动时只检查 `web/dist/index.html`，缺失时提示在 `web/` 运行 `npm ci && npm run build`。
+- 文档同步：`CLAUDE.md`、`.gemini/GEMINI.md`、`.github/copilot-instructions.md`、`BACKEND_API.md`（同源部署说明与静态目录表）。
+
+### 验证
+
+- `cd web && npm run build`：通过；产物 `index-BJvEhV-b.js` / `index-DXZ6JaN6.js` / `index-BT7NIenF.css` 与移除前一致（构建幂等）。
+- `uv run --frozen python -m unittest discover -s tests`：**274 个测试通过**（原 275；删除子模块错误插值用例，改为断言新的构建提示）。
+- `starlette.testclient` 直连后端：`/` 200 且引用新入口，`/assets/index-BJvEhV-b.js` 200，`/libs/live2d.min.js` 200（`public, max-age=2592000`）。
+- 本机无 Docker，未执行镜像构建；多阶段 Dockerfile 需在服务器实测。
+
+### 部署注意（必须重建镜像）
+
+- 镜像内前端路径从 `/app/frontend` 变为 `/app/web/dist`，旧镜像无法只靠 `docker cp` 获得新页面，**必须重建镜像**后切换 `run-container.sh`。
+- 服务器 `docker build -t open-llm-vtuber:<tag> .` 会在 `web` 阶段执行 `npm ci`（需外网）；`web/` 与 `web/public/libs` 随源码包进入构建上下文。
+- 新镜像后的热更新：本地 `cd web && npm run build`，再 `docker cp web/dist/. open-llm-vtuber:/app/web/dist/`；无需重启（静态文件按请求读取）。旧 hash 资源会留在容器里，不影响打开中的页面。
+- 回滚：源码侧 `git revert` 本提交可恢复 `.gitmodules` 与 gitlink（再 `git submodule update --init`）；生产可切回上一镜像 `1.2.1-oidc-cache-20261025`，其 `/app/frontend` 内容仍在。
+- 本次改动尚未提交、未部署。

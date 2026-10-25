@@ -137,7 +137,7 @@ Cookie（`auth/manager.py`）：
 - Origin 校验（`routes.py:136-154`）：**仅在 oidc 模式生效**。若请求带 `Origin` 头，其 host 必须等于请求的 `Host`（忽略默认端口）。不匹配 → `close(1008, "Origin not allowed")`；不带 `Origin`（非浏览器客户端）→ 放行
 - `/audio-ws` 额外要求 `?client_uid=` 指向一个属于同一 user 的已建立 `/client-ws` 连接，否则 `close(1008, "Unknown client")`
 
-> **结论：新前端必须与后端同源部署**（放进 `frontend/` 由后端托管，或反代到同一域名）。CORS 虽然配了 `allow_origins=["*"]`，但同时 `allow_credentials=False`（`server.py:101-107`），跨域请求**不会携带 cookie**，oidc 模式下必然 401。静态资源另有 `Access-Control-Allow-Origin: *`（`server.py:39-50`），所以只有"读静态文件"能跨域，"用会话"不能。
+> **结论：新前端必须与后端同源部署**（构建到 `web/dist` 由后端托管，或反代到同一域名）。CORS 虽然配了 `allow_origins=["*"]`，但同时 `allow_credentials=False`（`server.py:101-107`），跨域请求**不会携带 cookie**，oidc 模式下必然 401。静态资源另有 `Access-Control-Allow-Origin: *`（`server.py:39-50`），所以只有"读静态文件"能跨域，"用会话"不能。
 
 ---
 
@@ -172,7 +172,7 @@ Cookie（`auth/manager.py`）：
 | `/bg` | `backgrounds/` | 公开 | 背景图 |
 | `/avatars` | `avatars/` | 公开 | 头像，**仅允许 `.jpg/.jpeg/.png/.gif/.svg`，其它扩展名 403**（`server.py:53-63`） |
 | `/web-tool` | `web_tool/` | 公开 | ASR/TTS 测试页 |
-| `/` | `frontend/` | 受中间件保护 | 前端产物（`html=True`，兜底挂载，必须最后注册） |
+| `/` | `web/dist/` | 受中间件保护 | 前端产物（`html=True`，兜底挂载，必须最后注册） |
 
 所有静态响应都带 `Access-Control-Allow-Origin: *`，`.js` 强制 `Content-Type: application/javascript`。
 

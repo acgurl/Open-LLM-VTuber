@@ -233,7 +233,7 @@ class WebSocketServer:
         )
         self.app.mount(
             "/",
-            CORSStaticFiles(directory="frontend", html=True),
+            CORSStaticFiles(directory="web/dist", html=True, check_dir=False),
             name="frontend",
         )
 
