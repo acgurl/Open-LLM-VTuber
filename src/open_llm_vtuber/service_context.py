@@ -224,25 +224,24 @@ class ServiceContext:
         else:
             logger.info("ToolExecutor initialized for this session.")
 
-    def _prepare_tool_adapter(self, user_servers: dict[str, MCPServer]) -> bool:
-        """Build the registry and adapter this session's tools come from.
+    def _prepare_tool_adapter(self, user_servers: dict[str, MCPServer]) -> None:
+        """Build this session's registry and an adapter over the same registry.
 
-        User servers need a session-local registry and a matching adapter.
-        Deployment-only sessions keep the shared adapter from the default
-        context; without one there is nothing to fetch tools with.
+        The adapter is session-local by design: one borrowed from an earlier
+        configuration may point at a different registry.
         """
         base_registry = ServerRegistry()
-        if user_servers:
-            self.mcp_server_registry = base_registry.merged_with(user_servers)
-            self.tool_adapter = ToolAdapter(server_registry=self.mcp_server_registry)
-            return True
+        self.mcp_server_registry = (
+            base_registry.merged_with(user_servers) if user_servers else base_registry
+        )
+        self.tool_adapter = ToolAdapter(server_registry=self.mcp_server_registry)
 
-        self.mcp_server_registry = base_registry
-        if self.tool_adapter is not None:
-            return True
-        logger.error("ToolAdapter not initialized before calling _init_mcp_components.")
-        self.mcp_prompt = "[Error: ToolAdapter not initialized]"
-        return False
+    def _ensure_tool_adapter(self) -> ToolAdapter:
+        if self.tool_adapter is None:
+            if self.mcp_server_registry is None:
+                self.mcp_server_registry = ServerRegistry.from_servers({})
+            self.tool_adapter = ToolAdapter(server_registry=self.mcp_server_registry)
+        return self.tool_adapter
 
     async def _init_mcp_components(self, use_mcpp, enabled_servers):
         """Initializes MCP components based on configuration, dynamically fetching tool info."""
@@ -259,8 +258,7 @@ class ServiceContext:
         effective_servers = global_enabled + list(user_servers.keys())
 
         if effective_servers:
-            if not self._prepare_tool_adapter(user_servers):
-                return
+            self._prepare_tool_adapter(user_servers)
             await self._init_mcp_tools(effective_servers)
             self._init_mcp_client()
             self._init_tool_executor()
@@ -371,12 +369,7 @@ class ServiceContext:
         merged: dict[str, FormattedTool] = dict(self._base_mcp_tools)
         merged.update(self.local_mcp_tools)
 
-        adapter = self.tool_adapter
-        if adapter is None:
-            # Temporary formatter for sessions that only have browser-local
-            # tools. Do not cache it on the context: a later config switch may
-            # need a registry-aware adapter for deployment servers.
-            adapter = ToolAdapter(ServerRegistry.from_servers({}))
+        adapter = self._ensure_tool_adapter()
 
         local_prompt = ""
         if self._local_mcp_servers_info:
@@ -624,19 +617,6 @@ class ServiceContext:
 
         # init vad from character config
         self.init_vad(config.character_config.vad_config)
-
-        # Initialize shared ToolAdapter if it doesn't exist yet
-        if (
-            not self.tool_adapter
-            and config.character_config.agent_config.agent_settings.basic_memory_agent.use_mcpp
-        ):
-            if not self.mcp_server_registry:
-                logger.info(
-                    "Initializing shared ServerRegistry within load_from_config."
-                )
-                self.mcp_server_registry = ServerRegistry()
-            logger.info("Initializing shared ToolAdapter within load_from_config.")
-            self.tool_adapter = ToolAdapter(server_registry=self.mcp_server_registry)
 
         # Initialize MCP Components before initializing Agent
         await self._init_mcp_components(
