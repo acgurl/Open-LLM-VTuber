@@ -41,6 +41,12 @@ class SherpaModelPathTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             self.engine._create_recognizer()
 
+    def test_unknown_model_type_is_rejected(self):
+        self.engine.model_type = "unknown"
+
+        with self.assertRaises(ValueError):
+            self.engine._create_recognizer()
+
 
 class AzureConfigTests(unittest.TestCase):
     def test_languages_default_is_not_a_mutable_argument(self):

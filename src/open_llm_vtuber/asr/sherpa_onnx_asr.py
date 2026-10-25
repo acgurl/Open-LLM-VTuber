@@ -87,132 +87,146 @@ class VoiceRecognition(ASRInterface):
         self.recognizer = self._create_recognizer()
 
     def _create_recognizer(self):
-        if self.model_type == "transducer":
-            recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
-                encoder=self.encoder,
-                decoder=self.decoder,
-                joiner=self.joiner,
-                tokens=self.tokens,
-                num_threads=self.num_threads,
-                sample_rate=self.SAMPLE_RATE,
-                feature_dim=self.feature_dim,
-                decoding_method=self.decoding_method,
-                hotwords_file=self.hotwords_file,
-                hotwords_score=self.hotwords_score,
-                modeling_unit=self.modeling_unit,
-                bpe_vocab=self.bpe_vocab,
-                blank_penalty=self.blank_penalty,
-                debug=self.debug,
-                provider=self.provider,
-            )
-        elif self.model_type == "paraformer":
-            recognizer = sherpa_onnx.OfflineRecognizer.from_paraformer(
-                paraformer=self.paraformer,
-                tokens=self.tokens,
-                num_threads=self.num_threads,
-                sample_rate=self.SAMPLE_RATE,
-                feature_dim=self.feature_dim,
-                decoding_method=self.decoding_method,
-                debug=self.debug,
-                provider=self.provider,
-            )
-        elif self.model_type == "nemo_ctc":
-            recognizer = sherpa_onnx.OfflineRecognizer.from_nemo_ctc(
-                model=self.nemo_ctc,
-                tokens=self.tokens,
-                num_threads=self.num_threads,
-                sample_rate=self.SAMPLE_RATE,
-                feature_dim=self.feature_dim,
-                decoding_method=self.decoding_method,
-                debug=self.debug,
-                provider=self.provider,
-            )
-        elif self.model_type == "wenet_ctc":
-            recognizer = sherpa_onnx.OfflineRecognizer.from_wenet_ctc(
-                model=self.wenet_ctc,
-                tokens=self.tokens,
-                num_threads=self.num_threads,
-                sample_rate=self.SAMPLE_RATE,
-                feature_dim=self.feature_dim,
-                decoding_method=self.decoding_method,
-                debug=self.debug,
-                provider=self.provider,
-            )
-        elif self.model_type == "whisper":
-            recognizer = sherpa_onnx.OfflineRecognizer.from_whisper(
-                encoder=self.whisper_encoder,
-                decoder=self.whisper_decoder,
-                tokens=self.tokens,
-                num_threads=self.num_threads,
-                decoding_method=self.decoding_method,
-                debug=self.debug,
-                language=self.whisper_language,
-                task=self.whisper_task,
-                tail_paddings=self.whisper_tail_paddings,
-                provider=self.provider,
-            )
-        elif self.model_type == "tdnn_ctc":
-            recognizer = sherpa_onnx.OfflineRecognizer.from_tdnn_ctc(
-                model=self.tdnn_model,
-                tokens=self.tokens,
-                sample_rate=self.SAMPLE_RATE,
-                feature_dim=self.feature_dim,
-                num_threads=self.num_threads,
-                decoding_method=self.decoding_method,
-                debug=self.debug,
-                provider=self.provider,
-            )
-        elif self.model_type == "sense_voice":
-            if not self.sense_voice or not os.path.isfile(self.sense_voice):
-                if self.sense_voice and self.sense_voice.startswith(
-                    "./models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
-                ):
-                    logger.warning(
-                        "SenseVoice model not found. Downloading the model..."
-                    )
-
-                    url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2"
-                    output_dir = "./models"
-                    # check the local file first before download
-                    local_result = check_and_extract_local_file(url, output_dir)
-
-                    if local_result is None:
-                        logger.info("Local file not found. Downloading...")
-                        download_and_extract(url, output_dir)
-                    else:
-                        logger.info("Local file found. Using existing file.")
-                    # download_and_extract(
-                    #     url="https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2",
-                    #     output_dir="./models",
-                    # )
-
-            if not self.sense_voice or not os.path.isfile(self.sense_voice):
-                raise FileNotFoundError(
-                    "The SenseVoice model is missing. Please provide the path to the model.onnx file."
-                )
-
-            recognizer = sherpa_onnx.OfflineRecognizer.from_sense_voice(
-                model=self.sense_voice,
-                tokens=self.tokens,
-                num_threads=self.num_threads,
-                use_itn=self.use_itn,
-                debug=self.debug,
-                provider=self.provider,
-            )
-        elif self.model_type == "fire_red_asr":
-            recognizer = sherpa_onnx.OfflineRecognizer.from_fire_red_asr(
-                encoder=self.fire_red_asr_encoder,
-                decoder=self.fire_red_asr_decoder,
-                tokens=self.tokens,
-                num_threads=self.num_threads,
-                decoding_method=self.decoding_method,
-                debug=self.debug,
-                provider=self.provider,
-            )
-        else:
+        builders = {
+            "transducer": self._build_transducer,
+            "paraformer": self._build_paraformer,
+            "nemo_ctc": self._build_nemo_ctc,
+            "wenet_ctc": self._build_wenet_ctc,
+            "whisper": self._build_whisper,
+            "tdnn_ctc": self._build_tdnn_ctc,
+            "sense_voice": self._build_sense_voice,
+            "fire_red_asr": self._build_fire_red_asr,
+        }
+        builder = builders.get(self.model_type)
+        if builder is None:
             raise ValueError(f"Invalid model type: {self.model_type}")
+        return builder()
 
-        return recognizer
+    def _build_transducer(self):
+        return sherpa_onnx.OfflineRecognizer.from_transducer(
+            encoder=self.encoder,
+            decoder=self.decoder,
+            joiner=self.joiner,
+            tokens=self.tokens,
+            num_threads=self.num_threads,
+            sample_rate=self.SAMPLE_RATE,
+            feature_dim=self.feature_dim,
+            decoding_method=self.decoding_method,
+            hotwords_file=self.hotwords_file,
+            hotwords_score=self.hotwords_score,
+            modeling_unit=self.modeling_unit,
+            bpe_vocab=self.bpe_vocab,
+            blank_penalty=self.blank_penalty,
+            debug=self.debug,
+            provider=self.provider,
+        )
+
+    def _build_paraformer(self):
+        return sherpa_onnx.OfflineRecognizer.from_paraformer(
+            paraformer=self.paraformer,
+            tokens=self.tokens,
+            num_threads=self.num_threads,
+            sample_rate=self.SAMPLE_RATE,
+            feature_dim=self.feature_dim,
+            decoding_method=self.decoding_method,
+            debug=self.debug,
+            provider=self.provider,
+        )
+
+    def _build_nemo_ctc(self):
+        return sherpa_onnx.OfflineRecognizer.from_nemo_ctc(
+            model=self.nemo_ctc,
+            tokens=self.tokens,
+            num_threads=self.num_threads,
+            sample_rate=self.SAMPLE_RATE,
+            feature_dim=self.feature_dim,
+            decoding_method=self.decoding_method,
+            debug=self.debug,
+            provider=self.provider,
+        )
+
+    def _build_wenet_ctc(self):
+        return sherpa_onnx.OfflineRecognizer.from_wenet_ctc(
+            model=self.wenet_ctc,
+            tokens=self.tokens,
+            num_threads=self.num_threads,
+            sample_rate=self.SAMPLE_RATE,
+            feature_dim=self.feature_dim,
+            decoding_method=self.decoding_method,
+            debug=self.debug,
+            provider=self.provider,
+        )
+
+    def _build_whisper(self):
+        return sherpa_onnx.OfflineRecognizer.from_whisper(
+            encoder=self.whisper_encoder,
+            decoder=self.whisper_decoder,
+            tokens=self.tokens,
+            num_threads=self.num_threads,
+            decoding_method=self.decoding_method,
+            debug=self.debug,
+            language=self.whisper_language,
+            task=self.whisper_task,
+            tail_paddings=self.whisper_tail_paddings,
+            provider=self.provider,
+        )
+
+    def _build_tdnn_ctc(self):
+        return sherpa_onnx.OfflineRecognizer.from_tdnn_ctc(
+            model=self.tdnn_model,
+            tokens=self.tokens,
+            sample_rate=self.SAMPLE_RATE,
+            feature_dim=self.feature_dim,
+            num_threads=self.num_threads,
+            decoding_method=self.decoding_method,
+            debug=self.debug,
+            provider=self.provider,
+        )
+
+    def _build_sense_voice(self):
+        self._ensure_sense_voice_model()
+        return sherpa_onnx.OfflineRecognizer.from_sense_voice(
+            model=self.sense_voice,
+            tokens=self.tokens,
+            num_threads=self.num_threads,
+            use_itn=self.use_itn,
+            debug=self.debug,
+            provider=self.provider,
+        )
+
+    def _ensure_sense_voice_model(self) -> None:
+        if self.sense_voice and os.path.isfile(self.sense_voice):
+            return
+        if self.sense_voice and self.sense_voice.startswith(
+            "./models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
+        ):
+            logger.warning("SenseVoice model not found. Downloading the model...")
+            url = (
+                "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/"
+                "sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2"
+            )
+            output_dir = "./models"
+            local_result = check_and_extract_local_file(url, output_dir)
+            if local_result is None:
+                logger.info("Local file not found. Downloading...")
+                download_and_extract(url, output_dir)
+            else:
+                logger.info("Local file found. Using existing file.")
+        if not self.sense_voice or not os.path.isfile(self.sense_voice):
+            raise FileNotFoundError(
+                "The SenseVoice model is missing. Please provide the path to the model.onnx file."
+            )
+
+    def _build_fire_red_asr(self):
+        return sherpa_onnx.OfflineRecognizer.from_fire_red_asr(
+            encoder=self.fire_red_asr_encoder,
+            decoder=self.fire_red_asr_decoder,
+            tokens=self.tokens,
+            num_threads=self.num_threads,
+            decoding_method=self.decoding_method,
+            debug=self.debug,
+            provider=self.provider,
+        )
 
     def transcribe_np(self, audio: np.ndarray) -> str:
         stream = self.recognizer.create_stream()
