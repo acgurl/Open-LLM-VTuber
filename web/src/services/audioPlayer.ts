@@ -14,8 +14,10 @@ class AudioPlayer {
   private queue: AudioPayload[] = [];
   private draining = false;
   private synthComplete = false;
-  private stopped = false;
+  // 每轮打断递增；旧载荷的播放循环和进度回调据此自行退出
+  private epoch = 0;
   private currentAudio: HTMLAudioElement | null = null;
+  private finishCurrent: (() => void) | null = null;
   private rafId = 0;
   private heardBase = '';
   private heardPartial = '';
@@ -30,7 +32,6 @@ class AudioPlayer {
   }
 
   enqueue(p: AudioPayload) {
-    this.stopped = false;
     this.queue.push(p);
     void this.drain();
   }
@@ -41,7 +42,7 @@ class AudioPlayer {
   }
 
   stopAll() {
-    this.stopped = true;
+    this.epoch += 1;
     this.synthComplete = false;
     this.queue.length = 0;
     try {
@@ -49,6 +50,8 @@ class AudioPlayer {
     } catch {
       /* ignore */
     }
+    this.finishCurrent?.();
+    this.heardPartial = '';
     live2d.setLipSync(0);
     live2d.setSpeaking(false);
     useSubtitle.getState().hide();
@@ -66,19 +69,19 @@ class AudioPlayer {
     if (this.draining) return;
     this.draining = true;
     while (this.queue.length > 0) {
+      const epoch = this.epoch;
       const p = this.queue.shift()!;
-      await this.playOne(p);
-      if (this.stopped) {
-        this.queue.length = 0;
-        break;
-      }
+      await this.playOne(p, epoch);
+      // 被 stopAll 打断后队列里只可能剩新一轮（stopAll 已清空旧队列）；
+      // 继续交给下一轮迭代播放，否则结束
+      if (epoch !== this.epoch && this.queue.length === 0) break;
     }
     this.draining = false;
     this.maybeAck();
   }
 
-  private async playOne(p: AudioPayload) {
-    if (this.stopped) return;
+  private async playOne(p: AudioPayload, epoch: number) {
+    if (epoch !== this.epoch) return;
     const ttsOn = useSettings.getState().ttsOn;
     const modelInfo = useConnection.getState().modelInfo;
     const tagSet = buildTagSet(modelInfo);
@@ -108,20 +111,32 @@ class AudioPlayer {
       live2d.setSpeaking(true);
       const bytes = base64ToBytes(p.audio);
       const blob = new Blob([bytes.buffer as ArrayBuffer], { type: p.audio_mime });
-      await this.playBlob(blob, p.volumes ?? [], p.slice_length || 20, clean.length, (shown) => {
+      await this.playBlob(blob, p.volumes ?? [], p.slice_length || 20, clean.length, epoch, (shown) => {
+        if (epoch !== this.epoch) return;
         this.heardPartial = clean.slice(0, shown);
         if (showSubtitle) useSubtitle.getState().progress(shown);
       });
+      if (epoch !== this.epoch) return;
       live2d.setLipSync(0);
       live2d.setSpeaking(false);
       this.heardBase += clean;
       this.heardPartial = '';
-    } else if (clean && !this.stopped) {
-      // 静音载荷：只显示不播，按长度短暂停留
-      await sleep(Math.min(3000, 600 + clean.length * 45));
+    } else if (clean) {
+      // 静音载荷：只显示不播，按长度短暂停留并允许被打断
+      await this.holdDisplay(Math.min(3000, 600 + clean.length * 45), epoch);
+      if (epoch !== this.epoch) return;
     }
 
     if (showSubtitle) useSubtitle.getState().hide();
+  }
+
+  private async holdDisplay(ms: number, epoch: number) {
+    const end = performance.now() + ms;
+    while (epoch === this.epoch) {
+      const left = end - performance.now();
+      if (left <= 0) return;
+      await sleep(Math.min(50, left));
+    }
   }
 
   private playBlob(
@@ -129,6 +144,7 @@ class AudioPlayer {
     volumes: number[],
     sliceMs: number,
     totalChars: number,
+    epoch: number,
     onProgress: (shownChars: number) => void,
   ): Promise<void> {
     return new Promise((resolve) => {
@@ -142,11 +158,13 @@ class AudioPlayer {
         cancelAnimationFrame(this.rafId);
         URL.revokeObjectURL(url);
         if (this.currentAudio === el) this.currentAudio = null;
+        if (this.finishCurrent === finish) this.finishCurrent = null;
         resolve();
       };
+      this.finishCurrent = finish;
       const gain = useConnection.getState().modelInfo?.lipSyncGain ?? 1;
       const tick = () => {
-        if (this.stopped) {
+        if (epoch !== this.epoch) {
           finish();
           return;
         }

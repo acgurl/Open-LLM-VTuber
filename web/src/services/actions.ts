@@ -9,6 +9,8 @@ import type { ImagePayload } from '../protocol/types';
 export function sendText(text: string, images?: ImagePayload[]) {
   const trimmed = text.trim();
   if (!trimmed && (!images || images.length === 0)) return;
+  // 上一轮还在生成或播放时，新输入立即打断，旧语音与字幕不能压在新一轮前面
+  if (useConnection.getState().busy) interrupt();
   useChat.getState().addUserMessage(trimmed);
   wsClient.send({ type: 'text-input', text: trimmed, ...(images?.length ? { images } : {}) });
 }
