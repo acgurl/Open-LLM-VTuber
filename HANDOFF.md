@@ -479,6 +479,6 @@ ssh oracle "docker restart open-llm-vtuber"
 
 - 镜像 `open-llm-vtuber:1.2.1-oidc-cache-20261025`，`run-container.sh` 已切换；旧镜像 `1.2.1-refactor-20261025` 保留回滚。
 - 备份 `data/backups/oidc-cache-20261025-064723/`：9 个后端源文件、`frontend/index.html`、`run-container.sh`；Caddyfile 备份 `/etc/caddy/Caddyfile.bak.oidccache.20261025`、`/etc/caddy/Caddyfile.bak.oidccache2.20261025`。
-- 前端产物 `index-BiqjDyMf.js`、`index-BJiath1D.js`、`index-BT7NIenF.css`（旧 hash 资源保留）；`frontend/` 子模块提交 `eba3249`。
+- 前端产物 `index-BiqjDyMf.js`、`index-BJiath1D.js`、`index-BT7NIenF.css`（旧 hash 资源保留）；`frontend/` 子模块提交 `eba3249`。源码父仓 `49640e2`、子模块 `eba3249` 均已推送 `origin`（main / build-motion）。
 - 回滚：把 `run-container.sh` 镜像改回 `1.2.1-refactor-20261025` 并 `bash run-container.sh`；前端可在备份目录恢复 `index.html`。恢复 Caddy 用 `.bak.oidccache*.20261025`。
 - 未做：Cloudflare HTML 入口（`/`、`/index.html`，`respect_origin`）未手动 purge，最多 60s 后自然刷新；旧 hash 资源仍在，不影响打开中的页面。
