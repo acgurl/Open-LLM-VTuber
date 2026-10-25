@@ -843,6 +843,89 @@ class SQLiteHistoryRepository(HistoryRepository):
             transport,
         )
 
+    def _insert_user_mcp_server_row(
+        self,
+        *,
+        server_id: str,
+        user_id: str,
+        name: str,
+        url: str,
+        headers: dict[str, str],
+        enabled: bool,
+        mode: str,
+        transport: str,
+        now: str,
+    ) -> None:
+        self._conn.execute(
+            "INSERT INTO user_mcp_servers("
+            "id, user_id, name, url, headers_json, enabled, mode, "
+            "transport, created_at, updated_at"
+            ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                server_id,
+                user_id,
+                name,
+                url,
+                json.dumps(headers, ensure_ascii=False),
+                1 if enabled else 0,
+                mode,
+                transport,
+                now,
+                now,
+            ),
+        )
+
+    def _update_user_mcp_server_row(
+        self,
+        *,
+        server_id: str,
+        user_id: str,
+        url: str,
+        headers: dict[str, str],
+        enabled: bool,
+        mode: str,
+        transport: str,
+        now: str,
+        name: str | None = None,
+    ) -> int:
+        """Update a row; ``name`` is only rewritten when explicitly given."""
+        if name is None:
+            cursor = self._conn.execute(
+                "UPDATE user_mcp_servers SET "
+                "url = ?, headers_json = ?, enabled = ?, mode = ?, "
+                "transport = ?, updated_at = ? "
+                "WHERE id = ? AND user_id = ?",
+                (
+                    url,
+                    json.dumps(headers, ensure_ascii=False),
+                    1 if enabled else 0,
+                    mode,
+                    transport,
+                    now,
+                    server_id,
+                    user_id,
+                ),
+            )
+        else:
+            cursor = self._conn.execute(
+                "UPDATE user_mcp_servers SET "
+                "name = ?, url = ?, headers_json = ?, enabled = ?, "
+                "mode = ?, transport = ?, updated_at = ? "
+                "WHERE id = ? AND user_id = ?",
+                (
+                    name,
+                    url,
+                    json.dumps(headers, ensure_ascii=False),
+                    1 if enabled else 0,
+                    mode,
+                    transport,
+                    now,
+                    server_id,
+                    user_id,
+                ),
+            )
+        return cursor.rowcount
+
     def _create_user_mcp_server_sync(
         self,
         user_id: str,
@@ -858,23 +941,16 @@ class SQLiteHistoryRepository(HistoryRepository):
         with self._conn:
             self._ensure_user_sync(self._conn, user_id)
             try:
-                self._conn.execute(
-                    "INSERT INTO user_mcp_servers("
-                    "id, user_id, name, url, headers_json, enabled, mode, "
-                    "transport, created_at, updated_at"
-                    ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        server_id,
-                        user_id,
-                        name,
-                        url,
-                        json.dumps(headers, ensure_ascii=False),
-                        1 if enabled else 0,
-                        mode,
-                        transport,
-                        now,
-                        now,
-                    ),
+                self._insert_user_mcp_server_row(
+                    server_id=server_id,
+                    user_id=user_id,
+                    name=name,
+                    url=url,
+                    headers=headers,
+                    enabled=enabled,
+                    mode=mode,
+                    transport=transport,
+                    now=now,
                 )
             except sqlite3.IntegrityError as exc:
                 raise ValueError("An MCP server with this name already exists") from exc
@@ -933,26 +1009,20 @@ class SQLiteHistoryRepository(HistoryRepository):
         now = _now_iso()
         with self._conn:
             try:
-                cursor = self._conn.execute(
-                    "UPDATE user_mcp_servers SET "
-                    "name = ?, url = ?, headers_json = ?, enabled = ?, "
-                    "mode = ?, transport = ?, updated_at = ? "
-                    "WHERE id = ? AND user_id = ?",
-                    (
-                        name,
-                        url,
-                        json.dumps(headers, ensure_ascii=False),
-                        1 if enabled else 0,
-                        mode,
-                        transport,
-                        now,
-                        server_id,
-                        user_id,
-                    ),
+                updated = self._update_user_mcp_server_row(
+                    server_id=server_id,
+                    user_id=user_id,
+                    name=name,
+                    url=url,
+                    headers=headers,
+                    enabled=enabled,
+                    mode=mode,
+                    transport=transport,
+                    now=now,
                 )
             except sqlite3.IntegrityError as exc:
                 raise ValueError("An MCP server with this name already exists") from exc
-            if cursor.rowcount == 0:
+            if updated == 0:
                 return None
 
             row = self._conn.execute(
@@ -1025,42 +1095,28 @@ class SQLiteHistoryRepository(HistoryRepository):
             for name, url, headers, enabled, mode, transport in prepared:
                 keep.add(name)
                 server_id = existing.get(name)
-                headers_json = json.dumps(headers, ensure_ascii=False)
                 if server_id is not None:
-                    self._conn.execute(
-                        "UPDATE user_mcp_servers SET "
-                        "url = ?, headers_json = ?, enabled = ?, mode = ?, "
-                        "transport = ?, updated_at = ? "
-                        "WHERE id = ? AND user_id = ?",
-                        (
-                            url,
-                            headers_json,
-                            1 if enabled else 0,
-                            mode,
-                            transport,
-                            now,
-                            server_id,
-                            user_id,
-                        ),
+                    self._update_user_mcp_server_row(
+                        server_id=server_id,
+                        user_id=user_id,
+                        url=url,
+                        headers=headers,
+                        enabled=enabled,
+                        mode=mode,
+                        transport=transport,
+                        now=now,
                     )
                 else:
-                    self._conn.execute(
-                        "INSERT INTO user_mcp_servers("
-                        "id, user_id, name, url, headers_json, enabled, mode, "
-                        "transport, created_at, updated_at"
-                        ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (
-                            uuid.uuid4().hex,
-                            user_id,
-                            name,
-                            url,
-                            headers_json,
-                            1 if enabled else 0,
-                            mode,
-                            transport,
-                            now,
-                            now,
-                        ),
+                    self._insert_user_mcp_server_row(
+                        server_id=uuid.uuid4().hex,
+                        user_id=user_id,
+                        name=name,
+                        url=url,
+                        headers=headers,
+                        enabled=enabled,
+                        mode=mode,
+                        transport=transport,
+                        now=now,
                     )
 
             for name, server_id in existing.items():
