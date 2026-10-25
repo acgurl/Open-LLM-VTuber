@@ -1,6 +1,7 @@
 import os
 import sys
 import atexit
+import shutil
 import asyncio
 import argparse
 from pathlib import Path
@@ -69,6 +70,19 @@ def check_frontend_build(lang=None):
         logger.warning(_frontend_message(lang, "missing"))
 
 
+MCP_CONFIG_TEMPLATE = (
+    Path(__file__).parent / "config_templates" / "mcp_servers.default.json"
+)
+
+
+def ensure_mcp_config(config_path: Path = Path("mcp_servers.json")) -> None:
+    """Seed the runtime MCP config from the tracked template when missing."""
+    if config_path.exists() or not MCP_CONFIG_TEMPLATE.exists():
+        return
+    shutil.copyfile(MCP_CONFIG_TEMPLATE, config_path)
+    logger.info(f"Created {config_path} from {MCP_CONFIG_TEMPLATE}.")
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Open-LLM-VTuber Server")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
@@ -88,6 +102,9 @@ def run(console_log_level: str):
 
     # Check if the frontend has been built
     check_frontend_build(lang)
+
+    # Seed the runtime MCP config on a fresh checkout
+    ensure_mcp_config()
 
     # Sync user config with default config
     try:
