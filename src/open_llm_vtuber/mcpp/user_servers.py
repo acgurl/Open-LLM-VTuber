@@ -439,6 +439,20 @@ def local_mcp_config_payload(records: list[dict] | None) -> list[dict]:
     return payload
 
 
+def build_user_mcp_server(record: dict) -> MCPServer:
+    """Turn one stored remote record into the registry entry for a session."""
+    name = user_server_key(record["id"])
+    return MCPServer(
+        name=name,
+        url=record["url"],
+        headers=record.get("headers") or None,
+        timeout=timedelta(seconds=USER_MCP_TIMEOUT_SECONDS),
+        is_user=True,
+        display_name=record.get("name") or name,
+        transport=record.get("transport") or "http",
+    )
+
+
 def build_user_mcp_servers(records: list[dict] | None) -> dict[str, MCPServer]:
     """Convert remote repository rows into registry entries for one session."""
     servers: dict[str, MCPServer] = {}
@@ -451,16 +465,8 @@ def build_user_mcp_servers(records: list[dict] | None) -> dict[str, MCPServer]:
         url = record.get("url")
         if not isinstance(server_id, str) or not isinstance(url, str):
             continue
-        key = user_server_key(server_id)
-        servers[key] = MCPServer(
-            name=key,
-            url=url,
-            headers=record.get("headers") or None,
-            timeout=timedelta(seconds=USER_MCP_TIMEOUT_SECONDS),
-            is_user=True,
-            display_name=record.get("name") or key,
-            transport=record.get("transport") or "http",
-        )
+        server = build_user_mcp_server(record)
+        servers[server.name] = server
     return servers
 
 

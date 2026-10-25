@@ -7,7 +7,6 @@ deployment-managed servers themselves are never exposed or modified here.
 """
 
 import asyncio
-from datetime import timedelta
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -18,13 +17,12 @@ from starlette.responses import JSONResponse
 from .auth import AuthManager
 from .mcpp.mcp_client import MCPClient
 from .mcpp.server_registry import ServerRegistry
-from .mcpp.types import MCPServer
 from .mcpp.user_servers import (
     MAX_USER_MCP_TOOLS,
     USER_MCP_TIMEOUT_SECONDS,
+    build_user_mcp_server,
     classify_mcp_url,
     parse_user_mcp_config,
-    user_server_key,
     validate_server_id,
 )
 from .service_context import ServiceContext
@@ -210,25 +208,13 @@ def init_user_mcp_routes(
             # local-mcp-registered / local-mcp-error over WebSocket.
             return {"mode": "local", "tools": []}
 
-        key = user_server_key(body.server_id)
-        registry = ServerRegistry.from_servers(
-            {
-                key: MCPServer(
-                    name=key,
-                    url=record["url"],
-                    headers=record.get("headers") or None,
-                    timeout=timedelta(seconds=USER_MCP_TIMEOUT_SECONDS),
-                    is_user=True,
-                    display_name=record.get("name"),
-                    transport=record.get("transport") or "http",
-                )
-            }
-        )
+        server = build_user_mcp_server(record)
+        registry = ServerRegistry.from_servers({server.name: server})
 
         try:
             async with MCPClient(registry) as client:
                 tools = await asyncio.wait_for(
-                    client.list_tools(key),
+                    client.list_tools(server.name),
                     timeout=USER_MCP_TIMEOUT_SECONDS + 5,
                 )
         except Exception as exc:
