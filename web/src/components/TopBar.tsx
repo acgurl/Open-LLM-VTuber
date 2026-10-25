@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { useConnection } from '../stores/connection';
 import { useSettings } from '../stores/settings';
+import { audioPlayer } from '../services/audioPlayer';
 
 const DOT_CLASS: Record<string, string> = {
   online: 'dot online',
@@ -16,8 +17,16 @@ export function TopBar() {
   const status = useConnection((s) => s.status);
   const confName = useConnection((s) => s.confName);
   const statusText = useConnection((s) => s.statusText);
+  const ttsOn = useSettings((s) => s.ttsOn);
+  const setTtsOn = useSettings((s) => s.setTtsOn);
   const setHistoryOpen = useSettings((s) => s.setHistoryOpen);
   const setSettingsOpen = useSettings((s) => s.setSettingsOpen);
+
+  const toggleTts = () => {
+    const enabled = !ttsOn;
+    setTtsOn(enabled);
+    if (!enabled) audioPlayer.stopAll();
+  };
 
   return (
     <header className="topbar">
@@ -32,6 +41,15 @@ export function TopBar() {
       <div className="topbar-center">
         <span className={DOT_CLASS[status] ?? 'dot'} />
         <span className="topbar-name">{confName || t('app.title')}</span>
+        <button
+          className={`icon-btn tts-toggle${ttsOn ? '' : ' off'}`}
+          aria-label={t(ttsOn ? 'settings.ttsOn' : 'settings.ttsOff')}
+          aria-pressed={ttsOn}
+          title={t(ttsOn ? 'settings.ttsOn' : 'settings.ttsOff')}
+          onClick={toggleTts}
+        >
+          <VolumeIcon muted={!ttsOn} />
+        </button>
         {statusText && <span className="topbar-status">{statusText}</span>}
       </div>
       <button
@@ -50,6 +68,22 @@ function MenuIcon() {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
       <path d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
+
+function VolumeIcon({ muted }: { muted: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 5 6 9H3v6h3l5 4z" />
+      {muted ? (
+        <path d="m16 9 5 6m0-6-5 6" />
+      ) : (
+        <>
+          <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+          <path d="M18.5 5.5a9 9 0 0 1 0 13" />
+        </>
+      )}
     </svg>
   );
 }

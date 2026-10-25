@@ -53,6 +53,8 @@
     "background": "Background",
     "noBackground": "None",
     "subtitles": "Subtitles",
+    "ttsOn": "Turn speech off",
+    "ttsOff": "Turn speech on",
     "language": "Language",
     "account": "Account",
     "logout": "Log out",

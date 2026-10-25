@@ -5,6 +5,7 @@ import { useConnection } from '../stores/connection';
 import { useChat } from '../stores/chat';
 import { useGroup } from '../stores/group';
 import { useSubtitle } from '../stores/subtitle';
+import { useSettings } from '../stores/settings';
 import { live2d } from '../live2d/controller';
 import { wsClient } from './websocket';
 
@@ -73,11 +74,12 @@ class AudioPlayer {
       }
     }
     this.draining = false;
-    if (!this.stopped) this.maybeAck();
+    this.maybeAck();
   }
 
   private async playOne(p: AudioPayload) {
     if (this.stopped) return;
+    const ttsOn = useSettings.getState().ttsOn;
     const modelInfo = useConnection.getState().modelInfo;
     const tagSet = buildTagSet(modelInfo);
     const rawText = p.display_text?.text ?? '';
@@ -93,16 +95,16 @@ class AudioPlayer {
 
     if (p.actions) live2d.applyActions(p.actions);
 
-    if (p.audio && p.display_text && useGroup.getState().members.length > 1) {
+    if (ttsOn && p.audio && p.display_text && useGroup.getState().members.length > 1) {
       wsClient.send({ type: 'audio-play-start', display_text: p.display_text });
     }
 
     const showSubtitle = clean.length > 0;
     if (showSubtitle) {
-      useSubtitle.getState().show(name, avatar, clean, p.audio ? 0 : clean.length);
+      useSubtitle.getState().show(name, avatar, clean, ttsOn && p.audio ? 0 : clean.length);
     }
 
-    if (p.audio && p.audio_mime) {
+    if (ttsOn && p.audio && p.audio_mime) {
       live2d.setSpeaking(true);
       const bytes = base64ToBytes(p.audio);
       const blob = new Blob([bytes.buffer as ArrayBuffer], { type: p.audio_mime });

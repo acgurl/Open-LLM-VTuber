@@ -99,6 +99,19 @@ body,
   text-overflow: ellipsis;
 }
 
+.icon-btn.tts-toggle {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.tts-toggle.off {
+  color: var(--dim);
+}
+
 .dot {
   width: 8px;
   height: 8px;

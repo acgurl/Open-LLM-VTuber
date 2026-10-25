@@ -3,6 +3,7 @@ import type { ConfigFileEntry } from '../protocol/types';
 
 interface SettingsState {
   subtitlesOn: boolean;
+  ttsOn: boolean;
   background: string | null; // /bg/<file> 完整路径或 null
   backgroundFiles: string[];
   configs: ConfigFileEntry[];
@@ -13,6 +14,7 @@ interface SettingsState {
   pointerInteractive: boolean;
   scrollToResize: boolean;
   setSubtitlesOn: (v: boolean) => void;
+  setTtsOn: (v: boolean) => void;
   setBackground: (url: string | null) => void;
   setBackgroundFiles: (f: string[]) => void;
   setConfigs: (c: ConfigFileEntry[]) => void;
@@ -34,6 +36,7 @@ const persisted = (key: string): string | null => {
 
 export const useSettings = create<SettingsState>((set) => ({
   subtitlesOn: persisted('ollmvt.subtitles') !== '0',
+  ttsOn: persisted('ollmvt.tts') !== '0',
   background: persisted('ollmvt.bg'),
   backgroundFiles: [],
   configs: [],
@@ -48,6 +51,12 @@ export const useSettings = create<SettingsState>((set) => ({
       localStorage.setItem('ollmvt.subtitles', subtitlesOn ? '1' : '0');
     } catch { /* ignore */ }
     set({ subtitlesOn });
+  },
+  setTtsOn: (ttsOn) => {
+    try {
+      localStorage.setItem('ollmvt.tts', ttsOn ? '1' : '0');
+    } catch { /* ignore */ }
+    set({ ttsOn });
   },
   setBackground: (background) => {
     try {

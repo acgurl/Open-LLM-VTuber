@@ -53,6 +53,8 @@
     "background": "背景",
     "noBackground": "无背景",
     "subtitles": "字幕",
+    "ttsOn": "关闭语音",
+    "ttsOff": "开启语音",
     "language": "语言",
     "account": "账户",
     "logout": "退出登录",
