@@ -300,11 +300,30 @@ class ServiceContext:
                 f"At most {MAX_LOCAL_MCP_SERVERS} local MCP servers are allowed"
             )
 
+        formatted, server_info = self._format_local_tools(key, tools)
+
+        # Only touch the live registration after every tool validated.
+        self._remove_local_mcp_server(server_id)
+        self.local_mcp_tools.update(formatted)
+        self._local_mcp_servers_info[key] = server_info
+        self.local_mcp_servers[key] = {
+            "id": server_id,
+            "name": name,
+            "tool_names": list(formatted),
+        }
+        if self.local_mcp_bridge is None:
+            self.local_mcp_bridge = LocalMCPBridge(self.client_uid, self.channels.text)
+        self._rebuild_tooling()
+        return list(formatted)
+
+    def _format_local_tools(
+        self, key: str, tools: list[dict]
+    ) -> tuple[dict[str, FormattedTool], dict[str, dict]]:
+        """Validate browser tools and give each a collision-free exposed name."""
+        previous_names = set(self.local_mcp_servers.get(key, {}).get("tool_names", []))
+        taken = (set(self._base_mcp_tools) | set(self.local_mcp_tools)) - previous_names
         formatted: dict[str, FormattedTool] = {}
         server_info: dict[str, dict] = {}
-        previous = self.local_mcp_servers.get(key, {})
-        previous_names = set(previous.get("tool_names", []))
-        taken = (set(self._base_mcp_tools) | set(self.local_mcp_tools)) - previous_names
         for tool in tools:
             remote_name, description, schema = validate_local_tool(tool)
             candidate = make_exposed_tool_name("l", key, remote_name)
@@ -321,20 +340,7 @@ class ServiceContext:
                 "parameters": schema.get("properties", {}),
                 "required": schema.get("required", []),
             }
-
-        # Only touch the live registration after every tool validated.
-        self._remove_local_mcp_server(server_id)
-        self.local_mcp_tools.update(formatted)
-        self._local_mcp_servers_info[key] = server_info
-        self.local_mcp_servers[key] = {
-            "id": server_id,
-            "name": name,
-            "tool_names": list(formatted),
-        }
-        if self.local_mcp_bridge is None:
-            self.local_mcp_bridge = LocalMCPBridge(self.client_uid, self.channels.text)
-        self._rebuild_tooling()
-        return list(formatted)
+        return formatted, server_info
 
     def unregister_local_mcp_server(self, server_id: str) -> bool:
         if local_server_key(server_id) not in self.local_mcp_servers:
