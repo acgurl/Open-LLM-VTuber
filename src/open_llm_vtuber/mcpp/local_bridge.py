@@ -14,11 +14,7 @@ from uuid import uuid4
 from loguru import logger
 
 from ..message_handler import message_handler
-from .user_servers import (
-    LOCAL_MCP_TIMEOUT_SECONDS,
-    error_tool_result,
-    result_size_exceeded,
-)
+from .user_servers import LOCAL_MCP_TIMEOUT_SECONDS, error_tool_result
 
 _MAX_CONTENT_ITEMS = 64
 
@@ -111,9 +107,6 @@ class LocalMCPBridge:
                 "Local MCP tool failed",
             )
             return error_tool_result(text)
-
-        if result_size_exceeded(content_items):
-            return error_tool_result("Local MCP result exceeded the size limit")
 
         metadata = response.get("metadata")
         return {

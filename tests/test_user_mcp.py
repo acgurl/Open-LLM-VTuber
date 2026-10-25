@@ -493,21 +493,8 @@ class LocalMCPBridgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["content_items"][0]["type"], "error")
         self.assertEqual(result["content_items"][0]["text"], "boom")
 
-    async def test_timeout_and_oversized_result(self):
+    async def test_timeout_returns_an_error(self):
         result = await self._call(lambda request: None, timeout=0.05)
-        self.assertEqual(result["content_items"][0]["type"], "error")
-
-        def huge(request):
-            return {
-                "type": "local-tool-result",
-                "request_id": request["request_id"],
-                "server_id": "abc",
-                "content_items": [
-                    {"type": "text", "text": "x" * (MAX_MCP_RESULT_BYTES + 1)}
-                ],
-            }
-
-        result = await self._call(huge)
         self.assertEqual(result["content_items"][0]["type"], "error")
 
     async def test_mismatched_server_is_rejected(self):
@@ -574,6 +561,49 @@ class LocalToolExecutionTests(unittest.IsolatedAsyncioTestCase):
         final = updates[-1]
         self.assertEqual(final["type"], "final_tool_results")
         self.assertIn("ok", str(final["results"]))
+
+    async def test_oversized_local_result_is_rejected_by_the_executor(self):
+        from open_llm_vtuber.mcpp.tool_executor import ToolExecutor
+        from open_llm_vtuber.mcpp.tool_manager import ToolManager
+        from open_llm_vtuber.mcpp.types import FormattedTool
+
+        def send(payload):
+            request = json.loads(payload)
+            message_handler.handle_message(
+                "client",
+                {
+                    "type": "local-tool-result",
+                    "request_id": request["request_id"],
+                    "server_id": "abc",
+                    "content_items": [
+                        {"type": "text", "text": "x" * (MAX_MCP_RESULT_BYTES + 1)}
+                    ],
+                },
+            )
+
+        exposed = "l_abc123_echo"
+        manager = ToolManager(
+            initial_tools_dict={
+                exposed: FormattedTool(
+                    input_schema={"type": "object", "properties": {}},
+                    related_server="local:abc",
+                    remote_name="echo",
+                )
+            }
+        )
+        executor = ToolExecutor(
+            None, manager, LocalMCPBridge("client", send, timeout=0.2)
+        )
+
+        updates = [
+            update
+            async for update in executor.execute_tools(
+                [{"id": "call-1", "name": exposed, "args": {}}],
+                "OpenAI",
+            )
+        ]
+
+        self.assertIn("exceeded the size limit", str(updates[-1]["results"]))
 
 
 class LocalRegistrationTests(unittest.IsolatedAsyncioTestCase):

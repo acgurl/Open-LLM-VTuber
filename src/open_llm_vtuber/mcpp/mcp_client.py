@@ -17,11 +17,7 @@ from mcp.client.streamable_http import (
 
 from .server_registry import ServerRegistry
 from .types import MCPServer
-from .user_servers import (
-    error_tool_result,
-    result_size_exceeded,
-    validate_public_https_url_async,
-)
+from .user_servers import validate_public_https_url_async
 
 DEFAULT_TIMEOUT = timedelta(seconds=30)
 
@@ -231,7 +227,6 @@ class MCPClient:
         Returns:
             Dict containing the metadata and content_items from the tool response.
         """
-        server = self._get_server(server_name)
         logger.info(f"MCPC: Calling tool '{tool_name}' on server '{server_name}'...")
         async with self._session(server_name) as session:
             response = await session.call_tool(tool_name, tool_args)
@@ -273,9 +268,6 @@ class MCPClient:
             content_items.append(
                 {"type": "text", "text": ""}
             )  # Ensure content_items is not empty
-
-        if server.is_user and result_size_exceeded(content_items):
-            return error_tool_result("User MCP tool result exceeded the size limit")
 
         result = {
             "metadata": getattr(response, "metadata", {}),
