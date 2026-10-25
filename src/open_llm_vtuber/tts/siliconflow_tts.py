@@ -1,5 +1,3 @@
-import os
-
 import requests
 from loguru import logger
 from .tts_interface import TTSInterface
@@ -65,11 +63,7 @@ class SiliconFlowTTS(TTSInterface):
             return cache_file
         except requests.RequestException as e:
             logger.error(f"生成音频文件失败Failed to generate the audio file.: {e}")
-            if os.path.exists(cache_file):
-                try:
-                    os.remove(cache_file)
-                except OSError as rm_err:
-                    logger.error(f"Could not remove incomplete file: {rm_err}")
+            self.remove_partial_file(cache_file)
             return None
 
     def remove_file(self, filepath: str, verbose: bool = True) -> None:

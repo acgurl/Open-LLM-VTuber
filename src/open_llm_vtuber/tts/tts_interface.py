@@ -44,6 +44,16 @@ class TTSInterface(metaclass=abc.ABCMeta):
     def close(self) -> None:
         """Release reusable resources such as pooled API clients."""
 
+    def remove_partial_file(self, filepath) -> None:
+        """Delete an audio file left behind by a failed synthesis."""
+        target = str(filepath)
+        if not os.path.exists(target):
+            return
+        try:
+            os.remove(target)
+        except OSError as err:
+            logger.error(f"Could not remove incomplete file {target}: {err}")
+
     def remove_file(self, filepath: str, verbose: bool = True) -> None:
         """
         Remove a file from the file system.

@@ -3,7 +3,6 @@ from __future__ import annotations
 # src/open_llm_vtuber/tts/cartesia_tts.py
 from pathlib import Path
 from typing import Literal
-import os
 
 from loguru import logger
 from open_llm_vtuber.config_manager.tts import CartesiaEmotions, CartesiaLanguages
@@ -142,14 +141,7 @@ class TTSEngine(TTSInterface):
             )
         except Exception as e:
             logger.critical(f"Error: Cartesia TTS unable to generate audio: {e}")
-            # Clean up potentially incomplete file
-            if speech_file_path.exists():
-                try:
-                    os.remove(speech_file_path)
-                except OSError as rm_err:
-                    logger.error(
-                        f"Could not remove incomplete file {speech_file_path}: {rm_err}"
-                    )
+            self.remove_partial_file(speech_file_path)
             raise e
 
         return str(speech_file_path)
