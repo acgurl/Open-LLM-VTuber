@@ -106,7 +106,7 @@ class ToolExecutor:
         self,
         caller_mode: Literal["Claude", "OpenAI", "Prompt"],
         tool_id: str,
-        result_content: str,
+        result_content: str | List[Dict[str, Any]],
         is_error: bool,
     ) -> Dict[str, Any] | None:
         """Format tool result for LLM API."""
