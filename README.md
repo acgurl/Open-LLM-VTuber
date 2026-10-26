@@ -1,153 +1,433 @@
 ![](./assets/banner.jpg)
 
 <h1 align="center">Open-LLM-VTuber</h1>
-<h3 align="center">
 
-[![GitHub release](https://img.shields.io/github/v/release/Open-LLM-VTuber/Open-LLM-VTuber)](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber/releases)
-[![license](https://img.shields.io/github/license/Open-LLM-VTuber/Open-LLM-VTuber)](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber/blob/master/LICENSE)
-[![CodeQL](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber/actions/workflows/codeql.yml/badge.svg)](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber/actions/workflows/codeql.yml)
-[![Ruff](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber/actions/workflows/ruff.yml/badge.svg)](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber/actions/workflows/ruff.yml)
-[![Docker](https://img.shields.io/badge/Open-LLM-VTuber%2FOpen--LLM--VTuber-%25230db7ed.svg?logo=docker&logoColor=blue&labelColor=white&color=blue)](https://hub.docker.com/r/Open-LLM-VTuber/open-llm-vtuber)
-[![QQ User Group](https://img.shields.io/badge/QQ_User_Group-792615362-white?style=flat&logo=qq&logoColor=white)](https://qm.qq.com/q/ngvNUQpuKI)
-[![Static Badge](https://img.shields.io/badge/Join%20Chat-Zulip?style=flat&logo=zulip&label=Zulip(dev-community)&color=blue&link=https%3A%2F%2Folv.zulipchat.com)](https://olv.zulipchat.com)
-
-> **📢 v2.0 Development**: We are focusing on Open-LLM-VTuber v2.0 — a complete rewrite of the codebase. v2.0 is currently in its early discussion and planning phase. We kindly ask you to refrain from opening new issues or pull requests for feature requests on v1. To participate in the v2 discussions or contribute, join our developer community on [Zulip](https://olv.zulipchat.com). Weekly meeting schedules will be announced on Zulip. We will continue fixing bugs for v1 and work through existing pull requests.
-
-[![BuyMeACoffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://www.buymeacoffee.com/yi.ting)
-[![](https://dcbadge.limes.pink/api/server/3UDA8YFDXx)](https://discord.gg/3UDA8YFDXx)
-
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Open-LLM-VTuber/Open-LLM-VTuber)
-
-ENGLISH README | [中文 README](./README.CN.md) | [한국어 README](./README.KR.md) | [日本語 README](./README.JP.md)
-
-[Documentation](https://open-llm-vtuber.github.io/docs/quick-start) | [![Roadmap](https://img.shields.io/badge/Roadmap-GitHub_Project-yellow)](https://github.com/orgs/Open-LLM-VTuber/projects/2)
-
-<a href="https://trendshift.io/repositories/27063" target="_blank"><img src="https://trendshift.io/api/badge/repositories/27063" alt="Open-LLM-VTuber%2FOpen-LLM-VTuber | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
-
-</h3>
-
-
-> 常见问题 Common Issues doc (Written in Chinese): https://docs.qq.com/pdf/DTFZGQXdTUXhIYWRq
->
-> User Survey: https://forms.gle/w6Y6PiHTZr1nzbtWA
->
-> 调查问卷(中文): https://wj.qq.com/s2/16150415/f50a/
-
-
-
-> :warning: This project is in its early stages and is currently under **active development**.
-
-> :warning: If you want to run the server remotely and access it on a different machine, such as running the server on your computer and access it on your phone, you will need to configure `https`, because the microphone on the front end will only launch in a secure context (a.k.a. https or localhost). See [MDN Web Doc](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia). Therefore, you should configure https with a reverse proxy to access the page on a remote machine (non-localhost).
-
-
-
-## ⭐️ What is this project?
-
-
-**Open-LLM-VTuber** is a unique **voice-interactive AI companion** that not only supports **real-time voice conversations**  and **visual perception** but also features a lively **Live2D avatar**. All functionalities can run completely offline on your computer!
-
-You can treat it as your personal AI companion — whether you want a `virtual girlfriend`, `boyfriend`, `cute pet`, or any other character, it can meet your expectations. The project fully supports `Windows`, `macOS`, and `Linux`, and offers two usage modes: web version and desktop client (with special support for **transparent background desktop pet mode**, allowing the AI companion to accompany you anywhere on your screen).
-
-Although the long-term memory feature is temporarily removed (coming back soon), thanks to the persistent storage of chat logs, you can always continue your previous unfinished conversations without losing any precious interactive moments.
-
-In terms of backend support, we have integrated a rich variety of LLM inference, text-to-speech, and speech recognition solutions. If you want to customize your AI companion, you can refer to the [Character Customization Guide](https://open-llm-vtuber.github.io/docs/user-guide/live2d) to customize your AI companion's appearance and persona.
-
-The reason it's called `Open-LLM-Vtuber` instead of `Open-LLM-Companion` or `Open-LLM-Waifu` is because the project's initial development goal was to use open-source solutions that can run offline on platforms other than Windows to recreate the closed-source AI Vtuber `neuro-sama`.
-
-### 👀 Demo
-| ![](assets/i1.jpg) | ![](assets/i2.jpg) |
-|:---:|:---:|
-| ![](assets/i3.jpg) | ![](assets/i4.jpg) |
-
-
-## ✨ Features & Highlights
-
-- 🖥️ **Cross-platform support**: Perfect compatibility with macOS, Linux, and Windows. We support NVIDIA and non-NVIDIA GPUs, with options to run on CPU or use cloud APIs for resource-intensive tasks. Some components support GPU acceleration on macOS.
-
-- 🔒 **Offline mode support**: Run completely offline using local models - no internet required. Your conversations stay on your device, ensuring privacy and security.
-
-- 💻 **Attractive and powerful web and desktop clients**: Offers both web version and desktop client usage modes, supporting rich interactive features and personalization settings. The desktop client can switch freely between window mode and desktop pet mode, allowing the AI companion to be by your side at all times.
-
-- 🎯 **Advanced interaction features**:
-  - 👁️ Visual perception, supporting camera, screen recording and screenshots, allowing your AI companion to see you and your screen
-  - 🎤 Voice interruption without headphones (AI won't hear its own voice)
-  - 🫱 Touch feedback, interact with your AI companion through clicks or drags
-  - 😊 Live2D expressions, set emotion mapping to control model expressions from the backend
-  - 🐱 Pet mode, supporting transparent background, global top-most, and mouse click-through - drag your AI companion anywhere on the screen
-  - 💭 Display AI's inner thoughts, allowing you to see AI's expressions, thoughts and actions without them being spoken
-  - 🗣️ AI proactive speaking feature
-  - 💾 Chat log persistence, switch to previous conversations anytime
-  - 🌍 TTS translation support (e.g., chat in Chinese while AI uses Japanese voice)
-
-- 🧠 **Extensive model support**:
-  - 🤖 Large Language Models (LLM): Ollama, OpenAI (and any OpenAI-compatible API), Gemini, Claude, Mistral, DeepSeek, Zhipu AI, GGUF, LM Studio, vLLM, etc.
-  - 🎙️ Automatic Speech Recognition (ASR): sherpa-onnx, FunASR, Faster-Whisper, Whisper.cpp, Whisper, Groq Whisper, Azure ASR, etc.
-  - 🔊 Text-to-Speech (TTS): sherpa-onnx, pyttsx3, MeloTTS, Coqui-TTS, GPTSoVITS, Bark, CosyVoice, Edge TTS, Fish Audio, Azure TTS, etc.
-
-- 🔧 **Highly customizable**:
-  - ⚙️ **Simple module configuration**: Switch various functional modules through simple configuration file modifications, without delving into the code
-  - 🎨 **Character customization**: Import custom Live2D models to give your AI companion a unique appearance. Shape your AI companion's persona by modifying the Prompt. Perform voice cloning to give your AI companion the voice you desire
-  - 🧩 **Flexible Agent implementation**: Inherit and implement the Agent interface to integrate any Agent architecture, such as HumeAI EVI, OpenAI Her, Mem0, etc.
-  - 🔌 **Good extensibility**: Modular design allows you to easily add your own LLM, ASR, TTS, and other module implementations, extending new features at any time
-
-
-## 👥 User Reviews
-> Thanks to the developer for open-sourcing and sharing the girlfriend for everyone to use
->
-> This girlfriend has been used over 100,000 times
-
-
-## 🚀 Quick Start
-
-Please refer to the [Quick Start](https://open-llm-vtuber.github.io/docs/quick-start) section in our documentation for installation.
-
-
-
-## ☝ Update
-> :warning: `v1.0.0` has breaking changes and requires re-deployment. You *may* still update via the method below, but the `conf.yaml` file is incompatible and most of the dependencies needs to be reinstalled with `uv`. For those who came from versions before `v1.0.0`, I recommend deploy this project again with the [latest deployment guide](https://open-llm-vtuber.github.io/docs/quick-start).
-
-Please use `uv run update.py` to update if you installed any versions later than `v1.0.0`.
-
-## 😢 Uninstall  
-Most files, including Python dependencies and models, are stored in the project folder.
-
-However, models downloaded via ModelScope or Hugging Face may also be in `MODELSCOPE_CACHE` or `HF_HOME`. While we aim to keep them in the project's `models` directory, it's good to double-check.  
-
-Review the installation guide for any extra tools you no longer need, such as `uv`, `ffmpeg`, or `deeplx`.  
-
-## 🤗 Want to contribute?
-Checkout the [development guide](https://docs.llmvtuber.com/docs/development-guide/overview).
-
-
-# 🎉🎉🎉 Related Projects
-
-[ylxmf2005/LLM-Live2D-Desktop-Assitant](https://github.com/ylxmf2005/LLM-Live2D-Desktop-Assitant)
-- Your Live2D desktop assistant powered by LLM! Available for both Windows and MacOS, it senses your screen, retrieves clipboard content, and responds to voice commands with a unique voice. Featuring voice wake-up, singing capabilities, and full computer control for seamless interaction with your favorite character.
-
-
-
-
-
-
-## 📜 Third-Party Licenses
-
-### Live2D Sample Models Notice
-
-This project includes Live2D sample models provided by Live2D Inc. These assets are licensed separately under the Live2D Free Material License Agreement and the Terms of Use for Live2D Cubism Sample Data. They are not covered by the MIT license of this project.
-
-This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in accordance with the terms and conditions set by Live2D Inc. (See [Live2D Free Material License Agreement](https://www.live2d.jp/en/terms/live2d-free-material-license-agreement/) and [Terms of Use](https://www.live2d.com/eula/live2d-sample-model-terms_en.html)).
-
-Note: For commercial use, especially by medium or large-scale enterprises, the use of these Live2D sample models may be subject to additional licensing requirements. If you plan to use this project commercially, please ensure that you have the appropriate permissions from Live2D Inc., or use versions of the project without these models.
-
-
-## Contributors
-Thanks our contributors and maintainers for making this project possible.
-
-<a href="https://github.com/Open-LLM-VTuber/Open-LLM-VTuber/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Open-LLM-VTuber/Open-LLM-VTuber" />
-</a>
-
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Open-LLM-VTuber/open-llm-vtuber&type=Date)](https://star-history.com/#Open-LLM-VTuber/open-llm-vtuber&Date)
+<p align="center">
+A self-hosted, multi-user Live2D voice companion with a rebuilt web client.
+</p>
+
+<p align="center">
+English | <a href="./README.CN.md">简体中文</a> | <a href="./README.JP.md">日本語 (upstream)</a> | <a href="./README.KR.md">한국어 (upstream)</a>
+</p>
+
+<p align="center">
+<a href="https://github.com/acgurl/Open-LLM-VTuber/actions/workflows/tests.yml"><img src="https://github.com/acgurl/Open-LLM-VTuber/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+<a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+</p>
+
+**Reference deployment:** <https://vtuber.acgurl.cn/> (OIDC login required)
+
+> This repository is the `acgurl/Open-LLM-VTuber` fork. The AI engine layer is inherited from
+> upstream [Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber), while the web
+> client, authentication, storage, MCP management and deployment workflow are specific to this
+> repository. Upstream documentation and screenshots may describe features that no longer exist
+> here. The Japanese and Korean READMEs are upstream snapshots and are not maintained in this fork.
+
+## What this project is
+
+Open-LLM-VTuber is a browser-based AI companion with a Live2D avatar. You can talk to it by voice
+or text, it replies with streaming text and synthesized speech, and its avatar reacts with
+expressions and motions. It also supports visual input (camera, screen capture or uploaded images)
+and MCP tools such as search, time or a private knowledge base.
+
+Everything can be self-hosted. The LLM, ASR and TTS layers can run against local engines or cloud
+APIs, and authentication, conversation history and generated audio stay on your server.
+
+This fork is **web only**. The upstream Electron desktop client and transparent desktop-pet mode
+are not part of this repository.
+
+## What is different from upstream
+
+| Area | This fork |
+| --- | --- |
+| Frontend | Rebuilt React 18 + Vite + TypeScript client in `web/`; served by the backend from `web/dist` |
+| Authentication | Optional OIDC login (Casdoor-compatible) with signed session cookies, per-user connection limits and origin checks |
+| History | SQLite repository scoped by internal user id, with one-time import of legacy `chat_history/*.json` |
+| MCP | Deployment-level servers plus per-user remote/local MCP configuration and a browser-side bridge for `localhost` endpoints |
+| Live2D | Model metadata comes from `model_dict.json`; expressions, motions, tap reactions, pinch/scroll zoom and silhouette-based framing |
+| UI | Streaming chat, think blocks, tool cards, history drawer, character/background switching, light/dark/system themes, accent hue, zh/en UI |
+| Deployment | Single Dockerfile that builds the frontend in a Node stage; secrets and runtime data stay outside the image |
+
+## Features
+
+- **Voice and text conversation** — browser VAD and microphone input, text input, voice interruption,
+  streaming replies, TTS playback with an independent mute toggle, and a separate audio WebSocket so
+  large audio frames do not block text deltas.
+- **Live2D stage** — expression mapping, motion groups, tap reactions, automatic upper-body framing,
+  pinch zoom, scroll-to-zoom and configurable pointer interaction.
+- **Vision** — live camera window, camera photo, screen capture or image upload; up to four images
+  per message (8 MiB each).
+- **Conversation UI** — Markdown with external links, collapsible think blocks, tool-call cards,
+  message copy, smart auto-scroll and a per-user history drawer. Text input is capped at 4000
+  characters.
+- **Characters and scenes** — switch character presets and backgrounds from the settings drawer.
+  Character presets are scanned at runtime, so adding a YAML file does not require a restart.
+- **Group chat** — invite another browser tab by its connection id; each connection keeps its own
+  agent memory.
+- **MCP tools** — deployment-managed stdio/HTTP servers, per-user HTTP/SSE servers configured from
+  the UI, and browser-local servers for endpoints that the server cannot reach.
+- **Multi-user isolation** — with OIDC enabled, history, user MCP servers, TTS cache files and
+  browser localStorage keys are scoped per user. The default is a single-user, no-login mode.
+- **Model coverage** — OpenAI-compatible APIs, Ollama, Gemini, Claude, DeepSeek, Zhipu, Groq,
+  Mistral, LM Studio, llama.cpp; ASR via sherpa-onnx, FunASR, Faster-Whisper, Whisper, Groq and
+  Azure; TTS via Azure, Edge, MeloTTS, GPT-SoVITS, CosyVoice, Fish Audio, Bark, pyttsx3 and
+  sherpa-onnx.
+
+## Architecture
+
+```text
+Browser (web/: React 18 + Vite + TypeScript)
+  │  /client-ws   JSON control, streaming text, history, config, mic audio
+  │  /audio-ws    TTS audio payloads
+  │  /tts-ws      standalone text-to-speech
+  ▼
+FastAPI (src/open_llm_vtuber/server.py)
+  ├─ Auth (single or OIDC) + static hosting (web/dist, models, backgrounds, avatars, cache)
+  ├─ WebSocketHandler
+  │    └─ one ServiceContext per connection
+  │         └─ BasicMemoryAgent → LLM
+  ├─ shared ASR / VAD / TTS engines
+  ├─ MCP registry (deployment servers, per-user remote servers, browser-local tools)
+  └─ HistoryRepository → SQLite
+```
+
+Important runtime properties:
+
+- **One WebSocket connection is one session.** Each connection gets its own agent memory. Shared
+  engines are reused, but conversation state is not shared between tabs.
+- **History is restored into the agent** when a client opens an existing history, so a previous
+  conversation can be continued after reconnecting.
+- **The whole backend accepts JSON WebSocket frames only.** Microphone audio is sent as an array of
+  floats, not as binary PCM. See [BACKEND_API.md](./BACKEND_API.md).
+- **The frontend must be served same-origin.** OIDC session cookies are `HttpOnly` and
+  credential-less CORS is disabled; the WebSocket origin check also compares the request host.
+- **Configuration is loaded at startup.** At runtime you can switch character presets, backgrounds
+  and per-user MCP; other configuration changes require a restart.
+
+### Endpoints
+
+| Endpoint | Purpose |
+| --- | --- |
+| `/client-ws` | Control messages, text deltas, history, character config, microphone audio |
+| `/audio-ws?client_uid=...` | TTS audio payloads; falls back to `/client-ws` when absent |
+| `/tts-ws` | Standalone text-to-speech synthesis |
+| `/proxy-ws` | Optional multi-client fan-out; not mounted in OIDC mode |
+| `/healthz` | Readiness: `200 {"status":"ok"}` or `503 {"status":"starting"}` |
+| `/api/session` | Current session (`authenticated`, `mode`, `user_id`, `display_name`) |
+| `/auth/login`, `/auth/callback`, `/auth/logout` | OIDC authorization-code flow |
+| `/api/mcp/config` | Read/save/test the current user's MCP configuration |
+| `POST /asr` | Standalone speech-to-text upload |
+| `/live2d-models/info` | Scan for Live2D models (the authoritative list is `model_dict.json`) |
+
+The complete message set, payload shapes, limits and close codes are documented in
+[BACKEND_API.md](./BACKEND_API.md).
+
+## Quick start (local)
+
+### Prerequisites
+
+- Python 3.10–3.12
+- [uv](https://docs.astral.sh/uv/)
+- Node.js 20+ and npm
+- `ffmpeg` on `PATH`
+- A `model_dict.json` describing the Live2D model you want to use
+- A character preset in `characters/` (the default template refers to `mao_pro`)
+
+### Run
+
+```bash
+uv sync
+
+cd web
+npm ci
+npm run build
+cd ..
+
+uv run run_server.py
+```
+
+Open <http://localhost:12393>. Use `uv run run_server.py --verbose` for debug logging.
+
+On first start:
+
+- `conf.yaml` is created from `config_templates/conf.default.yaml` if it does not exist.
+- `mcp_servers.json` is created from `config_templates/mcp_servers.default.json` if it does not exist.
+- `model_dict.json` is **not** created automatically. It is deployment-specific and intentionally
+  untracked, so place one in the project root before starting. A minimal entry looks like this:
+
+```json
+[
+  {
+    "name": "mao_pro",
+    "url": "/live2d-models/mao_pro/runtime/mao_pro.webp.model3.json",
+    "kScale": 0.5,
+    "lipSyncGain": 1.2,
+    "initialXshift": 0,
+    "initialYshift": 0,
+    "kXOffset": 0,
+    "idleMotionGroupName": "Idle",
+    "emotionMap": { "neutral": 0, "joy": 3 },
+    "motionMap": {}
+  }
+]
+```
+
+The microphone requires a secure context. `localhost` is fine; any remote access must use HTTPS
+through a reverse proxy.
+
+## Configuration
+
+| Path | Purpose | Tracked |
+| --- | --- | --- |
+| `conf.yaml` | Main runtime configuration: host/port, storage, auth, agent, LLM, ASR, TTS, VAD, default character | No |
+| `characters/*.yaml` | Character presets (persona, model name, avatar, optional engine overrides) | Mostly no |
+| `model_dict.json` | Live2D model metadata: URL, scale, lip-sync gain, emotion/motion maps | No |
+| `mcp_servers.json` | Deployment-managed MCP servers; may contain tokens | No |
+| `web/` | Frontend source; `npm run build` emits `web/dist` | Yes |
+| `data/storage/` | SQLite history and legacy import/archive data | No |
+| `avatars/`, `backgrounds/`, `live2d-models/`, `models/` | Runtime assets; only a subset is tracked | Partly |
+| `cache/` | Generated TTS audio; cleared on process shutdown | No |
+
+### Authentication
+
+`system_config.auth.mode` accepts:
+
+- `single` (default) — no login; every connection is the `default_user_id` user (`local` by default).
+- `oidc` — standard authorization-code flow with OIDC discovery, nonce validation and signed session
+  cookies. Refresh tokens are not implemented.
+
+Example OIDC configuration:
+
+```yaml
+system_config:
+  host: '127.0.0.1'
+  port: 12393
+  storage:
+    backend: 'sqlite'
+    sqlite_path: 'data/storage/open_llm_vtuber.db'
+    default_user_id: 'local'
+    import_legacy_history: true
+  auth:
+    mode: 'oidc'
+    cookie_secure: true
+    archive_local_history: true
+    oidc:
+      issuer: 'https://sso.example.com'
+      client_id: 'open-llm-vtuber'
+      client_secret: '...'
+      redirect_uri: 'https://vtuber.example.com/auth/callback'
+      post_logout_redirect_uri: 'https://vtuber.example.com/'
+```
+
+Provide the cookie-signing secret through the environment instead of committing it:
+
+```bash
+export VTUBER_AUTH_SECRET="$(openssl rand -hex 32)"
+```
+
+Keep the secret stable: changing it invalidates every existing session. OIDC requires HTTPS and a
+reverse proxy on the same origin as the app. On the first OIDC start, the legacy single-user history
+can be exported to `data/storage/archive/`; the local account is no longer bound to new sessions.
+
+### History
+
+- Default backend: SQLite at `data/storage/open_llm_vtuber.db`.
+- All reads and writes are scoped by the internal `user_id`; the UI never sees another user's
+  history.
+- Existing `chat_history/*.json` files are imported once and moved to
+  `data/storage/legacy_history/` (`import_legacy_history: true`).
+- Back up the database file together with `data/storage/` before upgrades.
+
+### MCP
+
+Two layers are available:
+
+1. **Deployment-managed servers** from `mcp_servers.json` (stdio or HTTP). Enable tool calling in the
+   agent configuration:
+
+   ```yaml
+   agent_config:
+     agent_settings:
+       basic_memory_agent:
+         use_mcpp: true
+         mcp_enabled_servers: ['time', 'ddg-search']
+   ```
+
+2. **Per-user servers** edited in the settings drawer (or via `/api/mcp/config`). This accepts a JSON
+   document with `mcp_servers` / `mcpServers` entries using `url`, optional `headers`, `enabled` and
+   `type` / `transport` (`sse` or `streamable-http`). stdio commands are rejected.
+
+The backend classifies each URL:
+
+- Public HTTPS endpoints are connected by the server (`remote`).
+- `localhost`, loopback and private-network endpoints are connected by the browser (`local`); the
+  browser opens the connection directly and registers tool schemas over `/client-ws`.
+
+Per-user MCP changes apply after reconnecting (reload the page). Header values shown as `***` mean
+"keep the stored secret". Browser-local HTTP endpoints may require Local Network Access permission
+when the page itself is served over HTTPS.
+
+## Docker
+
+The image builds the frontend in a Node stage and serves `/app/web/dist`; runtime data and secrets
+are excluded from the image by `.dockerignore`.
+
+```bash
+docker build -f dockerfile -t open-llm-vtuber:local .
+```
+
+Prepare a `conf/` directory containing at least `conf.yaml`. Optionally place `model_dict.json`,
+`characters/`, `live2d-models/`, `avatars/` and `backgrounds/` under `conf/`; the startup script
+links them into `/app`. Then run:
+
+```bash
+docker run -d --name open-llm-vtuber --restart unless-stopped --network host \
+  -v "$PWD/conf:/app/conf" \
+  -v "$PWD/characters:/app/characters" \
+  -v "$PWD/live2d-models:/app/live2d-models" \
+  -v "$PWD/avatars:/app/avatars" \
+  -v "$PWD/backgrounds:/app/backgrounds" \
+  -v "$PWD/models:/app/models" \
+  -v "$PWD/data/storage:/app/data/storage" \
+  -v "$PWD/data/logs:/app/logs" \
+  -v "$PWD/data/cache:/app/cache" \
+  -v "$PWD/mcp_servers.json:/app/mcp_servers.json:ro" \
+  open-llm-vtuber:local
+```
+
+Notes:
+
+- `conf/conf.yaml` is required; the container exits with an error when it is missing.
+- `--network host` makes `127.0.0.1:12393` reachable on Linux. On Docker Desktop, publish the port
+  with `-p 12393:12393` and set `system_config.host` to `0.0.0.0`.
+- Recreate the container after changing `mcp_servers.json`; a restart does not necessarily re-read
+  an atomically replaced bind mount.
+- Keep `data/storage/` on a persistent volume. History and per-user MCP configuration live there.
+
+## Deployment notes
+
+- Terminate HTTPS and WebSocket upgrades in a reverse proxy (Caddy, nginx, etc.). The page, API and
+  WebSockets must share one origin.
+- Preserve the cache policy produced by the app: `/assets/` is immutable, HTML revalidates,
+  `/api/`, `/auth/`, `/cache/`, `/web-tool/` and `/model_dict.json` are `no-store`.
+- `GET /healthz` is public and is the readiness probe.
+- DNS, Cloudflare and Caddy details for the reference deployment are outside this repository and
+  recorded in [HANDOFF.md](./HANDOFF.md).
+
+## Character presets
+
+The working tree contains the following presets. Assets for some of them (models, avatars,
+backgrounds) are intentionally not tracked, so a fresh clone will only have the subset that is in
+Git.
+
+| Preset | Character | Live2D model |
+| --- | --- | --- |
+| `zh_relu_airi.yaml` | ReLU / AIRI | `hiyori_pro` |
+| `zh_haru.yaml` | Haru | `haru` |
+| `zh_mao.yaml` | 虹色Mao | `mao` |
+| `zh_nahida.yaml` | 纳西妲 | `nahida` |
+| `zh_naiwa.yaml` | 奶娃 | `naiwa` |
+| `zh_xiaozhi2.yaml` | 小智 | `xiaozhi2` |
+| `zh_yifan.yaml` | 小智（弈帆） | `yifan` |
+| `en_unhelpful_ai.yaml` | unhelpful_ai | `mao_pro` |
+
+To add a character, copy a preset, change `character_name`, `conf_uid`, `live2d_model_name` and
+`persona_prompt`, then drop the file into `characters/`. The frontend discovers it on the next
+`fetch-configs`.
+
+## Development
+
+```bash
+# backend tests (same command as CI)
+uv run --frozen python -m unittest discover -s tests -v
+
+# lint and formatting
+ruff check .
+ruff format --check .
+pre-commit run --all-files
+```
+
+Frontend:
+
+```bash
+cd web
+npm ci
+npm run dev      # Vite dev server, proxies WebSocket/API to the backend
+npm run build    # type-check and emit web/dist
+```
+
+### Project layout
+
+```text
+run_server.py                 entry point: config, logger, uvicorn
+src/open_llm_vtuber/
+  server.py                   FastAPI app, static mounts, health check
+  routes.py                   /client-ws, /audio-ws, /tts-ws, /asr
+  websocket_handler.py        message routing, sessions, MCP registration
+  service_context.py          per-connection engine/session container
+  auth/                       OIDC, signed cookies, HTTP guard
+  storage/                    HistoryRepository, SQLite, legacy import
+  mcpp/                       MCP client, registry, per-user servers, browser bridge
+  agent/, asr/, tts/, vad/    engine implementations and factories
+  config_manager/             typed YAML configuration
+web/                          React + Vite frontend source
+characters/                   character presets
+config_templates/             default conf.yaml and mcp_servers.json
+tests/                        unittest suite
+```
+
+## Documentation
+
+| Document | Contents |
+| --- | --- |
+| [BACKEND_API.md](./BACKEND_API.md) | Complete WebSocket/HTTP contract, payloads, limits, timing, gotchas |
+| [HANDOFF.md](./HANDOFF.md) | Production deployment topology, mounts, operations, change history |
+| [CLAUDE.md](./CLAUDE.md) | Codebase guide for development agents |
+| [config_templates/README.md](./config_templates/README.md) | How the default templates are used |
+
+## Security notes
+
+- In OIDC mode, session cookies are `HttpOnly`, `Secure` (configurable) and `SameSite=Lax`; WS
+  connections without a valid session close with code `4401`, and cross-origin WS connections close
+  with `1008`.
+- Generated TTS files live under `/cache/<user_id>/`; a logged-in user cannot fetch another user's
+  file.
+- `conf.yaml`, `mcp_servers.json`, `model_dict.json`, `data/` and most model/character assets are
+  ignored by Git and `.dockerignore`. Never put API keys or MCP tokens in tracked files.
+- Cloud ASR/TTS providers receive audio or text. Use local engines when that is not acceptable.
+- The default single-user mode has no authentication. Do not expose it publicly without a reverse
+  proxy and access control or OIDC.
+
+## Known limitations
+
+- No desktop client or desktop-pet mode; this fork is browser-only.
+- Agent working memory is per WebSocket connection. History can be reloaded from SQLite, but memory
+  is not shared between concurrent tabs.
+- OIDC has no refresh-token flow; after the session expires, users log in again.
+- Most configuration changes require a restart; only character/background switching and per-user MCP
+  apply at runtime.
+- Browser-local MCP depends on browser permissions and cannot reach arbitrary private services.
+- Live2D sample models have their own license terms (see below).
+
+## Credits and license
+
+This project is a fork of
+[Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber) and keeps its modular engine
+design. Thanks to the upstream authors and contributors.
+
+The code is released under the [MIT License](./LICENSE).
+
+### Live2D sample models notice
+
+This project includes Live2D sample models provided by Live2D Inc. These assets are licensed
+separately under the Live2D Free Material License Agreement and the Terms of Use for Live2D Cubism
+Sample Data. They are not covered by the MIT license of this project.
+
+This content uses sample data owned and copyrighted by Live2D Inc. The sample data are utilized in
+accordance with the terms and conditions set by Live2D Inc. (See
+[Live2D Free Material License Agreement](https://www.live2d.jp/en/terms/live2d-free-material-license-agreement/)
+and [Terms of Use](https://www.live2d.com/eula/live2d-sample-model-terms_en.html)).
+
+For commercial use, especially by medium or large-scale enterprises, the use of these Live2D sample
+models may be subject to additional licensing requirements. Ensure that you have the appropriate
+permissions from Live2D Inc., or use a version of the project without these models.
