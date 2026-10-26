@@ -13,9 +13,10 @@ const ZOOM_STEP = 1.05; // 每格滚轮 ±5%
 const ZOOM_EASING = 0.3;
 const DRAG_THRESHOLD_PX = 5;
 const TAP_MAX_MS = 350;
-// 默认构图：模型可见轮廓高度占视口 81%，顶部留白 10%，窄屏时宽度不超过 92%
-const FRAME_HEIGHT_RATIO = 0.81;
-const FRAME_TOP_RATIO = 0.1;
+// 默认构图：头部与上半身取景。轮廓高度取视口的 1.39 倍，头顶固定在 12% 处，
+// 下半身溢出视口自然裁掉；窄屏时退回宽度上限，保证不会左右切到模型。
+const FRAME_HEIGHT_RATIO = 1.39;
+const FRAME_TOP_RATIO = 0.12;
 const FRAME_WIDTH_RATIO = 0.92;
 const ALPHA_THRESHOLD = 24;
 const TAP_GUARD_MS = 400;
