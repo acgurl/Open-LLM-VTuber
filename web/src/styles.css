@@ -8,7 +8,7 @@
   font-style: normal;
   font-weight: 300 800;
   font-display: swap;
-  src: url('/fonts/dm-sans-latin.woff2') format('woff2');
+  src: url('/assets/fonts/dm-sans-latin-v1.woff2') format('woff2');
 }
 
 @font-face {
@@ -16,7 +16,7 @@
   font-style: normal;
   font-weight: 400 700;
   font-display: swap;
-  src: url('/fonts/comfortaa-latin.woff2') format('woff2');
+  src: url('/assets/fonts/comfortaa-latin-v1.woff2') format('woff2');
 }
 
 :root {
