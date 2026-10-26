@@ -547,7 +547,7 @@ html[data-theme='light'] .app::after {
   inset: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 14px 8px 14px 0;
+  padding: 14px 8px;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -640,8 +640,6 @@ html[data-theme='light'] .app::after {
 /* ---------- 消息 ---------- */
 .bubble-row {
   display: flex;
-  gap: 10px;
-  align-items: flex-start;
   animation: message-in 360ms var(--ease-spring) backwards;
 }
 
@@ -657,55 +655,7 @@ html[data-theme='light'] .app::after {
 }
 
 .bubble-row.human {
-  flex-direction: row-reverse;
-}
-
-.bubble-avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: radial-gradient(
-    125% 125% at 30% 18%,
-    color-mix(in oklab, var(--accent) 55%, #fff),
-    color-mix(in oklab, var(--accent) 34%, #fff)
-  );
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: var(--font-round);
-  font-size: 13px;
-  font-weight: 700;
-  color: #16171d;
-  flex: none;
-  border: 1px solid color-mix(in oklab, var(--accent) 35%, #fff);
-  box-shadow: 0 0 0 3px var(--accent-soft), 0 10px 22px -14px rgba(0, 0, 0, 0.8);
-}
-
-.bubble-row.human .bubble-avatar {
-  background: radial-gradient(
-    125% 125% at 30% 18%,
-    color-mix(in oklab, var(--secondary) 42%, #fff),
-    color-mix(in oklab, var(--secondary) 26%, #fff)
-  );
-  border-color: color-mix(in oklab, var(--secondary) 32%, #fff);
-  box-shadow: 0 0 0 3px var(--secondary-soft), 0 10px 22px -14px rgba(0, 0, 0, 0.8);
-}
-
-.bubble-avatar.streaming {
-  animation: avatar-pulse 1.9s ease-in-out infinite;
-}
-
-@keyframes avatar-pulse {
-  50% {
-    box-shadow: 0 0 0 5px var(--accent-soft), 0 0 20px -2px var(--accent-glow);
-  }
-}
-
-.bubble-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+  justify-content: flex-end;
 }
 
 .bubble-stack {
@@ -714,7 +664,7 @@ html[data-theme='light'] .app::after {
   align-items: flex-start;
   gap: 5px;
   min-width: 0;
-  max-width: calc(100% - 44px);
+  max-width: 100%;
 }
 
 .bubble-row.human .bubble-stack {
@@ -1115,7 +1065,6 @@ html[data-theme='light'] .app::after {
 .tool-card {
   position: relative;
   align-self: stretch;
-  margin-left: 44px;
   border: 1px solid var(--line);
   border-radius: 16px;
   background:
@@ -2940,7 +2889,7 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
   }
 
   .chat-overlay {
-    padding-right: 4px;
+    padding-inline: 4px;
   }
 
   .subtitle-bar {
@@ -2972,15 +2921,6 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
 
   .topbar-center {
     max-width: 44vw;
-  }
-
-  .bubble-stack {
-    max-width: calc(100% - 38px);
-  }
-
-  .bubble-avatar {
-    width: 30px;
-    height: 30px;
   }
 
   .drawer-body {

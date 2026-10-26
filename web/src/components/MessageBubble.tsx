@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useConnection } from '../stores/connection';
-import { buildTagSet, splitByTags, splitThink, stripTags, avatarUrl } from '../utils/text';
+import { buildTagSet, splitByTags, splitThink, stripTags } from '../utils/text';
 import type { ChatTextEntry } from '../stores/chat';
 import { ThinkBlock } from './ThinkBlock';
 
@@ -24,7 +24,6 @@ export function MessageBubble({ entry }: { entry: ChatTextEntry }) {
   const [copied, setCopied] = useState(false);
   const tagSet = buildTagSet(modelInfo);
   const isAi = entry.role === 'ai';
-  const avatar = avatarUrl(entry.avatar);
 
   const copyText = () => {
     const visible = splitThink(entry.text)
@@ -44,13 +43,6 @@ export function MessageBubble({ entry }: { entry: ChatTextEntry }) {
 
   return (
     <div className={`bubble-row ${isAi ? 'ai' : 'human'}`}>
-      <div className={`bubble-avatar${entry.streaming ? ' streaming' : ''}`}>
-        {avatar ? (
-          <img src={avatar} alt="" width={30} height={30} />
-        ) : (
-          <span>{(entry.name ?? (isAi ? 'A' : 'U')).slice(0, 1).toUpperCase()}</span>
-        )}
-      </div>
       <div className="bubble-stack">
         <div className={`bubble ${entry.streaming ? 'streaming' : ''}`}>
           {isAi ? (

@@ -70,11 +70,6 @@ export function splitThink(text: string): ThinkBlock[] {
   return out;
 }
 
-export function avatarUrl(avatar?: string): string | null {
-  if (!avatar) return null;
-  return `/avatars/${avatar}`;
-}
-
 export function backgroundUrl(file: string): string {
   return `/bg/${file}`;
 }
