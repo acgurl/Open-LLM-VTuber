@@ -5,6 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#06070c" />
     <title>Open-LLM-VTuber</title>
+    <!-- 首屏前先落主题，避免深色闪白；键名与 src/utils/storage.ts、src/stores/theme.ts 保持一致。 -->
+    <script>
+      (function () {
+        try {
+          var match = document.cookie.match(/(?:^|;\s*)vtuber_uid=([^;]+)/);
+          var uid = match ? decodeURIComponent(match[1]) : '';
+          var prefix = uid ? 'ollmvt.u' + uid + '.' : 'ollmvt.';
+          var mode = localStorage.getItem(prefix + 'theme');
+          var light =
+            mode === 'light' ||
+            (mode !== 'dark' && window.matchMedia('(prefers-color-scheme: light)').matches);
+          var theme = light ? 'light' : 'dark';
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme;
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.content = light ? '#edf1f7' : '#06070c';
+        } catch (e) {
+          /* localStorage 不可用时按深色渲染 */
+        }
+      })();
+    </script>
     <!-- 上次模型的贴图提前入队，与主包下载并行；键名与 src/utils/storage.ts 保持一致。 -->
     <script>
       (function () {

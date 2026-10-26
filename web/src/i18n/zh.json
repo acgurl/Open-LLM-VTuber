@@ -62,6 +62,11 @@
     "character": "角色",
     "background": "背景",
     "noBackground": "无背景",
+    "appearance": "外观",
+    "theme": "主题",
+    "themeAuto": "跟随系统",
+    "themeLight": "白天",
+    "themeDark": "黑夜",
     "subtitles": "字幕",
     "ttsOn": "关闭语音",
     "ttsOff": "开启语音",
@@ -122,6 +127,10 @@
   },
   "think": {
     "label": "思考过程"
+  },
+  "theme": {
+    "toLight": "切换到白天模式",
+    "toDark": "切换到黑夜模式"
   },
   "error": {
     "title": "提示",

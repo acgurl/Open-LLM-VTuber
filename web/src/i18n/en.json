@@ -62,6 +62,11 @@
     "character": "Character",
     "background": "Background",
     "noBackground": "None",
+    "appearance": "Appearance",
+    "theme": "Theme",
+    "themeAuto": "System",
+    "themeLight": "Light",
+    "themeDark": "Dark",
     "subtitles": "Subtitles",
     "ttsOn": "Turn speech off",
     "ttsOff": "Turn speech on",
@@ -122,6 +127,10 @@
   },
   "think": {
     "label": "Thinking"
+  },
+  "theme": {
+    "toLight": "Switch to light mode",
+    "toDark": "Switch to dark mode"
   },
   "error": {
     "title": "Notice",

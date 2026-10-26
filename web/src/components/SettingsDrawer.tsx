@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSettings } from '../stores/settings';
 import { useConnection } from '../stores/connection';
 import { useGroup } from '../stores/group';
+import { useTheme, type ThemeMode } from '../stores/theme';
 import { setLanguage } from '../i18n';
 import { logout } from '../services/session';
 import {
@@ -34,6 +35,8 @@ export function SettingsDrawer() {
   const setPointerInteractive = useSettings((s) => s.setPointerInteractive);
   const scrollToResize = useSettings((s) => s.scrollToResize);
   const setScrollToResize = useSettings((s) => s.setScrollToResize);
+  const themeMode = useTheme((s) => s.mode);
+  const setThemeMode = useTheme((s) => s.setMode);
   const displayName = useConnection((s) => s.displayName);
   const presence = usePresence(open, 220);
 
@@ -111,6 +114,21 @@ export function SettingsDrawer() {
                 );
               })}
             </div>
+          </section>
+
+          <section>
+            <h3>{t('settings.appearance')}</h3>
+            <label className="setting-row">
+              <span>{t('settings.theme')}</span>
+              <select
+                value={themeMode}
+                onChange={(e) => setThemeMode(e.target.value as ThemeMode)}
+              >
+                <option value="auto">{t('settings.themeAuto')}</option>
+                <option value="light">{t('settings.themeLight')}</option>
+                <option value="dark">{t('settings.themeDark')}</option>
+              </select>
+            </label>
           </section>
 
           <section>
