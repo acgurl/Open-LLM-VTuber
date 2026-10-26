@@ -1657,6 +1657,32 @@ html[data-theme='light'] .app::after {
   border-color: var(--line-strong);
 }
 
+/* 空闲态收成顶栏同款玻璃胶囊：同高度、同受光边、同投影 */
+.cam-window.idle {
+  height: 44px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, var(--sheen), transparent 72%),
+    var(--glass-strong);
+  box-shadow: var(--shadow-btn);
+  transition:
+    box-shadow 200ms var(--ease-snap),
+    border-color 200ms var(--ease-snap),
+    transform 220ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .cam-window.idle:hover {
+    border-color: var(--line-strong);
+    box-shadow: var(--shadow-float), var(--shadow-inset);
+    transform: translateY(-1px);
+  }
+}
+
+.cam-window.idle.dragging {
+  transform: none;
+}
+
 .cam-window.dragging {
   cursor: grabbing;
   box-shadow: 0 30px 70px -26px rgba(0, 0, 0, 1);
@@ -1759,28 +1785,65 @@ html[data-theme='light'] .app::after {
 .cam-idle {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 15px;
+  gap: 9px;
+  height: 100%;
+  padding: 0 17px 0 10px;
   border: none;
   border-radius: inherit;
   background: none;
-  color: var(--muted);
+  color: var(--ink);
   font: inherit;
   font-size: 0.86rem;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  transition: color 160ms;
+  transition: color 160ms var(--ease-snap);
 }
 
-.cam-idle:hover:not(:disabled) {
-  color: var(--ink);
+.cam-idle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  box-shadow: 0 0 14px -6px var(--accent-glow);
+  transition:
+    transform 240ms var(--ease-spring),
+    box-shadow 200ms var(--ease-snap),
+    background 200ms var(--ease-snap);
+}
+
+@media (hover: hover) {
+  .cam-idle:hover:not(:disabled) .cam-idle-icon {
+    transform: scale(1.07);
+    box-shadow: 0 0 20px -5px var(--accent-glow);
+  }
 }
 
 .cam-idle:disabled {
   cursor: default;
+  opacity: 0.72;
+}
+
+.cam-idle.error {
+  color: var(--danger);
+}
+
+.cam-idle.error .cam-idle-icon {
+  background: var(--danger-soft);
+  border-color: var(--danger-line);
+  color: var(--danger);
+  box-shadow: none;
 }
 
 .cam-idle-text {
   max-width: 22ch;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ---------- 抽屉 ---------- */
@@ -2901,6 +2964,10 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
     width: 146px;
   }
 
+  .cam-window.idle {
+    height: 42px;
+  }
+
   .input-bar {
     width: 94vw;
   }
@@ -2949,6 +3016,21 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
 
   .topbar-name {
     font-size: 0.9rem;
+  }
+
+  .cam-window.idle {
+    height: 38px;
+  }
+
+  .cam-idle {
+    gap: 7px;
+    padding: 0 14px 0 8px;
+    font-size: 0.8rem;
+  }
+
+  .cam-idle-icon {
+    width: 23px;
+    height: 23px;
   }
 }
 

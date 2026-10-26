@@ -41,6 +41,7 @@ export function CameraWindow() {
   const starting = useCamera((s) => s.starting);
   const error = useCamera((s) => s.error);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const winRef = useRef<HTMLDivElement>(null);
   const [pos, setPos] = useState<Pos | null>(loadPos);
   const [dragging, setDragging] = useState(false);
   const drag = useRef<{ x: number; y: number; left: number; top: number; moved: boolean } | null>(
@@ -57,10 +58,24 @@ export function CameraWindow() {
   }, [stream]);
 
   useEffect(() => {
-    const onResize = () => setPos((p) => (p ? clampTo(p) : p));
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
-  }, []);
+    const el = winRef.current;
+    if (!el) return;
+    // 空闲胶囊和实况窗口尺寸不同：切换和缩放时都按当前尺寸重新夹取，别把框体探出视口。
+    // 用布局尺寸和 computed left/top：getBoundingClientRect 会带上入场动画的 scale。
+    const fit = () => {
+      const cs = window.getComputedStyle(el);
+      const left = Number.parseFloat(cs.left);
+      const top = Number.parseFloat(cs.top);
+      if (!Number.isFinite(left) || !Number.isFinite(top)) return;
+      const next = clampTo({ left, top }, el.offsetWidth, el.offsetHeight);
+      if (next.left === left && next.top === top) return;
+      posRef.current = next;
+      setPos(next);
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [stream]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
@@ -111,6 +126,7 @@ export function CameraWindow() {
 
   return (
     <div
+      ref={winRef}
       className={`cam-window ${stream ? 'live' : 'idle'}${dragging ? ' dragging' : ''}`}
       style={pos ? { left: pos.left, top: pos.top, right: 'auto' } : undefined}
       onPointerDown={onPointerDown}
@@ -126,8 +142,14 @@ export function CameraWindow() {
       }}
     >
       {!stream ? (
-        <button className="cam-idle" disabled={starting} onClick={() => void camera.start()}>
-          {starting ? <span className="spinner" /> : <CamIcon />}
+        <button
+          className={`cam-idle${error ? ' error' : ''}`}
+          disabled={starting}
+          onClick={() => void camera.start()}
+        >
+          <span className="cam-idle-icon">
+            {starting ? <span className="spinner" /> : <CamIcon />}
+          </span>
           <span className="cam-idle-text">{error ? t(error) : t('camera.start')}</span>
         </button>
       ) : (
