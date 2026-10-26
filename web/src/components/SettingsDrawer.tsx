@@ -27,8 +27,6 @@ export function SettingsDrawer() {
   const { t } = useTranslation();
   const open = useSettings((s) => s.settingsOpen);
   const setOpen = useSettings((s) => s.setSettingsOpen);
-  const subtitlesOn = useSettings((s) => s.subtitlesOn);
-  const setSubtitlesOn = useSettings((s) => s.setSubtitlesOn);
   const background = useSettings((s) => s.background);
   const setBackground = useSettings((s) => s.setBackground);
   const backgroundFiles = useSettings((s) => s.backgroundFiles);
@@ -178,14 +176,6 @@ export function SettingsDrawer() {
 
           <section>
             <h3>{t('settings.title')}</h3>
-            <label className="setting-row">
-              <span>{t('settings.subtitles')}</span>
-              <input
-                type="checkbox"
-                checked={subtitlesOn}
-                onChange={(e) => setSubtitlesOn(e.target.checked)}
-              />
-            </label>
             <label className="setting-row">
               <span>{t('settings.language')}</span>
               <select

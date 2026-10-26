@@ -123,8 +123,8 @@ def tts_filter(
 ) -> str:
     """
     Filter or do anything to the text before TTS generates the audio.
-    Changes here do not affect subtitles or LLM's memory. The generated audio is
-    the only affected thing.
+    Changes here do not affect displayed text or LLM's memory. The generated
+    audio is the only affected thing.
 
     Args:
         text (str): The text to filter.

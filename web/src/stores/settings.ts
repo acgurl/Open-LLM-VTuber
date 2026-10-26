@@ -3,7 +3,6 @@ import type { ConfigFileEntry } from '../protocol/types';
 import { readSetting, writeSetting } from '../utils/storage';
 
 interface SettingsState {
-  subtitlesOn: boolean;
   ttsOn: boolean;
   background: string | null; // /bg/<file> 完整路径或 null
   backgroundFiles: string[];
@@ -14,7 +13,6 @@ interface SettingsState {
   switching: boolean; // 角色切换 loading
   pointerInteractive: boolean;
   scrollToResize: boolean;
-  setSubtitlesOn: (v: boolean) => void;
   setTtsOn: (v: boolean) => void;
   setBackground: (url: string | null) => void;
   setBackgroundFiles: (f: string[]) => void;
@@ -28,7 +26,6 @@ interface SettingsState {
 }
 
 export const useSettings = create<SettingsState>((set) => ({
-  subtitlesOn: readSetting('subtitles') !== '0',
   ttsOn: readSetting('tts') !== '0',
   background: readSetting('bg'),
   backgroundFiles: [],
@@ -39,10 +36,6 @@ export const useSettings = create<SettingsState>((set) => ({
   switching: false,
   pointerInteractive: readSetting('l2d.pointer') !== '0',
   scrollToResize: readSetting('l2d.scroll') !== '0',
-  setSubtitlesOn: (subtitlesOn) => {
-    writeSetting('subtitles', subtitlesOn ? '1' : '0');
-    set({ subtitlesOn });
-  },
   setTtsOn: (ttsOn) => {
     writeSetting('tts', ttsOn ? '1' : '0');
     set({ ttsOn });

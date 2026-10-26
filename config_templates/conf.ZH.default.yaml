@@ -483,7 +483,7 @@ character_config:
     ignore_angle_brackets: True # 从音频生成中删除尖括号包住的内容
 
     translator_config:
-      # 比如...你说话并阅读英语字幕，而 TTS 说日语之类的
+      # 比如...你阅读英语文本，而 TTS 说日语之类的
       translate_audio: False # 警告：请确保翻译引擎配置成功再开启此选项，否则会翻译失败
       translate_provider: 'deeplx' # 翻译提供商, 目前支持 deeplx 或 tencent
 

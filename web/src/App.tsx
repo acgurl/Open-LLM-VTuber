@@ -6,7 +6,6 @@ import { fetchSession, redirectToLogin } from './services/session';
 import { wsClient } from './services/websocket';
 import { Live2DStage } from './components/Live2DStage';
 import { ChatOverlay } from './components/ChatOverlay';
-import { SubtitleBar } from './components/SubtitleBar';
 import { InputBar } from './components/InputBar';
 import { TopBar } from './components/TopBar';
 import { CameraWindow } from './components/CameraWindow';
@@ -52,7 +51,6 @@ export default function App() {
       <TopBar />
       <CameraWindow />
       <ChatOverlay />
-      <SubtitleBar />
       <InputBar />
       <HistoryDrawer />
       <SettingsDrawer />

@@ -9,7 +9,7 @@ import type { ImagePayload } from '../protocol/types';
 export function sendText(text: string, images?: ImagePayload[]) {
   const trimmed = text.trim();
   if (!trimmed && (!images || images.length === 0)) return;
-  // 上一轮还在生成或播放时，新输入立即打断，旧语音与字幕不能压在新一轮前面
+  // 上一轮还在生成或播放时，新输入立即打断，旧语音不能压在新一轮前面
   if (useConnection.getState().busy) interrupt();
   useChat.getState().addUserMessage(trimmed);
   wsClient.send({ type: 'text-input', text: trimmed, ...(images?.length ? { images } : {}) });
@@ -35,7 +35,7 @@ export function refreshHistories() {
 
 export function openHistory(uid: string) {
   if (uid === useHistory.getState().currentUid) return;
-  // 旧一轮的语音/字幕不能串到新历史，先收尾再切换
+  // 旧一轮的语音不能串到新历史，先收尾再切换
   if (useConnection.getState().busy || audioPlayer.isActive()) interrupt();
   useHistory.getState().setCurrentUid(uid);
   wsClient.send({ type: 'fetch-and-set-history', history_uid: uid });

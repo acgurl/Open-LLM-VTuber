@@ -40,9 +40,6 @@
     "imageTooLarge": "图片过大（单张上限 8 MiB）",
     "tooLong": "消息过长（上限 4000 字）"
   },
-  "subtitle": {
-    "you": "你"
-  },
   "camera": {
     "start": "开启摄像头",
     "stop": "关闭摄像头",
@@ -68,7 +65,6 @@
     "themeAuto": "跟随系统",
     "themeLight": "白天",
     "themeDark": "黑夜",
-    "subtitles": "字幕",
     "ttsOn": "关闭语音",
     "ttsOff": "开启语音",
     "language": "语言",

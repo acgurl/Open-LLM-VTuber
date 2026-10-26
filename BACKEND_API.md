@@ -16,7 +16,7 @@
 6. [`/client-ws`：服务端 → 客户端 消息全集](#6-client-ws服务端--客户端-消息全集)
 7. [一轮对话的完整时序](#7-一轮对话的完整时序)
 8. [语音输入契约（麦克风）](#8-语音输入契约麦克风)
-9. [语音输出契约（TTS 播放、口型、字幕）](#9-语音输出契约tts-播放口型字幕)
+9. [语音输出契约（TTS 播放、口型）](#9-语音输出契约tts-播放口型)
 10. [文本渲染契约（流式、标签、think、工具调用）](#10-文本渲染契约流式标签think工具调用)
 11. [Live2D 模型元数据](#11-live2d-模型元数据)
 12. [历史记录](#12-历史记录)
@@ -278,7 +278,7 @@ Cookie（`auth/manager.py`）：
 | `add-client-to-group` | `invitee_uid`: string | 邀请。**键名是 `invitee_uid`** |
 | `remove-client-from-group` | `target_uid`: string | 退出或踢人（同一条消息）。**键名是 `target_uid`** |
 | `request-group-info` | 无 | 回 `group-update` |
-| `audio-play-start` | `display_text`: object | 仅群聊有效：告知服务端"我开始播放这句了"，服务端把一条静音载荷转发给其他成员用于口型/字幕同步 |
+| `audio-play-start` | `display_text`: object | 仅群聊有效：告知服务端"我开始播放这句了"，服务端把一条静音载荷转发给其他成员用于口型同步 |
 
 详见[第 14 节](#14-群聊)。
 
@@ -576,7 +576,7 @@ Cookie（`auth/manager.py`）：
 
 ---
 
-## 9. 语音输出契约（TTS 播放、口型、字幕）
+## 9. 语音输出契约（TTS 播放、口型）
 
 ### 9.1 播放
 
@@ -594,9 +594,9 @@ Cookie（`auth/manager.py`）：
 - 写入时机要在模型 update 的 `beforeModelUpdate` 阶段（或等效的绘制前钩子），否则会被动作参数回滚覆盖。
 - `volumes` 为空数组时（静音载荷）不做口型。
 
-### 9.3 字幕
+### 9.3 文本上屏
 
-- `streamed === true`：文本已通过 `text-delta` 上屏，字幕只需按播放进度**推进高亮/逐字显示**，不要再追加新气泡。
+- `streamed === true`：文本已通过 `text-delta` 上屏，不要再追加新气泡。
 - `streamed === false`：这句没走过流式，需要把 `display_text.text` 作为新内容上屏。
 - `forwarded === true`（群聊）：别人正在播的句子，只有文本没有音频，按普通文本渲染即可。
 
@@ -609,7 +609,7 @@ Cookie（`auth/manager.py`）：
 | 来源 | 内容 | 用途 |
 | --- | --- | --- |
 | `text-delta.text` / `full_text` | **LLM 原始输出**，含 `[joy]`、`[nod]` 等 Live2D 标签、含 `<think>` 标记 | 打字机式流式上屏 |
-| `audio.display_text.text` | 经过分句/装饰管线处理的**单句**显示文本 | 字幕、TTS 对齐、动作触发 |
+| `audio.display_text.text` | 经过分句/装饰管线处理的**单句**显示文本 | 文本上屏、TTS 对齐、动作触发 |
 
 装饰管线（`agent/transformers.py`）：`sentence_divider` → `actions_extractor` → `display_processor` → `tts_filter`。
 
@@ -840,7 +840,7 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 其他成员 ← {"type":"audio","audio":null,"display_text":{...},"actions":null,"forwarded":true,"streamed":false,...}
 ```
 
-（`websocket_handler.py:770-788`）——即一条 `forwarded:true` 的静音载荷，用于对齐字幕与口型。只在群成员 > 1 时生效。
+（`websocket_handler.py:770-788`）——即一条 `forwarded:true` 的静音载荷，用于对齐口型。只在群成员 > 1 时生效。
 
 ### 14.3 群聊轮次
 
@@ -986,9 +986,9 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 3. **连接建立时 `history_uid` 为空，对话不落库。** 必须在开始聊天前发 `create-new-history` 或 `fetch-and-set-history`。`switch-config` 之后同样要重做。
 4. **必须回 `frontend-playback-complete`**（不带 `request_id`），否则每轮白等 120s，群聊会卡住全员。
 5. **服务端 VAD 不会自动开启对话轮次。** `raw-audio-data` 路径下，后端把检测到的语音塞进录音缓冲后，只回一条 `{"type":"control","text":"mic-audio-end"}` 作为**提示**；前端必须自己再发一条真正的 `mic-audio-end` 消息，才会触发 ASR 和新一轮对话。另外该路径要求 `vad_config.vad_model` 已启用，否则消息被静默丢弃。
-6. **`display_text.text` 不剥离 `[joy]` 这类方括号标签。** 前端必须自己处理（剥离或渲染成动作块），否则字幕里会出现方括号关键字。
+6. **`display_text.text` 不剥离 `[joy]` 这类方括号标签。** 前端必须自己处理（剥离或渲染成动作块），否则文本里会出现方括号关键字。
 7. **`audio:null` 的静音载荷是正常消息**，不是错误。think 段、TTS 超时都会产生它，必须照常渲染文本并计入句子序号。
-8. **`streamed:true` 的载荷不能把 `display_text.text` 再追加一次**，否则字幕重复。
+8. **`streamed:true` 的载荷不能把 `display_text.text` 再追加一次**，否则文本重复。
 9. **群聊键名不对称**：邀请用 `invitee_uid`，移除用 `target_uid`，切配置用 `file`。写错不会报错，只会静默无响应。
 10. **单聊打断没有回执。** 别等 `interrupt-signal`（那是群聊专用），发完就自己停播放、收气泡。
 11. **`/live2d-models/info` 与 `model_dict.json` 不一致**：前者要求 `<folder>/<folder>.model3.json`，自带模型在 `runtime/` 子目录下。以 `model_dict.json`（经 WS 下发的 `model_info`）为准。
@@ -1050,7 +1050,7 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 
 - [ ] 历史抽屉：`fetch-history-list` → 渲染 `uid` / `latest_message.content` / `timestamp`
 - [ ] 打开历史：`fetch-and-set-history`，用 `history-data.messages` 重建气泡
-- [ ] 切换 / 新建历史或角色前，若本轮仍在生成或播放，先发 `interrupt-signal` 并停止本地音频、字幕、口型，避免旧轮串台
+- [ ] 切换 / 新建历史或角色前，若本轮仍在生成或播放，先发 `interrupt-signal` 并停止本地音频、口型，避免旧轮串台
 - [ ] 新建 / 删除历史
 - [ ] 角色切换：`fetch-configs` → `switch-config`，切换后重新选/建历史，并**保留旧的 `client_uid`**
 - [ ] 背景：`fetch-backgrounds` → `/bg/<file>`
@@ -1153,7 +1153,7 @@ const handle = (msg: any) => {
 function enqueueAudio(msg: any) {
   // 坑 6/7/8：先剥标签，再决定要不要上屏，静音载荷也要处理
   const text = stripLive2dTags(msg.display_text?.text ?? "");
-  if (!msg.streamed && !msg.forwarded && text) appendSubtitle(text);
+  if (!msg.streamed && !msg.forwarded && text) appendText(text);
   if (text === "<think>")  { openThinkBlock();  return; }
   if (text === "</think>") { closeThinkBlock(); return; }
   applyActions(msg.actions);                       // expressions / motions

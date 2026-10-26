@@ -4,12 +4,11 @@ import { stripTags, buildTagSet } from '../utils/text';
 import { useConnection } from '../stores/connection';
 import { useChat } from '../stores/chat';
 import { useGroup } from '../stores/group';
-import { useSubtitle } from '../stores/subtitle';
 import { useSettings } from '../stores/settings';
 import { live2d } from '../live2d/controller';
 import { wsClient } from './websocket';
 
-// 串行播放一轮对话的音频载荷；负责字幕推进、口型、动作、播放完成回执。
+// 串行播放一轮对话的音频载荷；负责口型、动作、播放完成回执。
 class AudioPlayer {
   private queue: AudioPayload[] = [];
   private draining = false;
@@ -69,7 +68,6 @@ class AudioPlayer {
     this.heardPartial = '';
     live2d.setLipSync(0);
     live2d.setSpeaking(false);
-    useSubtitle.getState().hide();
   }
 
   private maybeAck() {
@@ -116,11 +114,6 @@ class AudioPlayer {
       wsClient.send({ type: 'audio-play-start', display_text: p.display_text });
     }
 
-    const showSubtitle = clean.length > 0;
-    if (showSubtitle) {
-      useSubtitle.getState().show(name, avatar, clean, p.audio ? 0 : clean.length);
-    }
-
     if (p.audio && p.audio_mime) {
       live2d.setSpeaking(true);
       const bytes = base64ToBytes(p.audio);
@@ -128,28 +121,12 @@ class AudioPlayer {
       await this.playBlob(blob, p.volumes ?? [], p.slice_length || 20, clean.length, epoch, (shown) => {
         if (epoch !== this.epoch) return;
         this.heardPartial = clean.slice(0, shown);
-        if (showSubtitle) useSubtitle.getState().progress(shown);
       });
       if (epoch !== this.epoch) return;
       live2d.setLipSync(0);
       live2d.setSpeaking(false);
       this.heardBase += clean;
       this.heardPartial = '';
-    } else if (clean) {
-      // 无音频载荷：只显示不播，按长度短暂停留并允许被打断
-      await this.holdDisplay(Math.min(3000, 600 + clean.length * 45), epoch);
-      if (epoch !== this.epoch) return;
-    }
-
-    if (showSubtitle) useSubtitle.getState().hide();
-  }
-
-  private async holdDisplay(ms: number, epoch: number) {
-    const end = performance.now() + ms;
-    while (epoch === this.epoch) {
-      const left = end - performance.now();
-      if (left <= 0) return;
-      await sleep(Math.min(50, left));
     }
   }
 
@@ -202,10 +179,6 @@ class AudioPlayer {
       el.play().catch(finish);
     });
   }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
 }
 
 export const audioPlayer = new AudioPlayer();

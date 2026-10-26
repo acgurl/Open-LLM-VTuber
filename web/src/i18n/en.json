@@ -40,9 +40,6 @@
     "imageTooLarge": "Image too large (8 MiB max each)",
     "tooLong": "Message too long (4000 chars max)"
   },
-  "subtitle": {
-    "you": "You"
-  },
   "camera": {
     "start": "Start camera",
     "stop": "Stop camera",
@@ -68,7 +65,6 @@
     "themeAuto": "System",
     "themeLight": "Light",
     "themeDark": "Dark",
-    "subtitles": "Subtitles",
     "ttsOn": "Turn speech off",
     "ttsOff": "Turn speech on",
     "language": "Language",

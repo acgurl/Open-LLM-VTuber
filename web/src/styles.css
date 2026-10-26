@@ -302,14 +302,12 @@ html[data-theme='light'] .app::after {
 
 /* ---------- 受光玻璃边 ---------- */
 .topbar-center,
-.input-row,
-.subtitle-bar {
+.input-row {
   position: relative;
 }
 
 .topbar-center::before,
-.input-row::before,
-.subtitle-bar::before {
+.input-row::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -1190,107 +1188,6 @@ html[data-theme='light'] .app::after {
   word-break: break-all;
   border-top: 1px solid var(--line);
   background: var(--inset);
-}
-
-/* ---------- 字幕 ---------- */
-.subtitle-bar {
-  position: fixed;
-  left: 50%;
-  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
-  transform: translateX(-50%);
-  width: min(720px, 90vw);
-  min-height: calc(1.65em * 2 + 22px);
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 2px;
-  padding: 10px 22px 12px;
-  border-radius: 20px;
-  background:
-    linear-gradient(180deg, var(--sheen), transparent 72%),
-    var(--glass-strong);
-  border: 1px solid var(--line);
-  backdrop-filter: blur(var(--blur)) saturate(1.2);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.2);
-  box-shadow: var(--shadow-float), 0 0 48px -26px var(--accent-glow);
-  overflow: hidden;
-  z-index: 20;
-  pointer-events: none;
-  animation: subtitle-in 240ms var(--ease-spring);
-}
-
-.subtitle-bar.closing {
-  animation: subtitle-out 140ms ease-in forwards;
-}
-
-@keyframes subtitle-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 8px) scale(0.992);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0) scale(1);
-  }
-}
-
-@keyframes subtitle-out {
-  to {
-    opacity: 0;
-    transform: translate(-50%, 5px) scale(0.994);
-  }
-}
-
-.subtitle-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--accent);
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.subtitle-name::before {
-  content: '';
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: currentColor;
-  box-shadow: 0 0 8px currentColor;
-}
-
-.subtitle-name:empty {
-  display: none;
-}
-
-.subtitle-text {
-  font-size: 1.04rem;
-  line-height: 1.65;
-  text-align: center;
-  text-wrap: pretty;
-  word-break: break-word;
-  text-shadow: var(--text-shadow);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.subtitle-progress {
-  position: absolute;
-  left: 18px;
-  right: 18px;
-  bottom: 0;
-  height: 2px;
-  border-radius: 2px;
-  background: linear-gradient(90deg, var(--accent), var(--tertiary));
-  transform: scaleX(var(--p, 0));
-  transform-origin: left;
-  opacity: 0.65;
-  box-shadow: 0 0 10px var(--accent-glow);
-  transition: transform 90ms linear;
 }
 
 /* ---------- 输入栏 ---------- */
@@ -2953,11 +2850,6 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
 
   .chat-overlay {
     padding-inline: 4px;
-  }
-
-  .subtitle-bar {
-    bottom: calc(92px + env(safe-area-inset-bottom, 0px));
-    border-radius: 18px;
   }
 
   .cam-window.live {
