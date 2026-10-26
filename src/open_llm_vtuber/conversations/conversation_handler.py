@@ -184,21 +184,32 @@ async def handle_individual_interrupt(
             task.cancel()
             logger.info("🛑 Conversation task was successfully interrupted")
 
+        # Generation already finished and the full reply was persisted before
+        # playback started; this interrupt only cuts the audio short. Keep the
+        # stored reply and the agent memory intact.
+        if getattr(context, "turn_response_persisted", False):
+            return
+
         try:
             context.agent_engine.handle_interrupt(heard_response)
         except Exception as e:
             logger.error(f"Error handling interrupt: {e}")
 
-        if context.history_uid and heard_response:
+        # Write to the history the turn started in; the user may have opened
+        # another history while this response was playing.
+        turn_history_uid = getattr(context, "turn_history_uid", context.history_uid)
+        if turn_history_uid and heard_response:
             await context.store_history_message(
                 role="ai",
                 content=heard_response,
                 name=context.character_config.character_name,
                 avatar=context.character_config.avatar,
+                history_uid=turn_history_uid,
             )
             await context.store_history_message(
                 role="system",
                 content="[Interrupted by user]",
+                history_uid=turn_history_uid,
             )
 
 

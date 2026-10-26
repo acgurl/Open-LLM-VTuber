@@ -34,11 +34,15 @@ export function refreshHistories() {
 }
 
 export function openHistory(uid: string) {
+  if (uid === useHistory.getState().currentUid) return;
+  // 旧一轮的语音/字幕不能串到新历史，先收尾再切换
+  if (useConnection.getState().busy || audioPlayer.isActive()) interrupt();
   useHistory.getState().setCurrentUid(uid);
   wsClient.send({ type: 'fetch-and-set-history', history_uid: uid });
 }
 
 export function newHistory() {
+  if (useConnection.getState().busy || audioPlayer.isActive()) interrupt();
   useChat.getState().clear();
   useHistory.getState().setCurrentUid(null);
   audioPlayer.stopAll();
@@ -57,6 +61,8 @@ export function fetchConfigs() {
 export function switchConfig(file: string) {
   const settings = useSettings.getState();
   if (settings.switching) return;
+  // 换角色会清空活动历史与 agent 记忆，先收尾正在进行的一轮
+  if (useConnection.getState().busy || audioPlayer.isActive()) interrupt();
   settings.setSwitching(true);
   wsClient.send({ type: 'switch-config', file });
 }

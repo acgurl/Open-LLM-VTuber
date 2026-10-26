@@ -47,6 +47,15 @@ async def process_single_conversation(
     full_response = ""
 
     try:
+        # Bind the whole turn to the history that was active when it started.
+        # Opening another history mid-turn must not reroute these writes.
+        skip_history = bool(metadata and metadata.get("skip_history", False))
+        turn_history_uid = (
+            context.history_uid if should_store_history(context, skip_history) else None
+        )
+        context.turn_history_uid = turn_history_uid
+        context.turn_response_persisted = False
+
         # Send initial signals
         await send_conversation_start_signals(channels.text)
         logger.info(f"New Conversation Chain {session_emoji} started!")
@@ -65,12 +74,12 @@ async def process_single_conversation(
         )
 
         # Store user message (check if we should skip storing to history)
-        skip_history = metadata and metadata.get("skip_history", False)
-        if should_store_history(context, skip_history):
+        if turn_history_uid:
             await context.store_history_message(
                 role="human",
                 content=input_text,
                 name=context.character_config.human_name,
+                history_uid=turn_history_uid,
             )
         elif skip_history:
             logger.debug("Skipping storing user input to history (proactive speak)")
@@ -88,6 +97,20 @@ async def process_single_conversation(
             error_prefix="Error processing agent response",
         )
 
+        # Persist the reply as soon as it is generated. Waiting for playback
+        # completion would leave the turn vulnerable to a concurrent history
+        # switch (the reply could be written to the wrong history or lost).
+        if full_response and turn_history_uid:
+            await context.store_history_message(
+                role="ai",
+                content=full_response,
+                name=context.character_config.character_name,
+                avatar=context.character_config.avatar,
+                history_uid=turn_history_uid,
+            )
+            context.turn_response_persisted = True
+            logger.info(f"AI response: {full_response}")
+
         # finalize_conversation_turn waits for TTS tasks and sends the single
         # backend-synth-complete signal.
         await finalize_conversation_turn(
@@ -95,15 +118,6 @@ async def process_single_conversation(
             channels=channels,
             client_uid=client_uid,
         )
-
-        if full_response and should_store_history(context):
-            await context.store_history_message(
-                role="ai",
-                content=full_response,
-                name=context.character_config.character_name,
-                avatar=context.character_config.avatar,
-            )
-            logger.info(f"AI response: {full_response}")
 
         return full_response  # Return accumulated full_response
 

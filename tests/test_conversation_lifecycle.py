@@ -253,6 +253,52 @@ class InterruptHistoryTests(unittest.IsolatedAsyncioTestCase):
             ],
             ["ai", "system"],
         )
+        self.assertEqual(
+            {
+                call.kwargs.get("history_uid")
+                for call in context.store_history_message.await_args_list
+            },
+            {"history"},
+        )
+
+    async def test_completed_turn_interrupt_keeps_the_stored_reply(self):
+        context = _interrupt_context()
+        context.turn_response_persisted = True
+        context.turn_history_uid = "history"
+
+        await conversation_handler.handle_individual_interrupt(
+            "client", {"client": None}, context, "heard part"
+        )
+
+        context.store_history_message.assert_not_awaited()
+        context.agent_engine.handle_interrupt.assert_not_called()
+
+    async def test_partial_interrupt_writes_to_the_turn_history(self):
+        context = _interrupt_context()
+        context.history_uid = "history-b"
+        context.turn_history_uid = "history-a"
+
+        await conversation_handler.handle_individual_interrupt(
+            "client", {"client": None}, context, "partial answer"
+        )
+
+        self.assertEqual(
+            [
+                call.kwargs.get("history_uid")
+                for call in context.store_history_message.await_args_list
+            ],
+            ["history-a", "history-a"],
+        )
+
+    async def test_proactive_interrupt_writes_nothing(self):
+        context = _interrupt_context()
+        context.turn_history_uid = None
+
+        await conversation_handler.handle_individual_interrupt(
+            "client", {"client": None}, context, "heard part"
+        )
+
+        context.store_history_message.assert_not_awaited()
 
     async def test_empty_group_interrupt_stores_nothing(self):
         task = asyncio.create_task(asyncio.Event().wait())

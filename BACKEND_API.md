@@ -203,7 +203,7 @@ Cookie（`auth/manager.py`）：
 | | `images`: array | 否 | 见下 |
 | `mic-audio-end` | `images`: array | 否 | 触发对累积的音频缓冲做 ASR，然后开始一轮对话；**缓冲随即清空**（`conversation_handler.py:117-119`） |
 | `ai-speak-signal` | — | — | 主动说话：用 `proactive_speak_prompt` 作为输入，先回 `full-text` "AI wants to speak something..."，且 `skip_history=true`（**这轮不写入历史**）（`conversation_handler.py:82-94,113-114`） |
-| `interrupt-signal` | `text`: string | 否，默认 `""` | 打断。`text` = 用户**实际听到**的那部分 AI 回复，会被写入历史并告知 agent（`websocket_handler.py:490-513`、`conversation_handler.py:175-202`） |
+| `interrupt-signal` | `text`: string | 否，默认 `""` | 打断。`text` = 用户**实际听到**的那部分 AI 回复。若回复已生成完毕（已落库），打断只停止播放、不再写历史；否则把听到的部分写入**该轮开始时**的历史并告知 agent（`websocket_handler.py:490-513`、`conversation_handler.py:175-213`） |
 | `frontend-playback-complete` | 无 | — | **必须实现**。回放完成回执，见 5.2 |
 
 `images` 数组元素结构（`websocket_handler.py:698-715`，枚举 `agent/input_types.py`）：
@@ -228,6 +228,7 @@ Cookie（`auth/manager.py`）：
 - 服务端用 `request_id=None` 等待，所以**客户端不要带 `request_id` 字段**（带了就匹配不上，等于没发）。
 - 不发也不会报错，但每轮对话会白等 120s，群聊会卡住所有成员。
 - 应在**本轮所有音频实际播放完毕后**发送（不是收到就发），否则群聊口型同步和轮次节奏会错。
+- 这个回执只决定 `force-new-message` / `conversation-chain-end` 的时机，**不影响历史落库**：AI 回复在文本生成完毕时已经写入（见 12.3），所以播放期间切历史/断线不会丢回复。
 
 ### 5.3 麦克风音频
 
@@ -719,14 +720,17 @@ LLM 被提示在句子里插入方括号关键字（提示词 `prompts/utils/liv
 - `delete-history` 删掉当前活动历史后也被置 `None`（`websocket_handler.py:614-615`）。
 - 两种空值（`""` / `None`）对落库判断等效，`store_history_message` 都会直接返回（`service_context.py:269-270`）。
 - `fetch-and-set-history` 除了返回消息，还会把该历史的消息灌进 agent 记忆（`agent_engine.set_memory`）并设为活动历史（`service_context.py:243-260`）。
+- **一轮对话的写入绑定到该轮开始时的 `history_uid`**（`single_conversation.py:49-112`）。播放期间切到别的历史不会把这条回复写到新历史；但新历史的 `set_memory` 会替换 agent 工作记忆，所以客户端切历史前应先打断进行中的一轮（见 12.3）。
 
 ### 12.3 消息写入时机
 
 | 场景 | 写入内容 |
 | --- | --- |
-| 正常一轮 | `role:"human"`（用户输入文本，含 ASR 结果）+ `role:"ai"`（完整回复） |
+| 正常一轮 | `role:"human"`（用户输入文本，含 ASR 结果）在轮次开始时写入；`role:"ai"`（完整回复）在**文本生成完毕时立即写入**，早于 TTS 播放结束与 `frontend-playback-complete` |
 | 主动说话 `ai-speak-signal` | **都不写**（`skip_history`） |
-| 打断 | `role:"ai"` = 用户听到的部分 + `role:"system"` = `[Interrupted by user]` |
+| 打断（回复尚未生成完） | `role:"ai"` = 用户听到的部分 + `role:"system"` = `[Interrupted by user]`，写入该轮开始时的历史 |
+| 打断（回复已生成完、只是播放没结束） | **不写**：完整回复已在生成完毕时落库，打断只停播放 |
+| 切历史 / 新建历史 / 换角色前 | 客户端应先发 `interrupt-signal` 收尾进行中的一轮；否则旧一轮的音画会串到新会话，且 agent 记忆被换掉 |
 | 群聊 | 人类输入写给发起者；AI 回复写给**所有成员**各自的历史 |
 
 `role:"system"` 的消息在 `history-data` 返回时被过滤，但会进 agent 记忆。
@@ -1046,6 +1050,7 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 
 - [ ] 历史抽屉：`fetch-history-list` → 渲染 `uid` / `latest_message.content` / `timestamp`
 - [ ] 打开历史：`fetch-and-set-history`，用 `history-data.messages` 重建气泡
+- [ ] 切换 / 新建历史或角色前，若本轮仍在生成或播放，先发 `interrupt-signal` 并停止本地音频、字幕、口型，避免旧轮串台
 - [ ] 新建 / 删除历史
 - [ ] 角色切换：`fetch-configs` → `switch-config`，切换后重新选/建历史，并**保留旧的 `client_uid`**
 - [ ] 背景：`fetch-backgrounds` → `/bg/<file>`

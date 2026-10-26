@@ -16,6 +16,8 @@ class AudioPlayer {
   private synthComplete = false;
   // 每轮打断递增；旧载荷的播放循环和进度回调据此自行退出
   private epoch = 0;
+  // 只有新一轮 chain-start 之后才接收载荷，避免打断后仍在路上的旧音频被重播
+  private accepting = false;
   private currentAudio: HTMLAudioElement | null = null;
   private finishCurrent: (() => void) | null = null;
   private rafId = 0;
@@ -25,6 +27,11 @@ class AudioPlayer {
   resetChain() {
     this.heardBase = '';
     this.heardPartial = '';
+    this.accepting = true;
+  }
+
+  isActive(): boolean {
+    return this.draining || this.queue.length > 0 || this.currentAudio !== null;
   }
 
   getHeardText(): string {
@@ -32,11 +39,13 @@ class AudioPlayer {
   }
 
   enqueue(p: AudioPayload) {
+    if (!this.accepting) return;
     this.queue.push(p);
     void this.drain();
   }
 
   notifySynthComplete() {
+    if (!this.accepting) return;
     this.synthComplete = true;
     this.maybeAck();
   }
@@ -48,6 +57,7 @@ class AudioPlayer {
 
   stopAll() {
     this.epoch += 1;
+    this.accepting = false;
     this.synthComplete = false;
     this.queue.length = 0;
     try {

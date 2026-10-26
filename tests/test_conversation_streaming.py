@@ -189,5 +189,70 @@ class SingleStreamTests(unittest.IsolatedAsyncioTestCase):
         context.store_history_message.assert_not_awaited()
 
 
+class SingleHistoryWriteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reply_is_persisted_to_turn_history_before_playback_wait(self):
+        events = []
+        channels = OutboundChannels(text=AsyncMock(), audio=AsyncMock())
+        context = SimpleNamespace(
+            character_config=SimpleNamespace(
+                character_name="AI",
+                avatar=None,
+                human_name="Human",
+                conf_uid="conf",
+            ),
+            agent_engine=_FakeAgent(
+                [
+                    {"type": "text_delta", "text": "回答"},
+                    _sentence("回答。"),
+                ]
+            ),
+            asr_engine=None,
+            live2d_model=None,
+            tts_engine=None,
+            translate_engine=None,
+            history_uid="history-a",
+            channels=channels,
+        )
+
+        async def store(role, content, name=None, avatar=None, history_uid=None):
+            events.append(("store", role, content, history_uid))
+
+        async def finalize(**_kwargs):
+            # 模拟播放期间用户切到另一条历史
+            context.history_uid = "history-b"
+            events.append(("finalize", None, None, None))
+
+        context.store_history_message = AsyncMock(side_effect=store)
+
+        with (
+            patch.object(
+                conversation_utils,
+                "process_agent_output",
+                new=AsyncMock(return_value="回答。"),
+            ),
+            patch.object(
+                single_conversation,
+                "finalize_conversation_turn",
+                new=finalize,
+            ),
+        ):
+            await single_conversation.process_single_conversation(
+                context=context,
+                channels=channels,
+                client_uid="client",
+                user_input="你好",
+            )
+
+        self.assertEqual(
+            events,
+            [
+                ("store", "human", "你好", "history-a"),
+                ("store", "ai", "回答。", "history-a"),
+                ("finalize", None, None, None),
+            ],
+        )
+        self.assertTrue(context.turn_response_persisted)
+
+
 if __name__ == "__main__":
     unittest.main()

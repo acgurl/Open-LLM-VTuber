@@ -54,6 +54,22 @@ class ServiceContextHistoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.context.history_uid, history_uid)
         self.assertEqual(self.agent.metadata["role"], "metadata")
 
+    async def test_store_history_message_accepts_an_explicit_history_uid(self):
+        old_history = await self.context.history.create_history("conf")
+        current_history = await self.context.history.create_history("conf")
+        self.context.history_uid = current_history
+
+        await self.context.store_history_message(
+            "ai", "旧历史回复", history_uid=old_history
+        )
+
+        old_messages = await self.context.history.get_history("conf", old_history)
+        current_messages = await self.context.history.get_history(
+            "conf", current_history
+        )
+        self.assertEqual([m["content"] for m in old_messages], ["旧历史回复"])
+        self.assertEqual(current_messages, [])
+
     async def test_load_history_rejects_unknown_id_without_switching(self):
         self.context.history_uid = "current"
         with self.assertRaises(ValueError):

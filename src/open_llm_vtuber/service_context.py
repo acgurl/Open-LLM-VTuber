@@ -105,6 +105,10 @@ class ServiceContext:
         self.history_repository: HistoryRepository | None = None
         self.history: UserHistoryStore | None = None
         self.user_id: str | None = DEFAULT_USER_ID
+        # The active turn keeps writing to the history it started in, even if
+        # another history is opened while its audio is still playing.
+        self.turn_history_uid: str | None = None
+        self.turn_response_persisted: bool = False
 
         # TTS is normally shared from the default context. A session that
         # switches to a different TTS config creates its own engine and must be
@@ -472,12 +476,14 @@ class ServiceContext:
         content: str,
         name: str | None = None,
         avatar: str | None = None,
+        history_uid: str | None = None,
     ) -> None:
-        if self.history is None or not self.history_uid:
+        target_uid = history_uid if history_uid is not None else self.history_uid
+        if self.history is None or not target_uid:
             return
         await self.history.store_message(
             self.character_config.conf_uid,
-            self.history_uid,
+            target_uid,
             role=role,
             content=content,
             name=name,
