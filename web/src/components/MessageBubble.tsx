@@ -53,7 +53,11 @@ export function MessageBubble({ entry }: { entry: ChatTextEntry }) {
       </div>
       <div className="bubble-stack">
         <div className={`bubble ${entry.streaming ? 'streaming' : ''}`}>
-          {isAi ? <AiText text={entry.text} tagSet={tagSet} /> : <PlainText text={entry.text} />}
+          {isAi ? (
+            <AiText text={entry.text} tagSet={tagSet} streaming={Boolean(entry.streaming)} />
+          ) : (
+            <PlainText text={entry.text} />
+          )}
           {entry.streaming && <span className="caret" />}
         </div>
         <div className="bubble-meta">
@@ -81,13 +85,21 @@ function PlainText({ text }: { text: string }) {
   return <div className="bubble-text plain">{text}</div>;
 }
 
-function AiText({ text, tagSet }: { text: string; tagSet: Set<string> }) {
+function AiText({
+  text,
+  tagSet,
+  streaming,
+}: {
+  text: string;
+  tagSet: Set<string>;
+  streaming: boolean;
+}) {
   const blocks = splitThink(text);
   return (
     <>
       {blocks.map((b, i) =>
         b.kind === 'think' ? (
-          <ThinkBlock key={i} text={b.text} />
+          <ThinkBlock key={i} text={b.text} active={streaming && b.closed === false} />
         ) : (
           <TaggedMarkdown key={i} text={b.text} tagSet={tagSet} />
         ),

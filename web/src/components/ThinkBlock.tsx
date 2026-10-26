@@ -1,9 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-export function ThinkBlock({ text }: { text: string }) {
+// 思考中自动展开，思考结束（active 转 false）自动收起；手动展开后保持用户选择
+export function ThinkBlock({ text, active = false }: { text: string; active?: boolean }) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(active);
+  const wasActive = useRef(active);
+
+  useEffect(() => {
+    if (wasActive.current && !active) setOpen(false);
+    wasActive.current = active;
+  }, [active]);
+
   return (
     <div className={`think-block ${open ? 'open' : ''}`}>
       <button className="think-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>

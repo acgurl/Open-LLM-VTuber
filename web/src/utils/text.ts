@@ -45,6 +45,8 @@ export function stripTags(text: string, tagSet: Set<string>): string {
 export interface ThinkBlock {
   kind: 'normal' | 'think';
   text: string;
+  // think 块是否已遇到 </think>；流式期间未闭合的块仍在生成
+  closed?: boolean;
 }
 
 export function splitThink(text: string): ThinkBlock[] {
@@ -55,12 +57,16 @@ export function splitThink(text: string): ThinkBlock[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const seg = text.slice(last, m.index);
-    if (seg) out.push({ kind: inThink ? 'think' : 'normal', text: seg });
+    if (seg) {
+      out.push(inThink ? { kind: 'think', text: seg, closed: true } : { kind: 'normal', text: seg });
+    }
     inThink = m[0].toLowerCase() === '<think>';
     last = m.index + m[0].length;
   }
   const tail = text.slice(last);
-  if (tail) out.push({ kind: inThink ? 'think' : 'normal', text: tail });
+  if (tail) {
+    out.push(inThink ? { kind: 'think', text: tail, closed: false } : { kind: 'normal', text: tail });
+  }
   return out;
 }
 
