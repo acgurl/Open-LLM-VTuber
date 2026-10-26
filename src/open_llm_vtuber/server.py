@@ -82,6 +82,10 @@ class CORSStaticFiles(StarletteStaticFiles):
 
         if path.endswith(".js"):
             response.headers["Content-Type"] = "application/javascript"
+        elif path.endswith(".woff2"):
+            response.headers["Content-Type"] = "font/woff2"
+        elif path.endswith(".woff"):
+            response.headers["Content-Type"] = "font/woff"
 
         return response
 
