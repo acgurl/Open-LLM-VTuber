@@ -3,9 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#06070c" />
+    <meta name="theme-color" content="#121212" />
     <title>Open-LLM-VTuber</title>
-    <!-- 首屏前先落主题，避免深色闪白；键名与 src/utils/storage.ts、src/stores/theme.ts 保持一致。 -->
+    <link rel="preload" href="/fonts/dm-sans-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/comfortaa-latin.woff2" as="font" type="font/woff2" crossorigin />
+    <!-- 首屏前先落主题与色相，避免闪白和颜色跳变；键名与 src/utils/storage.ts、src/stores/theme.ts 保持一致。 -->
     <script>
       (function () {
         try {
@@ -19,8 +21,13 @@
           var theme = light ? 'light' : 'dark';
           document.documentElement.dataset.theme = theme;
           document.documentElement.style.colorScheme = theme;
+          document.documentElement.style.background = light ? '#f7f8fb' : '#121212';
           var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.content = light ? '#edf1f7' : '#06070c';
+          if (meta) meta.content = light ? '#f7f8fb' : '#121212';
+          var hue = parseFloat(localStorage.getItem(prefix + 'theme.hue'));
+          if (isFinite(hue)) {
+            document.documentElement.style.setProperty('--hue', hue.toFixed(2));
+          }
         } catch (e) {
           /* localStorage 不可用时按深色渲染 */
         }

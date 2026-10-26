@@ -64,6 +64,7 @@
     "noBackground": "无背景",
     "appearance": "外观",
     "theme": "主题",
+    "accent": "强调色",
     "themeAuto": "跟随系统",
     "themeLight": "白天",
     "themeDark": "黑夜",

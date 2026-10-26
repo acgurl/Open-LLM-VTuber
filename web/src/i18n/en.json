@@ -64,6 +64,7 @@
     "noBackground": "None",
     "appearance": "Appearance",
     "theme": "Theme",
+    "accent": "Accent color",
     "themeAuto": "System",
     "themeLight": "Light",
     "themeDark": "Dark",

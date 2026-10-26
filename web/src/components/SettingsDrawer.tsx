@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettings } from '../stores/settings';
 import { useConnection } from '../stores/connection';
@@ -20,6 +20,9 @@ import i18n from '../i18n';
 import { usePresence } from '../hooks/usePresence';
 import { McpPanel } from './McpPanel';
 
+// 预设色相：默认蓝紫，其余覆盖常见角色主题色
+const HUE_PRESETS = [220.44, 265, 320, 12, 150, 190];
+
 export function SettingsDrawer() {
   const { t } = useTranslation();
   const open = useSettings((s) => s.settingsOpen);
@@ -37,6 +40,8 @@ export function SettingsDrawer() {
   const setScrollToResize = useSettings((s) => s.setScrollToResize);
   const themeMode = useTheme((s) => s.mode);
   const setThemeMode = useTheme((s) => s.setMode);
+  const hue = useTheme((s) => s.hue);
+  const setHue = useTheme((s) => s.setHue);
   const displayName = useConnection((s) => s.displayName);
   const presence = usePresence(open, 220);
 
@@ -129,6 +134,26 @@ export function SettingsDrawer() {
                 <option value="dark">{t('settings.themeDark')}</option>
               </select>
             </label>
+            <div className="hue-setting">
+              <span>{t('settings.accent')}</span>
+              <div className="hue-row" role="group" aria-label={t('settings.accent')}>
+                {HUE_PRESETS.map((preset) => {
+                  const active = Math.abs(hue - preset) < 0.5;
+                  return (
+                    <button
+                      key={preset}
+                      type="button"
+                      className={`hue-dot${active ? ' active' : ''}`}
+                      style={{ '--dot-hue': String(preset) } as CSSProperties}
+                      aria-label={`${t('settings.accent')} ${Math.round(preset)}°`}
+                      aria-pressed={active}
+                      title={`${Math.round(preset)}°`}
+                      onClick={() => setHue(preset)}
+                    />
+                  );
+                })}
+              </div>
+            </div>
           </section>
 
           <section>
