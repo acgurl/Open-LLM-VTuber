@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useConnection } from './stores/connection';
 import { useSettings } from './stores/settings';
 import { fetchSession, redirectToLogin } from './services/session';
@@ -14,6 +15,7 @@ import { SettingsDrawer } from './components/SettingsDrawer';
 import { Toasts } from './components/Toasts';
 
 export default function App() {
+  const { t } = useTranslation();
   const status = useConnection((s) => s.status);
   const background = useSettings((s) => s.background);
 
@@ -46,6 +48,7 @@ export default function App() {
     <div className="app">
       {background && <div className="bg-layer" style={{ backgroundImage: `url(${background})` }} />}
       <Live2DStage />
+      <div className="atmosphere" aria-hidden="true" />
       <TopBar />
       <CameraWindow />
       <ChatOverlay />
@@ -54,7 +57,11 @@ export default function App() {
       <HistoryDrawer />
       <SettingsDrawer />
       <Toasts />
-      {status === 'failed' && <div className="boot-failure">backend unreachable</div>}
+      {status === 'failed' && (
+        <div className="boot-failure" role="status">
+          {t('boot.unreachable')}
+        </div>
+      )}
     </div>
   );
 }

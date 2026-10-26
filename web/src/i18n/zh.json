@@ -2,6 +2,14 @@
   "app": {
     "title": "Open-LLM-VTuber"
   },
+  "boot": {
+    "unreachable": "无法连接后端"
+  },
+  "chat": {
+    "latest": "回到最新",
+    "copy": "复制消息",
+    "copied": "已复制"
+  },
   "status": {
     "connecting": "连接中…",
     "online": "已连接",
@@ -16,6 +24,7 @@
     "micStarting": "麦克风启动中…"
   },
   "input": {
+    "message": "消息",
     "placeholder": "说点什么…",
     "send": "发送",
     "stop": "打断",
@@ -26,6 +35,7 @@
     "sourceUpload": "上传图片",
     "sourceCamera": "拍照",
     "sourceScreen": "屏幕截图",
+    "removeImage": "移除图片",
     "imageTooMany": "最多附加 4 张图片",
     "imageTooLarge": "图片过大（单张上限 8 MiB）",
     "tooLong": "消息过长（上限 4000 字）"
@@ -97,6 +107,7 @@
     "you": "我",
     "inviteHint": "在另一个标签页打开本页面，然后把它的连接 ID 粘贴到这里邀请。",
     "thisId": "本页连接 ID",
+    "copyId": "复制连接 ID",
     "invitePlaceholder": "对方的 client_uid",
     "invite": "邀请",
     "remove": "移出",

@@ -2,6 +2,14 @@
   "app": {
     "title": "Open-LLM-VTuber"
   },
+  "boot": {
+    "unreachable": "Backend unreachable"
+  },
+  "chat": {
+    "latest": "Jump to latest",
+    "copy": "Copy message",
+    "copied": "Copied"
+  },
   "status": {
     "connecting": "Connecting…",
     "online": "Connected",
@@ -16,6 +24,7 @@
     "micStarting": "Starting microphone…"
   },
   "input": {
+    "message": "Message",
     "placeholder": "Say something…",
     "send": "Send",
     "stop": "Interrupt",
@@ -26,6 +35,7 @@
     "sourceUpload": "Upload image",
     "sourceCamera": "Camera",
     "sourceScreen": "Screenshot",
+    "removeImage": "Remove image",
     "imageTooMany": "At most 4 images per message",
     "imageTooLarge": "Image too large (8 MiB max each)",
     "tooLong": "Message too long (4000 chars max)"
@@ -97,6 +107,7 @@
     "you": "Me",
     "inviteHint": "Open this page in another tab and paste its connection ID here to invite it.",
     "thisId": "This tab's connection ID",
+    "copyId": "Copy connection ID",
     "invitePlaceholder": "Peer client_uid",
     "invite": "Invite",
     "remove": "Remove",

@@ -37,8 +37,11 @@ export function HistoryDrawer() {
 
   return (
     <>
-      <div
+      <button
+        type="button"
         className={`drawer-mask${presence.closing ? ' closing' : ''}`}
+        aria-label={t('drawer.close')}
+        tabIndex={-1}
         onClick={() => setOpen(false)}
       />
       <aside className={`drawer left${presence.closing ? ' closing' : ''}`}>
@@ -63,25 +66,30 @@ export function HistoryDrawer() {
             <div
               key={h.uid}
               className={`history-item ${h.uid === currentUid ? 'current' : ''}`}
-              onClick={() => {
-                openHistory(h.uid);
-                setOpen(false);
-              }}
             >
-              <div className="history-snippet">{snippet(h.latest_message?.content)}</div>
-              <div className="history-meta">
-                <span>{h.timestamp ?? h.latest_message?.timestamp ?? ''}</span>
-                <button
-                  className="history-delete"
-                  aria-label={t('history.delete')}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (window.confirm(t('history.confirmDelete'))) deleteHistory(h.uid);
-                  }}
-                >
-                  <TrashIcon />
-                </button>
-              </div>
+              <button
+                type="button"
+                className="history-open"
+                onClick={() => {
+                  openHistory(h.uid);
+                  setOpen(false);
+                }}
+              >
+                <span className="history-snippet">{snippet(h.latest_message?.content)}</span>
+                <span className="history-meta">
+                  <span>{h.timestamp ?? h.latest_message?.timestamp ?? ''}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                className="history-delete"
+                aria-label={t('history.delete')}
+                onClick={() => {
+                  if (window.confirm(t('history.confirmDelete'))) deleteHistory(h.uid);
+                }}
+              >
+                <TrashIcon />
+              </button>
             </div>
           ))}
         </div>

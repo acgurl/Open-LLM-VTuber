@@ -33,7 +33,9 @@ interface ChatState {
   appendAiDelta: (delta: string, name?: string, avatar?: string) => void;
   finalizeStream: () => void;
   upsertTool: (t: Omit<ToolEntry, 'kind' | 'id'>) => void;
-  loadHistory: (msgs: { role: string; content: string; name?: string; avatar?: string }[]) => void;
+  loadHistory: (
+    msgs: { role: string; content: string; name?: string; avatar?: string; timestamp?: string }[],
+  ) => void;
   clear: () => void;
 }
 
@@ -94,16 +96,19 @@ export const useChat = create<ChatState>((set) => ({
     set(() => ({
       entries: msgs
         .filter((m) => m.role === 'human' || m.role === 'ai')
-        .map((m) => ({
-          kind: 'text' as const,
-          id: nextId(),
-          role: m.role as 'human' | 'ai',
-          text: m.content,
-          name: m.name,
-          avatar: m.avatar,
-          ts: Date.now(),
-          streaming: false,
-        })),
+        .map((m) => {
+          const parsed = m.timestamp ? Date.parse(m.timestamp) : NaN;
+          return {
+            kind: 'text' as const,
+            id: nextId(),
+            role: m.role as 'human' | 'ai',
+            text: m.content,
+            name: m.name,
+            avatar: m.avatar,
+            ts: Number.isFinite(parsed) ? parsed : Date.now(),
+            streaming: false,
+          };
+        }),
     })),
 
   clear: () => set({ entries: [] }),

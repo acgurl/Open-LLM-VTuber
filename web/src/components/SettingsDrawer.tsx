@@ -49,8 +49,11 @@ export function SettingsDrawer() {
 
   return (
     <>
-      <div
+      <button
+        type="button"
         className={`drawer-mask${presence.closing ? ' closing' : ''}`}
+        aria-label={t('drawer.close')}
+        tabIndex={-1}
         onClick={() => setOpen(false)}
       />
       <aside className={`drawer right${presence.closing ? ' closing' : ''}`}>
@@ -88,6 +91,7 @@ export function SettingsDrawer() {
             <div className="bg-grid">
               <button
                 className={`bg-cell ${background === null ? 'active' : ''}`}
+                aria-pressed={background === null}
                 onClick={() => setBackground(null)}
               >
                 {t('settings.noBackground')}
@@ -98,9 +102,11 @@ export function SettingsDrawer() {
                   <button
                     key={f}
                     className={`bg-cell ${background === url ? 'active' : ''}`}
+                    aria-label={f}
+                    aria-pressed={background === url}
                     onClick={() => setBackground(url)}
                   >
-                    <img src={url} alt={f} loading="lazy" />
+                    <img src={url} alt="" width={160} height={100} loading="lazy" />
                   </button>
                 );
               })}
@@ -188,7 +194,10 @@ function GroupPanel() {
         <span className="group-label">{t('group.thisId')}</span>
         <code className="group-uid">{clientUid ?? '—'}</code>
         <button
+          type="button"
           className="mini-btn"
+          aria-label={t('group.copyId')}
+          title={t('group.copyId')}
           disabled={!clientUid}
           onClick={() => clientUid && void navigator.clipboard?.writeText(clientUid)}
         >
@@ -214,6 +223,10 @@ function GroupPanel() {
       <div className="group-row">
         <input
           className="group-input"
+          name="peer-uid"
+          autoComplete="off"
+          spellCheck={false}
+          aria-label={t('group.invitePlaceholder')}
           placeholder={t('group.invitePlaceholder')}
           value={inviteUid}
           onChange={(e) => setInviteUid(e.target.value)}

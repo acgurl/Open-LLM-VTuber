@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConnection } from '../stores/connection';
 import { useSettings } from '../stores/settings';
@@ -28,6 +28,14 @@ export function InputBar() {
   const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
   const mediaMenuPresence = usePresence(mediaMenuOpen, 140);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    const el = textRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
+  }, [text]);
 
   const grabAndAdd = async (source: 'camera' | 'screen') => {
     setMediaMenuOpen(false);
@@ -123,8 +131,14 @@ export function InputBar() {
         <div className="image-strip">
           {images.map((img, i) => (
             <div key={i} className="image-thumb">
-              <img src={img.preview} alt="" />
-              <button className="image-remove" onClick={() => removeImage(i)}>
+              <img src={img.preview} alt="" width={60} height={60} />
+              <button
+                type="button"
+                className="image-remove"
+                aria-label={t('input.removeImage')}
+                title={t('input.removeImage')}
+                onClick={() => removeImage(i)}
+              >
                 ×
               </button>
             </div>
@@ -137,6 +151,7 @@ export function InputBar() {
             className="icon-btn"
             title={t('input.uploadImage')}
             aria-label={t('input.uploadImage')}
+            aria-expanded={mediaMenuOpen}
             onClick={() => setMediaMenuOpen((v) => !v)}
           >
             <ImageIcon />
@@ -162,6 +177,7 @@ export function InputBar() {
           accept="image/*"
           multiple
           hidden
+          aria-label={t('input.uploadImage')}
           onChange={(e) => {
             const files = Array.from(e.target.files ?? []);
             for (const f of files) void addImage(f, 'upload', f.type || 'image/png');
@@ -169,10 +185,14 @@ export function InputBar() {
           }}
         />
         <textarea
+          ref={textRef}
           className="input-text"
+          name="message"
           rows={1}
           value={text}
           placeholder={t('input.placeholder')}
+          aria-label={t('input.message')}
+          autoComplete="off"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
           onPaste={onPaste}

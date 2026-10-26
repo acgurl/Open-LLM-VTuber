@@ -135,8 +135,10 @@ export function McpPanel() {
       <div className="mcp-hint">{t('settings.mcp.jsonHint')}</div>
       <textarea
         className="mcp-editor"
+        name="mcp-config"
         rows={12}
         value={text}
+        aria-label={t('settings.mcp.title')}
         spellCheck={false}
         placeholder={EXAMPLE}
         onChange={(event) => setText(event.target.value)}

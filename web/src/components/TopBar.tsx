@@ -17,6 +17,7 @@ export function TopBar() {
   const status = useConnection((s) => s.status);
   const confName = useConnection((s) => s.confName);
   const statusText = useConnection((s) => s.statusText);
+  const busy = useConnection((s) => s.busy);
   const ttsOn = useSettings((s) => s.ttsOn);
   const setTtsOn = useSettings((s) => s.setTtsOn);
   const setHistoryOpen = useSettings((s) => s.setHistoryOpen);
@@ -39,10 +40,14 @@ export function TopBar() {
         <MenuIcon />
       </button>
       <div className="topbar-middle">
-        <div className="topbar-center">
+        <div className={`topbar-center${busy ? ' busy' : ''}`}>
           <span className={DOT_CLASS[status] ?? 'dot'} />
           <span className="topbar-name">{confName || t('app.title')}</span>
-          {statusText && <span className="topbar-status">{statusText}</span>}
+          {statusText && (
+            <span className="topbar-status" aria-live="polite">
+              {statusText}
+            </span>
+          )}
         </div>
         <button
           className={`icon-btn tts-toggle${ttsOn ? '' : ' off'}`}
