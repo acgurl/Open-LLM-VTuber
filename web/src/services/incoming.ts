@@ -46,8 +46,9 @@ export function handleServerMessage(msg: ServerMessage) {
     }
 
     case 'full-text': {
+      // 连接建立由状态点表达，不占用状态文字
+      if (msg.text === 'Connection established') break;
       const map: Record<string, string> = {
-        'Connection established': t('status.connectionEstablished'),
         'Thinking...': t('status.thinking'),
         'AI wants to speak something...': t('status.proactive'),
       };
@@ -75,6 +76,7 @@ export function handleServerMessage(msg: ServerMessage) {
 
     case 'text-delta':
       chat.appendAiDelta(msg.text, msg.name, msg.avatar);
+      if (conn.busy) conn.setStatusText(t('status.answering'));
       break;
 
     case 'tool_call_status':
@@ -86,6 +88,11 @@ export function handleServerMessage(msg: ServerMessage) {
         timestamp: msg.timestamp,
         name: msg.name,
       });
+      if (conn.busy) {
+        conn.setStatusText(
+          msg.status === 'running' ? t('status.toolRunning') : t('status.thinking'),
+        );
+      }
       break;
 
     case 'audio':
@@ -158,6 +165,7 @@ export function handleServerMessage(msg: ServerMessage) {
       audioPlayer.stopAll();
       chat.finalizeStream();
       conn.setBusy(false);
+      conn.setStatusText('');
       break;
 
     case 'heartbeat-ack':

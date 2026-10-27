@@ -436,8 +436,34 @@ html[data-theme='light'] .app::after {
   color: var(--muted);
   font-size: 0.8rem;
   white-space: nowrap;
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.topbar-status:empty {
+  display: none;
+}
+
+.topbar-status-text {
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
+  animation: status-swap 220ms var(--ease-spring);
+}
+
+/* 状态切换时 keyed 节点重建，进入动画自然重放；清空时直接消失不留残影 */
+@keyframes status-swap {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
 }
 
 .topbar .tts-toggle,

@@ -47,6 +47,7 @@ export const useConnection = create<ConnectionState>((set) => ({
   setWelcomeMessage: (welcomeMessage) => set({ welcomeMessage }),
   setDisplayName: (displayName) => set({ displayName }),
   setUserId: (userId) => set({ userId }),
-  setStatusText: (statusText) => set({ statusText }),
+  setStatusText: (statusText) =>
+    set((s) => (s.statusText === statusText ? s : { statusText })),
   setBusy: (busy) => set({ busy }),
 }));

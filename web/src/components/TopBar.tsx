@@ -46,11 +46,13 @@ export function TopBar() {
         <div className={`topbar-center${busy ? ' busy' : ''}`}>
           <span className={DOT_CLASS[status] ?? 'dot'} />
           <span className="topbar-name">{confName || t('app.title')}</span>
-          {statusText && (
-            <span className="topbar-status" aria-live="polite">
-              {statusText}
-            </span>
-          )}
+          <span className="topbar-status" aria-live="polite">
+            {statusText && (
+              <span className="topbar-status-text" key={statusText}>
+                {statusText}
+              </span>
+            )}
+          </span>
         </div>
         <button
           className={`icon-btn tts-toggle${ttsOn ? '' : ' off'}`}
