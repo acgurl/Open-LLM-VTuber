@@ -15,6 +15,14 @@ export function ChatOverlay() {
   const firstId = useRef<string | null>(null);
   const [showJump, setShowJump] = useState(false);
   const [unread, setUnread] = useState(false);
+  const [fade, setFade] = useState({ top: false, bottom: false });
+
+  // 只有真的还有内容在视区外时才淡出边缘，否则短会话的首尾会被雾化
+  const syncFade = (el: HTMLDivElement) => {
+    const top = el.scrollTop > 4;
+    const bottom = el.scrollHeight - el.scrollTop - el.clientHeight > 4;
+    setFade((prev) => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
+  };
 
   // 用户停在底部时始终吸底；主动上翻后不再抢滚动位置，只提示有新内容
   useEffect(() => {
@@ -36,10 +44,24 @@ export function ChatOverlay() {
         setShowJump(true);
         setUnread(true);
       }
+      syncFade(el);
       return;
     }
     el.scrollTop = el.scrollHeight;
+    syncFade(el);
   }, [entries]);
+
+  // 面板高度随内容/视口变化时补一次吸底，否则上一条的阅读位置会被新高度打乱
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      if (pinned.current) el.scrollTop = el.scrollHeight;
+      syncFade(el);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const onScroll = () => {
     const el = ref.current;
@@ -52,6 +74,7 @@ export function ChatOverlay() {
     pinned.current = near;
     setShowJump(!near && el.scrollHeight > el.clientHeight + 8);
     if (near) setUnread(false);
+    syncFade(el);
   };
 
   const jumpToLatest = () => {
@@ -65,7 +88,9 @@ export function ChatOverlay() {
   };
 
   return (
-    <div className="chat-shell">
+    <div
+      className={`chat-shell${fade.top ? ' fade-top' : ''}${fade.bottom ? ' fade-bottom' : ''}`}
+    >
       <div className="chat-overlay" ref={ref} onScroll={onScroll}>
         {entries.map((e: ChatEntry) =>
           e.kind === 'text' ? (
