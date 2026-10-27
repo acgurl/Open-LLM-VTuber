@@ -65,6 +65,8 @@ export function handleServerMessage(msg: ServerMessage) {
         conn.setBusy(true);
         audioPlayer.resetChain();
       } else if (msg.text === 'conversation-chain-end') {
+        // 一轮结束即收尾流式气泡，否则回答停了光标还在闪
+        chat.finalizeStream();
         conn.setBusy(false);
         conn.setStatusText('');
       } else if (msg.text === 'interrupt') {

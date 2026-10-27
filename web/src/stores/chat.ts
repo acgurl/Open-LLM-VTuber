@@ -27,6 +27,12 @@ export type ChatEntry = ChatTextEntry | ToolEntry;
 let seq = 0;
 const nextId = () => `e${Date.now().toString(36)}_${seq++}`;
 
+// 工具卡会插在文本气泡之后，流式气泡不一定在队尾，收尾时必须全量清理
+const stopStreaming = (entries: ChatEntry[]): ChatEntry[] => {
+  if (!entries.some((e) => e.kind === 'text' && e.streaming)) return entries;
+  return entries.map((e) => (e.kind === 'text' && e.streaming ? { ...e, streaming: false } : e));
+};
+
 interface ChatState {
   entries: ChatEntry[];
   addUserMessage: (text: string, name?: string) => void;
@@ -61,34 +67,29 @@ export const useChat = create<ChatState>((set) => ({
 
   appendAiDelta: (delta, name, avatar) =>
     set((s) => {
-      const entries = [...s.entries];
-      const last = entries[entries.length - 1];
+      const last = s.entries[s.entries.length - 1];
       if (last && last.kind === 'text' && last.role === 'ai' && last.streaming) {
-        entries[entries.length - 1] = { ...last, text: last.text + delta };
-        return { entries };
+        return { entries: [...s.entries.slice(0, -1), { ...last, text: last.text + delta }] };
       }
-      entries.push({
-        kind: 'text',
-        id: nextId(),
-        role: 'ai',
-        text: delta,
-        name,
-        avatar,
-        ts: Date.now(),
-        streaming: true,
-      });
-      return { entries };
+      // 旧气泡已被工具卡或消息隔断，不再增长，先收尾再另起一条
+      return {
+        entries: [
+          ...stopStreaming(s.entries),
+          {
+            kind: 'text',
+            id: nextId(),
+            role: 'ai',
+            text: delta,
+            name,
+            avatar,
+            ts: Date.now(),
+            streaming: true,
+          },
+        ],
+      };
     }),
 
-  finalizeStream: () =>
-    set((s) => {
-      const entries = [...s.entries];
-      const last = entries[entries.length - 1];
-      if (last && last.kind === 'text' && last.streaming) {
-        entries[entries.length - 1] = { ...last, streaming: false };
-      }
-      return { entries };
-    }),
+  finalizeStream: () => set((s) => ({ entries: stopStreaming(s.entries) })),
 
   upsertTool: (t) =>
     set((s) => {
@@ -98,7 +99,8 @@ export const useChat = create<ChatState>((set) => ({
         entries[idx] = { ...(entries[idx] as ToolEntry), ...t };
         return { entries };
       }
-      return { entries: [...s.entries, { kind: 'tool', id: nextId(), ...t }] };
+      // 新工具卡意味着这段文本已经说完，后续 text-delta 会另起气泡
+      return { entries: [...stopStreaming(s.entries), { kind: 'tool', id: nextId(), ...t }] };
     }),
 
   loadHistory: (msgs) =>

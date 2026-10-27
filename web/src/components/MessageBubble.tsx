@@ -50,7 +50,6 @@ export function MessageBubble({ entry }: { entry: ChatTextEntry }) {
           ) : (
             <PlainText text={entry.text} />
           )}
-          {entry.streaming && <span className="caret" />}
         </div>
         <div className="bubble-meta">
           <time dateTime={new Date(entry.ts).toISOString()}>
@@ -87,20 +86,35 @@ function AiText({
   streaming: boolean;
 }) {
   const blocks = splitThink(text);
+  // 光标跟最后一段可见文本走，否则会作为块级兄弟掉到下一行
+  const lastNormal = blocks.reduce((acc, b, i) => (b.kind === 'normal' ? i : acc), -1);
   return (
     <>
       {blocks.map((b, i) =>
         b.kind === 'think' ? (
           <ThinkBlock key={i} text={b.text} active={streaming && b.closed === false} />
         ) : (
-          <TaggedMarkdown key={i} text={b.text} tagSet={tagSet} />
+          <TaggedMarkdown
+            key={i}
+            text={b.text}
+            tagSet={tagSet}
+            caret={streaming && i === lastNormal}
+          />
         ),
       )}
     </>
   );
 }
 
-function TaggedMarkdown({ text, tagSet }: { text: string; tagSet: Set<string> }) {
+function TaggedMarkdown({
+  text,
+  tagSet,
+  caret,
+}: {
+  text: string;
+  tagSet: Set<string>;
+  caret?: boolean;
+}) {
   const tokens = splitByTags(text, tagSet);
   return (
     <div className="bubble-text">
@@ -115,6 +129,7 @@ function TaggedMarkdown({ text, tagSet }: { text: string; tagSet: Set<string> })
           </ReactMarkdown>
         ),
       )}
+      {caret && <span className="caret" />}
     </div>
   );
 }
