@@ -57,6 +57,10 @@ export function handleServerMessage(msg: ServerMessage) {
 
     case 'control': {
       if (msg.text === 'conversation-chain-start') {
+        // 新一轮开始：上一轮若还有声音在播或排队（客户端漏发打断时会出现），
+        // 先停掉再接收新音频，否则旧 TTS 会排在新语音前面继续读完
+        if (audioPlayer.isActive()) audioPlayer.stopAll();
+        chat.finalizeStream();
         conn.setBusy(true);
         audioPlayer.resetChain();
       } else if (msg.text === 'conversation-chain-end') {

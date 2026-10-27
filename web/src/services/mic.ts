@@ -3,6 +3,7 @@ import { useSettings } from '../stores/settings';
 import { useConnection } from '../stores/connection';
 import { wsClient } from './websocket';
 import { interrupt } from './actions';
+import { audioPlayer } from './audioPlayer';
 import { camera } from './camera';
 import type { ImagePayload } from '../protocol/types';
 import i18n from '../i18n';
@@ -67,8 +68,8 @@ class MicController {
           onnxWASMBasePath: assetBase(),
           onSpeechStart: () => {
             this.speaking = true;
-            // barge-in：AI 正在说话时用户开口 → 打断
-            if (useConnection.getState().busy) interrupt();
+            // barge-in：AI 还在生成或播放时用户开口 → 打断
+            if (useConnection.getState().busy || audioPlayer.isActive()) interrupt();
           },
           onSpeechEnd: () => {
             this.speaking = false;
@@ -110,6 +111,9 @@ class MicController {
 
   // 实况摄像头开着时，本轮语音再附一帧画面
   private async endTurn() {
+    // 和文字发送一致：提交本轮前补一次打断。用户开口时新一轮 chain-start 可能还没到
+    // （busy 仍为 false），那次 barge-in 会漏判，这里保证旧 TTS 不会压在新一轮前面
+    if (useConnection.getState().busy || audioPlayer.isActive()) interrupt();
     const images: ImagePayload[] = [];
     if (camera.isLive) {
       const frame = await camera.grabImage().catch(() => null);
