@@ -23,6 +23,8 @@ export interface ModelInfo {
   initialYshift?: number;
   kXOffset?: number;
   idleMotionGroupName?: string;
+  frameHeightRatio?: number;
+  frameTopRatio?: number;
   defaultEmotion?: number | string;
   pointerInteractive?: boolean;
   scrollToResize?: boolean;

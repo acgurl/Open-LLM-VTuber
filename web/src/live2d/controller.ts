@@ -15,6 +15,7 @@ const DRAG_THRESHOLD_PX = 5;
 const TAP_MAX_MS = 350;
 // 默认构图：头部与上半身取景。轮廓高度取视口的 1.39 倍，头顶固定在 12% 处，
 // 下半身溢出视口自然裁掉；窄屏时退回宽度上限，保证不会左右切到模型。
+// 半身像等轮廓较矮的模型可在 model_dict 里用 frameHeightRatio / frameTopRatio 覆盖。
 const FRAME_HEIGHT_RATIO = 1.39;
 const FRAME_TOP_RATIO = 0.12;
 const FRAME_WIDTH_RATIO = 0.92;
@@ -455,8 +456,10 @@ class Live2DController {
     const canvasW = internal.width || model.width || 1;
     const canvasH = internal.height || model.height || 1;
     const content = this.contentBounds ?? { x: 0, y: 0, width: canvasW, height: canvasH };
+    const heightRatio = this.info?.frameHeightRatio ?? FRAME_HEIGHT_RATIO;
+    const topRatio = this.info?.frameTopRatio ?? FRAME_TOP_RATIO;
     this.baseScale = Math.min(
-      (h * FRAME_HEIGHT_RATIO) / content.height,
+      (h * heightRatio) / content.height,
       (w * FRAME_WIDTH_RATIO) / content.width,
     );
     this.contentCenter = {
@@ -465,7 +468,7 @@ class Live2DController {
     };
     this.frameCenter = {
       x: w / 2,
-      y: h * FRAME_TOP_RATIO + (content.height * this.baseScale) / 2,
+      y: h * topRatio + (content.height * this.baseScale) / 2,
     };
     this.applyTransform();
   }

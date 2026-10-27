@@ -669,6 +669,8 @@ LLM 被提示在句子里插入方括号关键字（提示词 `prompts/utils/liv
 | `initialXshift` / `initialYshift` | number | 画布偏移（同上，当前前端不使用） |
 | `kXOffset` | number | 水平偏移（同上，当前前端不使用） |
 | `idleMotionGroupName` | string | 待机动作组名，如 `"Idle"` |
+| `frameHeightRatio` | number（可选） | 构图覆盖：可见轮廓高度 = 视口高度 × 该值，默认 `1.39`。半身像等轮廓较矮的模型调小（如 `0.86`）即可拉远 |
+| `frameTopRatio` | number（可选） | 构图覆盖：轮廓顶部在视口中的位置比例，默认 `0.12` |
 | `defaultEmotion` | number / string（可选） | 一轮对话结束后回落的表情；缺省使用第 0 个表情 |
 | `emotionMap` | object | 情绪关键字 → **表情索引（int）**。可为 `{}` |
 | `motionMap` | object | 动作关键字 → `{"group": string, "index"?: int}`。可为 `{}` |
@@ -1039,7 +1041,7 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 
 **Live2D / 表现层**
 
-- [ ] 用 `model_info.url` 加载模型，按渲染出的可见轮廓自动构图（主体约占视口高度 81%、顶部留白 10%）；缩放/拖拽/移动端双指缩放自行实现
+- [ ] 用 `model_info.url` 加载模型，按渲染出的可见轮廓自动构图（默认轮廓高 = 视口高度 × `frameHeightRatio`（1.39）、顶部留白 `frameTopRatio`（12%）；两个字段均可按模型覆盖）；缩放/拖拽/移动端双指缩放自行实现
 - [ ] `volumes` + `slice_length` + `lipSyncGain` 驱动口型
 - [ ] `actions.expressions`（索引数组）/ `actions.motions`（`{group,index?}` 数组）驱动表情动作
 - [ ] `idleMotionGroupName` 待机动作、`tapMotions` 点击区域
