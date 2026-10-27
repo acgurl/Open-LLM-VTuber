@@ -788,6 +788,7 @@ class ServiceContext:
             "model_info": self.live2d_model.model_info if self.live2d_model else {},
             "conf_name": self.character_config.conf_name,
             "conf_uid": self.character_config.conf_uid,
+            "welcome_message": self.character_config.welcome_message,
         }
         if client_uid is not None:
             payload["client_uid"] = client_uid

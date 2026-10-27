@@ -39,6 +39,7 @@ export function handleServerMessage(msg: ServerMessage) {
         groupBridge.setUid(msg.client_uid);
       }
       conn.setModelConf(msg.model_info ?? {}, msg.conf_name ?? '', msg.conf_uid ?? '');
+      conn.setWelcomeMessage(msg.welcome_message ?? '');
       saveCachedModel(msg.model_info ?? null);
       void live2d.load(msg.model_info ?? null);
       break;
@@ -107,9 +108,15 @@ export function handleServerMessage(msg: ServerMessage) {
       chat.loadHistory(msg.messages ?? []);
       break;
 
-    case 'new-history-created':
+    case 'new-history-created': {
       useHistory.getState().setCurrentUid(msg.history_uid);
+      // 欢迎语只进入当前这轮新会话，纯文本不触发 TTS，也不落库
+      const welcome = useConnection.getState().welcomeMessage.trim();
+      if (welcome && useChat.getState().entries.length === 0) {
+        useChat.getState().addAiMessage(welcome);
+      }
       break;
+    }
 
     case 'history-deleted':
       useHistory.getState().removeHistory(msg.history_uid);

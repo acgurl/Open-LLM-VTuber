@@ -19,6 +19,7 @@ class CharacterConfig(I18nMixin):
     character_name: str = Field(default="", alias="character_name")
     human_name: str = Field(default="Human", alias="human_name")
     avatar: str = Field(default="", alias="avatar")
+    welcome_message: str = Field(default="", alias="welcome_message")
     persona_prompt: str = Field(..., alias="persona_prompt")
     agent_config: AgentConfig = Field(..., alias="agent_config")
     asr_config: ASRConfig = Field(..., alias="asr_config")
@@ -66,6 +67,10 @@ class CharacterConfig(I18nMixin):
         ),
         "avatar": Description(
             en="Avatar image path for the character", zh="角色头像图片路径"
+        ),
+        "welcome_message": Description(
+            en="Text-only greeting shown in chat when a new session starts (not spoken)",
+            zh="新会话开始时显示在聊天中的纯文本欢迎语（不会语音朗读）",
         ),
     }
 

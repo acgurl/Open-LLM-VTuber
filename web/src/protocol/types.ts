@@ -116,6 +116,7 @@ export type ServerMessage =
       model_info: ModelInfo;
       conf_name: string;
       conf_uid: string;
+      welcome_message?: string;
       client_uid?: string;
     }
   | { type: 'config-switched'; message: string }

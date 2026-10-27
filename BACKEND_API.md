@@ -320,11 +320,13 @@ Cookie（`auth/manager.py`）：
   "model_info": { "name": "nahida", "url": "/live2d-models/...", "lipSyncGain": 1.2, "emotionMap": {}, "motionMap": {}, "...": "..." },
   "conf_name": "纳西妲",
   "conf_uid": "zh_nahida_01",
+  "welcome_message": "你好呀，我是 AIRI～...",
   "client_uid": "6f1c...-uuid"
 }
 ```
 
 - `model_info` 是 `model_dict.json` 里的**整个条目原样**；未配置 Live2D 时为 `{}`
+- `welcome_message` 是角色配置里的可选纯文本欢迎语（默认空串）。前端应在**新会话建立**（`new-history-created`）且聊天为空时把非空值渲染成一条 AI 气泡；它不经过 TTS，也不写入对话历史
 - **`client_uid` 只在"连接建立"和"响应 `request-init-config`"时存在**；`switch-config` 之后推送的那条**不带 `client_uid`**（`service_context.py:686`）。前端必须缓存首次拿到的 `client_uid`，切换角色时不要覆盖成 undefined。
 
 **`config-switched`** — `{ "type":"config-switched", "message":"Switched to config: <file>" }`（`service_context.py:688-695`），紧跟在 `set-model-and-conf` 之后。
@@ -773,6 +775,8 @@ character_config:
   live2d_model_name: "nahida"  # 必须能在 model_dict.json 里找到
   avatar: "xxx.png"            # 可选，avatars/ 下的文件名
   human_name: "Human"          # 可选
+  welcome_message: |           # 可选，新会话里的纯文本欢迎语（不朗读）
+    ...
   persona_prompt: |
     ...
   # 可选覆盖：agent_config / asr_config / tts_config / vad_config / tts_preprocessor_config

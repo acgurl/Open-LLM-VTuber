@@ -30,6 +30,7 @@ const nextId = () => `e${Date.now().toString(36)}_${seq++}`;
 interface ChatState {
   entries: ChatEntry[];
   addUserMessage: (text: string, name?: string) => void;
+  addAiMessage: (text: string, name?: string, avatar?: string) => void;
   appendAiDelta: (delta: string, name?: string, avatar?: string) => void;
   finalizeStream: () => void;
   upsertTool: (t: Omit<ToolEntry, 'kind' | 'id'>) => void;
@@ -47,6 +48,14 @@ export const useChat = create<ChatState>((set) => ({
       entries: [
         ...s.entries,
         { kind: 'text', id: nextId(), role: 'human', text, name, ts: Date.now() },
+      ],
+    })),
+
+  addAiMessage: (text, name, avatar) =>
+    set((s) => ({
+      entries: [
+        ...s.entries,
+        { kind: 'text', id: nextId(), role: 'ai', text, name, avatar, ts: Date.now() },
       ],
     })),
 

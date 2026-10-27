@@ -49,7 +49,9 @@ class Live2DFallbackTests(unittest.IsolatedAsyncioTestCase):
     def test_model_payload_tolerates_missing_model(self):
         context = ServiceContext()
         context.live2d_model = None
-        context.character_config = SimpleNamespace(conf_name="Conf", conf_uid="uid")
+        context.character_config = SimpleNamespace(
+            conf_name="Conf", conf_uid="uid", welcome_message=""
+        )
 
         self.assertEqual(
             context.model_conf_payload(),
@@ -58,6 +60,7 @@ class Live2DFallbackTests(unittest.IsolatedAsyncioTestCase):
                 "model_info": {},
                 "conf_name": "Conf",
                 "conf_uid": "uid",
+                "welcome_message": "",
             },
         )
 
