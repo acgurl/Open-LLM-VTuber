@@ -288,6 +288,14 @@ class WebSocketServer:
 
             self.history_repository = repository
             await self.default_context_cache.load_from_config(self.config)
+            base_character = getattr(self.config, "character_config", None)
+            if getattr(base_character, "allowed_users", None):
+                logger.warning(
+                    "character_config.allowed_users in conf.yaml has no effect: "
+                    "every session starts on the default character. Restrict "
+                    "characters by adding allowed_users to the presets in "
+                    "characters/*.yaml."
+                )
         except Exception:
             await repository.close()
             self.history_repository = None

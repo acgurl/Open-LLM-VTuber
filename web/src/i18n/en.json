@@ -69,6 +69,8 @@
     "ttsOff": "Turn speech on",
     "language": "Language",
     "account": "Account",
+    "userId": "User ID",
+    "copyUserId": "Copy user ID",
     "logout": "Log out",
     "group": "Group chat",
     "speech": "Speech",
@@ -153,6 +155,7 @@
     "Server is busy, please try again shortly": "Server is busy, please retry shortly",
     "Audio input is too long; the recording was discarded": "Recording too long and was discarded; please re-record",
     "Failed to switch configuration": "Failed to switch character",
+    "Character not available": "This character is restricted to other users",
     "Invalid request": "Invalid request",
     "Cannot group clients belonging to different users": "Cannot group clients of different users",
     "Only group owner or self can remove members": "Only the owner or the member themself can remove"

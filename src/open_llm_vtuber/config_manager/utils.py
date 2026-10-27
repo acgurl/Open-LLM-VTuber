@@ -1,7 +1,7 @@
 # config_manager/utils.py
 import yaml
 from pathlib import Path
-from typing import Union, Dict, Any, TypeVar
+from typing import Union, Dict, Any, TypeVar, Callable
 from pydantic import BaseModel, ValidationError
 import os
 import re
@@ -139,13 +139,20 @@ def _config_display_name(config: Any, fallback: str) -> str:
     return config.get("character_config", {}).get("conf_name", fallback)
 
 
-def scan_config_alts_directory(config_alts_dir: str) -> list[dict]:
+def scan_config_alts_directory(
+    config_alts_dir: str,
+    is_allowed: Callable[[dict], bool] | None = None,
+) -> list[dict]:
     """
     Scan the config_alts directory and return a list of config information.
     Each config info contains the filename and its display name from the config.
 
     Parameters:
     - config_alts_dir (str): The path to the config_alts directory.
+    - is_allowed: Optional predicate receiving a preset's raw
+      ``character_config`` mapping; presets it rejects are omitted. The
+      ``conf.yaml`` entry is always listed because it is the deployment-wide
+      default character.
 
     Returns:
     - list[dict]: A list of dicts containing config info:
@@ -184,6 +191,18 @@ def scan_config_alts_directory(config_alts_dir: str) -> list[dict]:
             except Exception as e:
                 logger.error(f"Failed to read character config {full_path}: {e}")
                 name = relative_path
+            else:
+                if is_allowed is not None:
+                    character_config = (
+                        config.get("character_config")
+                        if isinstance(config, dict)
+                        else None
+                    )
+                    if not is_allowed(
+                        character_config if isinstance(character_config, dict) else {}
+                    ):
+                        logger.debug(f"Hiding character config {full_path}")
+                        continue
 
             config_files.append({"filename": relative_path, "name": name})
 

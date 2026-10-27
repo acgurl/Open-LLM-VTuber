@@ -67,7 +67,9 @@ are not part of this repository.
 - **MCP tools** — deployment-managed stdio/HTTP servers, per-user HTTP/SSE servers configured from
   the UI, and browser-local servers for endpoints that the server cannot reach.
 - **Multi-user isolation** — with OIDC enabled, history, user MCP servers, TTS cache files and
-  browser localStorage keys are scoped per user. The default is a single-user, no-login mode.
+  browser localStorage keys are scoped per user. Character presets can be limited to specific
+  accounts with `allowed_users` (see `characters/README.md`). The default is a single-user,
+  no-login mode.
 - **Model coverage** — OpenAI-compatible APIs, Ollama, Gemini, Claude, DeepSeek, Zhipu, Groq,
   Mistral, LM Studio, llama.cpp; ASR via sherpa-onnx, FunASR, Faster-Whisper, Whisper, Groq and
   Azure; TTS via Azure, Edge, MeloTTS, GPT-SoVITS, CosyVoice, Fish Audio, Bark, pyttsx3 and
@@ -180,7 +182,7 @@ through a reverse proxy.
 | Path | Purpose | Tracked |
 | --- | --- | --- |
 | `conf.yaml` | Main runtime configuration: host/port, storage, auth, agent, LLM, ASR, TTS, VAD, default character | No |
-| `characters/*.yaml` | Character presets (persona, model name, avatar, optional engine overrides) | Mostly no |
+| `characters/*.yaml` | Character presets (persona, model name, avatar, optional engine overrides and `allowed_users`) | Mostly no |
 | `model_dict.json` | Live2D model metadata: URL, scale, lip-sync gain, emotion/motion maps | No |
 | `mcp_servers.json` | Deployment-managed MCP servers; may contain tokens | No |
 | `web/` | Frontend source; `npm run build` emits `web/dist` | Yes |
@@ -334,6 +336,11 @@ Git.
 To add a character, copy a preset, change `character_name`, `conf_uid`, `live2d_model_name` and
 `persona_prompt`, then drop the file into `characters/`. The frontend discovers it on the next
 `fetch-configs`.
+
+To keep a preset for selected people, add `allowed_users` with internal user ids (shown under
+Settings → Account) or display names; users that are not listed neither see nor can switch to it.
+Each preset is checked on its own, and the default character in `conf.yaml` stays available to
+everyone.
 
 ## Development
 

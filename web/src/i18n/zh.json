@@ -69,6 +69,8 @@
     "ttsOff": "开启语音",
     "language": "语言",
     "account": "账户",
+    "userId": "用户 ID",
+    "copyUserId": "复制用户 ID",
     "logout": "退出登录",
     "group": "群聊",
     "speech": "语音",
@@ -153,6 +155,7 @@
     "Server is busy, please try again shortly": "服务器繁忙，请稍后再试",
     "Audio input is too long; the recording was discarded": "录音过长，已被丢弃，请重录",
     "Failed to switch configuration": "角色切换失败，请重试",
+    "Character not available": "该角色仅限指定用户使用",
     "Invalid request": "请求无效",
     "Cannot group clients belonging to different users": "不能把不同账户的连接拉进群聊",
     "Only group owner or self can remove members": "只有群主或本人可以移出成员"

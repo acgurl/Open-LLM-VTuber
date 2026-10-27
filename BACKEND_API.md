@@ -265,8 +265,8 @@ Cookie（`auth/manager.py`）：
 
 | type | 字段 | 服务端响应 |
 | --- | --- | --- |
-| `fetch-configs` | 无 | `config-files` |
-| `switch-config` | `file`: string（**键名是 `file`**，不是 `config`/`name`；缺失则静默无响应） | `set-model-and-conf` + `config-switched`，或 `error` |
+| `fetch-configs` | 无 | `config-files`（已按当前用户的角色权限过滤） |
+| `switch-config` | `file`: string（**键名是 `file`**，不是 `config`/`name`；缺失则静默无响应） | `set-model-and-conf` + `config-switched`，或 `error`（无权限时为 `Character not available`） |
 | `request-init-config` | 无 | `set-model-and-conf`（含 `client_uid`） |
 | `fetch-backgrounds` | 无 | `background-files` |
 | `heartbeat` | 无 | `heartbeat-ack` |
@@ -333,12 +333,13 @@ Cookie（`auth/manager.py`）：
 
 **`config-files`** — `{ "type":"config-files", "configs":[{"filename":"conf.yaml","name":"ReLU / AIRI (Hiyori)"}, ...] }`（`websocket_handler.py:748-750`，扫描逻辑 `config_manager/utils.py:142-192`）。
 `configs[0]` 永远是 `conf.yaml`（基础配置），其后按 `filename` 排序；`name` 取自各文件的 `character_config.conf_name`，读不到则回落为相对路径。
+角色预设可用 `character_config.allowed_users` 限定用户（内部 user_id 或显示名，大小写不敏感，空表示公开），列表会按当前会话身份过滤；`conf.yaml` 对应的默认角色不受限制。
 
 **`background-files`** — `{ "type":"background-files", "files":["bg1.png", ...] }`（`websocket_handler.py:766-768`）。只有 basename，需自己拼 `/bg/`。
 
 **`heartbeat-ack`** — `{ "type":"heartbeat-ack" }`，无其它字段。
 
-**`error`** — `{ "type":"error", "message":"<英文文案>" }`。来源：非法请求、音频超限、输入校验失败、服务繁忙、对话异常、配置切换失败；群聊中的错误是**群播**（`group_conversation.py:314-326`）。字段名是 `message`，不是 `text`。
+**`error`** — `{ "type":"error", "message":"<英文文案>" }`。来源：非法请求、音频超限、输入校验失败、服务繁忙、对话异常、配置切换失败、无权使用该角色（`Character not available`）；群聊中的错误是**群播**（`group_conversation.py:314-326`）。字段名是 `message`，不是 `text`。
 
 ### 6.2 轮次控制
 

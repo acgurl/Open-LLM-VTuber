@@ -37,6 +37,7 @@ export default function App() {
         return;
       }
       if (session.display_name) useConnection.getState().setDisplayName(session.display_name);
+      if (session.user_id) useConnection.getState().setUserId(session.user_id);
     })();
     return () => {
       cancelled = true;

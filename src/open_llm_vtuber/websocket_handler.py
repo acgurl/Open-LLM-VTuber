@@ -352,6 +352,7 @@ class WebSocketHandler:
             client_uid=client_uid,
             history_repository=self.default_context_cache.history_repository,
             user_id=identity.user_id,
+            user_display_name=identity.display_name,
             user_mcp_servers=remote_mcp_servers,
             local_mcp_servers=local_mcp_servers,
         )
@@ -788,7 +789,10 @@ class WebSocketHandler:
     ) -> None:
         """Handle fetching available configurations"""
         context = self.client_contexts[client_uid]
-        config_files = scan_config_alts_directory(context.system_config.config_alts_dir)
+        config_files = scan_config_alts_directory(
+            context.system_config.config_alts_dir,
+            is_allowed=context.character_allowed,
+        )
         await websocket.send_text(
             json.dumps({"type": "config-files", "configs": config_files})
         )

@@ -107,6 +107,41 @@ Here is a breakdown of the core fields under `character_config`:
 
       - **Purpose**: These configuration blocks are used to override the corresponding settings in the main `conf.yaml`. You can assign a different ASR model, TTS engine, LLM, or VAD parameters for each character.
 
+## 🔒 Per-User Access Control
+
+A character preset can be limited to specific accounts with `allowed_users`:
+
+```yaml
+# my_private_character.yaml
+character_config:
+  conf_name: 'Private Character'
+  conf_uid: 'private_character_001'
+  character_name: 'Zero'
+  persona_prompt: |
+    ...
+  allowed_users:
+    - '3f2a9c04b1de4c7e8a5f6d7c8b9a0e1f' # internal user id
+    - '刘豫森'                              # or the OIDC display name
+```
+
+Rules:
+
+  - Omitted or empty (`allowed_users: []`) means the character is public.
+  - Tokens are compared case-insensitively against both the internal user id
+    (shown as **User ID** in Settings → Account, also returned by
+    `/api/session`) and the OIDC display name. Prefer the user id: display
+    names can change.
+  - Users that are not listed do not see the preset in the character list and
+    cannot switch to it; the server rejects the switch even if the filename is
+    sent directly.
+  - Each preset is checked against its **own** `allowed_users`. The default
+    `character_config` in the root `conf.yaml` is the character every session
+    starts on, so it is always available and its `allowed_users` is ignored —
+    put restricted characters in this directory instead.
+  - This only controls character selection. Live2D model files under
+    `/live2d-models/` and avatars under `/avatars/` are served as public static
+    assets, so anyone who knows a file URL can still fetch it.
+
 ## 💡 Best Practices
 
   - **Start by Copying**: The easiest way to get started is to duplicate an existing `.yaml` file and modify its contents with your `conf.yaml` content.

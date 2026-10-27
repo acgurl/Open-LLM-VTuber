@@ -41,6 +41,7 @@ export function SettingsDrawer() {
   const hue = useTheme((s) => s.hue);
   const setHue = useTheme((s) => s.setHue);
   const displayName = useConnection((s) => s.displayName);
+  const userId = useConnection((s) => s.userId);
   const presence = usePresence(open, 220);
 
   useEffect(() => {
@@ -198,6 +199,23 @@ export function SettingsDrawer() {
           <section>
             <h3>{t('settings.account')}</h3>
             {displayName && <div className="account-name">{displayName}</div>}
+            {userId && (
+              <div className="group-row">
+                <span className="group-label">{t('settings.userId')}</span>
+                <code className="group-uid" title={userId}>
+                  {userId}
+                </code>
+                <button
+                  type="button"
+                  className="mini-btn"
+                  aria-label={t('settings.copyUserId')}
+                  title={t('settings.copyUserId')}
+                  onClick={() => void navigator.clipboard?.writeText(userId)}
+                >
+                  ⧉
+                </button>
+              </div>
+            )}
             <button className="drawer-action danger" onClick={logout}>
               {t('settings.logout')}
             </button>

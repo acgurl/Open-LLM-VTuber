@@ -20,6 +20,9 @@ class CharacterConfig(I18nMixin):
     human_name: str = Field(default="Human", alias="human_name")
     avatar: str = Field(default="", alias="avatar")
     welcome_message: str = Field(default="", alias="welcome_message")
+    # Empty means public. Only presets in characters/ are checked against this
+    # list; the conf.yaml default character is always available.
+    allowed_users: list[str] = Field(default_factory=list, alias="allowed_users")
     persona_prompt: str = Field(..., alias="persona_prompt")
     agent_config: AgentConfig = Field(..., alias="agent_config")
     asr_config: ASRConfig = Field(..., alias="asr_config")
@@ -71,6 +74,17 @@ class CharacterConfig(I18nMixin):
         "welcome_message": Description(
             en="Text-only greeting shown in chat when a new session starts (not spoken)",
             zh="新会话开始时显示在聊天中的纯文本欢迎语（不会语音朗读）",
+        ),
+        "allowed_users": Description(
+            en=(
+                "Users allowed to select this character (internal user id or "
+                "display name). Empty means everyone. Only applies to presets "
+                "in characters/."
+            ),
+            zh=(
+                "允许使用该角色的用户（内部用户 ID 或显示名）。留空表示所有用户可用，"
+                "仅对 characters/ 下的角色预设生效。"
+            ),
         ),
     }
 

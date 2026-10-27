@@ -57,6 +57,7 @@ from .config_manager import (
     read_yaml,
     validate_config,
 )
+from .config_manager.access import is_user_allowed
 
 
 class ServiceContext:
@@ -105,6 +106,9 @@ class ServiceContext:
         self.history_repository: HistoryRepository | None = None
         self.history: UserHistoryStore | None = None
         self.user_id: str | None = DEFAULT_USER_ID
+        # Used to match character allowlists by name; the session cookie only
+        # carries the display name, not the email or OIDC subject.
+        self.user_display_name: str | None = None
         # The active turn keeps writing to the history it started in, even if
         # another history is opened while its audio is still playing.
         self.turn_history_uid: str | None = None
@@ -516,6 +520,7 @@ class ServiceContext:
         client_uid: str = None,
         history_repository: HistoryRepository | None = None,
         user_id: str | None = DEFAULT_USER_ID,
+        user_display_name: str | None = None,
         user_mcp_servers: list[dict] | None = None,
         local_mcp_servers: list[dict] | None = None,
     ) -> None:
@@ -551,6 +556,7 @@ class ServiceContext:
         # Engines passed in by load_cache are shared with the default context.
         self._owns_tts_engine = False
         self.set_history_storage(history_repository, user_id)
+        self.user_display_name = user_display_name
 
         # Initialize session-specific MCP components
         await self._init_mcp_components(
@@ -781,6 +787,21 @@ class ServiceContext:
 
     # ==== utils
 
+    def character_allowed(self, character_config: dict) -> bool:
+        """Whether this session may use a preset's raw ``character_config``.
+
+        Called with the preset YAML as written, never the merged config, so a
+        preset that omits ``allowed_users`` stays public instead of inheriting
+        the base character's list.
+        """
+        if not isinstance(character_config, dict):
+            return True
+        return is_user_allowed(
+            character_config.get("allowed_users"),
+            self.user_id,
+            self.user_display_name,
+        )
+
     def model_conf_payload(self, client_uid: str | None = None) -> dict:
         """Build the set-model-and-conf payload for the current character."""
         payload = {
@@ -853,16 +874,29 @@ class ServiceContext:
         - config_file_name (str): The name of the configuration file.
         """
         try:
-            character_config_data = self._load_character_config_data(config_file_name)
+            character_config_data, raw_character_config = (
+                self._load_character_config_data(config_file_name)
+            )
+            if not self.character_allowed(raw_character_config):
+                logger.warning(
+                    f"User {self.user_id} is not allowed to use character "
+                    f"{config_file_name}"
+                )
+                await self._send_config_switch_error(
+                    websocket, "Character not available"
+                )
+                return
             await self._apply_character_config(character_config_data)
             await self._notify_config_switched(websocket, config_file_name)
         except Exception as e:
             self._log_config_switch_error(e)
             await self._send_config_switch_error(websocket)
 
-    def _load_character_config_data(self, config_file_name: str) -> Any:
+    def _load_character_config_data(self, config_file_name: str) -> tuple[Any, dict]:
+        """Return the merged character config plus the preset's own raw mapping."""
         if config_file_name == "conf.yaml":
             character_config_data = read_yaml("conf.yaml").get("character_config")
+            raw_character_config: dict = {}
         else:
             # Resolve inside the character presets directory; the raw client
             # string must not be able to reach anywhere else (including
@@ -878,6 +912,7 @@ class ServiceContext:
             alt_config_data = read_yaml(str(file_path)).get("character_config")
             if not isinstance(alt_config_data, dict):
                 raise ValueError("Character config must be a mapping")
+            raw_character_config = alt_config_data
 
             # Merge against the base config every time. Using the current
             # (already merged) config makes overrides leak across switches.
@@ -890,7 +925,7 @@ class ServiceContext:
         if not character_config_data:
             raise ValueError(f"Failed to load configuration from {config_file_name}")
 
-        return character_config_data
+        return character_config_data, raw_character_config
 
     async def _apply_character_config(self, character_config_data: Any) -> None:
         new_config = validate_config(
@@ -933,13 +968,16 @@ class ServiceContext:
             )
 
     @staticmethod
-    async def _send_config_switch_error(websocket: WebSocket) -> None:
+    async def _send_config_switch_error(
+        websocket: WebSocket,
+        message: str = "Failed to switch configuration",
+    ) -> None:
         try:
             await websocket.send_text(
                 json.dumps(
                     {
                         "type": "error",
-                        "message": "Failed to switch configuration",
+                        "message": message,
                     }
                 )
             )

@@ -283,7 +283,7 @@ system_config:
 - 登录：`/auth/login` → Casdoor authorization code + nonce/state → `/auth/callback`（校验 state/nonce/ID Token 签名、iss/aud/exp）→ 设置 HMAC 签名 `vtuber_session` Cookie（HttpOnly/Secure/SameSite=Lax，默认 7 天）。
 - 身份：`user_identities(provider, subject)` 映射 Casdoor issuer+sub 到内部随机 user_id；所有历史读写仍经 `UserHistoryStore(user_id)`。
 - 访问控制：`/`、`/web-tool`、`/model_dict.json`、`/cache` 需要登录；`/healthz`、`/auth/*`、`/api/session`、`/assets/`、`/libs/`、`/live2d-models/`、`/bg/`、`/avatars/` 公开。`/client-ws`、`/tts-ws` 无会话关闭 4401，`/audio-ws` 关闭 1008，OIDC 模式校验 Origin。
-- 每用户主 WS 连接上限 4（`auth.max_connections_per_user`）；群组只允许同一 user_id 互邀；角色预设对所有已登录用户开放。
+- 每用户主 WS 连接上限 4（`auth.max_connections_per_user`）；群组只允许同一 user_id 互邀；角色预设默认对所有已登录用户开放，可用 `characters/*.yaml` 里的 `allowed_users`（内部 user_id 或显示名）限定用户，见 `characters/README.md`。
 - `ServiceContext._owns_tts_engine` 修复共享 TTS 被某个会话切预设关闭的问题。
 
 ### 代码入口
