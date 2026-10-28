@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChat, type ChatEntry } from '../stores/chat';
+import { useConnection } from '../stores/connection';
 import { MessageBubble } from './MessageBubble';
 import { ToolCallCard } from './ToolCallCard';
 
@@ -9,6 +10,7 @@ const NEAR_BOTTOM_PX = 72;
 export function ChatOverlay() {
   const { t } = useTranslation();
   const entries = useChat((s) => s.entries);
+  const busy = useConnection((s) => s.busy);
   const ref = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const jumping = useRef(false);
@@ -16,6 +18,10 @@ export function ChatOverlay() {
   const [showJump, setShowJump] = useState(false);
   const [unread, setUnread] = useState(false);
   const [fade, setFade] = useState({ top: false, bottom: false });
+
+  // 刚发出去、还没有任何回答片段时显示输入气泡；一旦有文本或工具卡就收起
+  const last = entries[entries.length - 1];
+  const awaiting = busy && last?.kind === 'text' && last.role === 'human';
 
   // 只有真的还有内容在视区外时才淡出边缘，否则短会话的首尾会被雾化
   const syncFade = (el: HTMLDivElement) => {
@@ -63,6 +69,14 @@ export function ChatOverlay() {
     return () => ro.disconnect();
   }, []);
 
+  // 输入气泡出现/消失不经过 entries，需要单独补一次吸底
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (pinned.current) el.scrollTop = el.scrollHeight;
+    syncFade(el);
+  }, [awaiting]);
+
   const onScroll = () => {
     const el = ref.current;
     if (!el) return;
@@ -98,6 +112,19 @@ export function ChatOverlay() {
           ) : (
             <ToolCallCard key={e.id} entry={e} />
           ),
+        )}
+        {awaiting && (
+          <div className="bubble-row ai typing-row" aria-hidden="true">
+            <div className="bubble-stack">
+              <div className="bubble typing-bubble">
+                <span className="typing-dots">
+                  <i />
+                  <i />
+                  <i />
+                </span>
+              </div>
+            </div>
+          </div>
         )}
       </div>
       {showJump && (

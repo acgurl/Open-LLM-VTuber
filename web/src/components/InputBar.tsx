@@ -124,6 +124,7 @@ export function InputBar() {
 
   // 群聊中一轮未结束时禁发
   const sendDisabled = inGroup && busy;
+  const hasContent = text.trim().length > 0 || images.length > 0;
 
   return (
     <div className="input-bar">
@@ -145,7 +146,7 @@ export function InputBar() {
           ))}
         </div>
       )}
-      <div className="input-row">
+      <div className={`input-row${hasContent ? ' filled' : ''}`}>
         <div className="media-anchor">
           <button
             className="icon-btn"

@@ -19,6 +19,26 @@
   src: url('/assets/fonts/comfortaa-latin-v1.woff2') format('woff2');
 }
 
+/* 注册后可插值的变量：换色相、聊天区雾化边缘都能平滑过渡而不是硬切。
+   不支持的浏览器会退化为瞬时切换，不影响布局与可读性。 */
+@property --hue {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 220.44;
+}
+
+@property --fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
 :root {
   color-scheme: dark;
   --hue: 220.44;
@@ -149,6 +169,13 @@ html[data-theme='light'] {
 html {
   height: 100%;
   background: var(--bg);
+  /* 换强调色时整屏派生色一起转过去，而不是闪一下 */
+  transition: --hue 520ms var(--ease-spring);
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 34%, transparent);
+  color: var(--ink);
 }
 
 html,
@@ -208,6 +235,17 @@ button {
   z-index: 0;
   background-size: cover;
   background-position: center;
+  /* 换背景时淡入，避免舞台背后直接跳到另一张图 */
+  animation: bg-in 640ms ease-out;
+}
+
+@keyframes bg-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* 壁纸压一层中性薄雾，任意背景都能托住人物和玻璃 UI */
@@ -400,6 +438,15 @@ html[data-theme='light'] .app::after {
   box-shadow: var(--shadow-float), 0 0 30px -14px var(--accent-glow);
 }
 
+/* 忙碌时标题和状态一起被主色轻轻“点亮”，与状态点、扫光形成同一组信号 */
+.topbar-center.busy .topbar-name {
+  color: color-mix(in oklab, var(--ink) 82%, var(--accent));
+}
+
+.topbar-center.busy .topbar-status {
+  color: color-mix(in oklab, var(--muted) 42%, var(--accent));
+}
+
 .topbar-center.busy::after {
   content: '';
   position: absolute;
@@ -411,7 +458,7 @@ html[data-theme='light'] .app::after {
     transparent 68%
   );
   transform: translateX(-100%);
-  animation: sheen 2.2s linear infinite;
+  animation: sheen 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
   pointer-events: none;
 }
 
@@ -430,6 +477,7 @@ html[data-theme='light'] .app::after {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+  transition: color 280ms var(--ease-snap);
 }
 
 .topbar-status {
@@ -439,6 +487,7 @@ html[data-theme='light'] .app::after {
   display: flex;
   min-width: 0;
   overflow: hidden;
+  transition: color 280ms var(--ease-snap);
 }
 
 .topbar-status:empty {
@@ -556,6 +605,31 @@ html[data-theme='light'] .app::after {
   cursor: default;
 }
 
+/* 图标按下时缩一下，按钮外壳的位移与图标的形变错开，手感更实 */
+.icon-btn > svg {
+  transition: transform 240ms var(--ease-spring);
+}
+
+.icon-btn:active:not(:disabled) > svg {
+  transform: scale(0.84);
+}
+
+/* 日夜图标切换时转进来，替代硬切 */
+.theme-toggle > svg {
+  animation: icon-turn 520ms var(--ease-spring);
+}
+
+@keyframes icon-turn {
+  from {
+    opacity: 0;
+    transform: rotate(-70deg) scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 /* ---------- 聊天区 ---------- */
 .chat-shell {
   position: fixed;
@@ -579,6 +653,10 @@ html[data-theme='light'] .app::after {
   scrollbar-color: var(--scroll-thumb) transparent;
   --fade-top: 0px;
   --fade-bottom: 0px;
+  /* 雾化高度本身可以插值，滚动越过阈值时边缘是渐显而不是跳变 */
+  transition:
+    --fade-top 260ms var(--ease-snap),
+    --fade-bottom 260ms var(--ease-snap);
   mask-image: linear-gradient(
     to bottom,
     transparent,
@@ -676,18 +754,56 @@ html[data-theme='light'] .app::after {
   animation: pulse 1.4s ease-in-out infinite;
 }
 
+.scroll-jump svg {
+  transition: transform 220ms var(--ease-spring);
+}
+
 @media (hover: hover) {
   .scroll-jump:hover {
     color: var(--ink);
     border-color: var(--line-strong);
     transform: translate(-50%, -1px);
   }
+
+  .scroll-jump:hover svg {
+    transform: translateY(2px);
+  }
 }
 
 /* ---------- 消息 ---------- */
+/* 入场带方向：AI 从左下浮起并轻微虚化，用户消息从右侧贴入，读起来分得清谁说的 */
 .bubble-row {
   display: flex;
-  animation: message-in 360ms var(--ease-spring) backwards;
+  animation: bubble-in-ai 380ms var(--ease-spring) backwards;
+}
+
+.bubble-row.human {
+  animation-name: bubble-in-human;
+  animation-duration: 320ms;
+}
+
+@keyframes bubble-in-ai {
+  from {
+    opacity: 0;
+    transform: translateY(11px) scale(0.988);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes bubble-in-human {
+  from {
+    opacity: 0;
+    transform: translate(13px, 4px) scale(0.988);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 @keyframes message-in {
@@ -770,6 +886,52 @@ html[data-theme='light'] .app::after {
   }
 }
 
+/* 等待首字：一个安静的“对方正在输入”气泡，收在左下，不与正式回答抢注意力 */
+.typing-bubble {
+  display: inline-flex;
+  align-items: center;
+  padding: 13px 17px;
+  border-color: var(--line-strong);
+}
+
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 8px;
+}
+
+.typing-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.4;
+  animation: typing-bounce 1.25s ease-in-out infinite;
+}
+
+.typing-dots i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.typing-dots i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0) scale(0.9);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1);
+    background: var(--accent);
+  }
+}
+
 .bubble-meta {
   display: flex;
   align-items: center;
@@ -826,6 +988,26 @@ html[data-theme='light'] .app::after {
 .bubble-copy.copied {
   color: var(--ok);
   opacity: 1;
+}
+
+.bubble-copy svg {
+  transition: transform 220ms var(--ease-spring);
+}
+
+.bubble-copy.copied svg {
+  animation: check-pop 380ms var(--ease-spring);
+}
+
+@keyframes check-pop {
+  from {
+    transform: scale(0.5) rotate(-14deg);
+  }
+  62% {
+    transform: scale(1.16) rotate(3deg);
+  }
+  to {
+    transform: none;
+  }
 }
 
 @media (hover: none) {
@@ -957,15 +1139,22 @@ html[data-theme='light'] .app::after {
 
 .bubble-text a[target='_blank']::after {
   content: '↗';
+  display: inline-block;
   margin-left: 2px;
   font-size: 0.8em;
   opacity: 0.6;
+  transition: transform 200ms var(--ease-spring);
 }
 
 @media (hover: hover) {
   .bubble-text a:hover {
     color: var(--accent-strong);
     text-decoration-color: currentColor;
+  }
+
+  .bubble-text a[target='_blank']:hover::after {
+    transform: translate(1.5px, -1.5px);
+    opacity: 1;
   }
 }
 
@@ -982,24 +1171,31 @@ html[data-theme='light'] .app::after {
 .caret {
   display: inline-block;
   width: 2px;
-  height: 1.02em;
+  height: 1.06em;
   margin-left: 4px;
   vertical-align: text-bottom;
   border-radius: 2px;
-  background: linear-gradient(180deg, transparent, var(--accent), transparent);
-  box-shadow: 0 0 9px var(--accent-glow);
-  animation: caret-pulse 0.95s ease-in-out infinite;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--accent) 20%,
+    var(--accent) 80%,
+    transparent
+  );
+  box-shadow: 0 0 10px var(--accent-glow);
+  animation: caret-breathe 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: opacity, transform;
 }
 
-@keyframes caret-pulse {
+@keyframes caret-breathe {
   0%,
   100% {
     opacity: 1;
     transform: scaleY(1);
   }
   50% {
-    opacity: 0.2;
-    transform: scaleY(0.68);
+    opacity: 0.22;
+    transform: scaleY(0.82);
   }
 }
 
@@ -1048,6 +1244,55 @@ html[data-theme='light'] .app::after {
   border-radius: 13px;
   border: 1px solid var(--line);
   background: var(--chip);
+  transition:
+    border-color 260ms var(--ease-snap),
+    background 260ms var(--ease-snap),
+    box-shadow 260ms var(--ease-snap);
+}
+
+/* 正在思考：整块轻微提亮，标签旁给三个跳动的点，说明它是活的 */
+.think-block.active {
+  border-color: var(--accent-line);
+  background: color-mix(in oklab, var(--accent) 7%, var(--chip));
+  box-shadow: 0 0 22px -16px var(--accent-glow);
+}
+
+.think-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 7px;
+  height: 8px;
+}
+
+.think-live i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.35;
+  animation: think-dot 1.15s ease-in-out infinite;
+}
+
+.think-live i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.think-live i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes think-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2.5px);
+  }
 }
 
 .think-block.open {
@@ -1151,12 +1396,51 @@ html[data-theme='light'] .app::after {
   }
 }
 
+/* 状态落定的一次性回执：完成时一圈绿光收掉，出错时一圈红光，不循环 */
 .tool-card.status-completed {
   border-color: color-mix(in oklab, var(--ok) 24%, transparent);
+  animation: tool-settle 520ms var(--ease-spring);
 }
 
 .tool-card.status-error {
   border-color: var(--danger-line);
+  animation: tool-settle-danger 520ms var(--ease-spring);
+}
+
+@keyframes tool-settle {
+  from {
+    box-shadow:
+      0 0 0 0 color-mix(in oklab, var(--ok) 40%, transparent),
+      var(--shadow-soft),
+      var(--shadow-inset);
+  }
+  45% {
+    box-shadow:
+      0 0 26px -6px color-mix(in oklab, var(--ok) 55%, transparent),
+      var(--shadow-soft),
+      var(--shadow-inset);
+  }
+  to {
+    box-shadow: var(--shadow-soft), var(--shadow-inset);
+  }
+}
+
+@keyframes tool-settle-danger {
+  from {
+    box-shadow:
+      0 0 0 0 color-mix(in oklab, var(--danger) 38%, transparent),
+      var(--shadow-soft),
+      var(--shadow-inset);
+  }
+  45% {
+    box-shadow:
+      0 0 26px -6px color-mix(in oklab, var(--danger) 50%, transparent),
+      var(--shadow-soft),
+      var(--shadow-inset);
+  }
+  to {
+    box-shadow: var(--shadow-soft), var(--shadow-inset);
+  }
 }
 
 .tool-head {
@@ -1201,6 +1485,24 @@ html[data-theme='light'] .app::after {
 .tool-dot.error {
   background: var(--danger);
   box-shadow: 0 0 8px color-mix(in oklab, var(--danger) 50%, transparent);
+}
+
+/* 状态点切换时弹一下，让“跑完了/失败了”能被余光捕捉到 */
+.tool-dot.completed,
+.tool-dot.error {
+  animation: dot-pop 360ms var(--ease-spring);
+}
+
+@keyframes dot-pop {
+  from {
+    transform: scale(0.35);
+  }
+  60% {
+    transform: scale(1.35);
+  }
+  to {
+    transform: none;
+  }
 }
 
 @keyframes pulse {
@@ -1284,6 +1586,35 @@ html[data-theme='light'] .app::after {
   box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-float);
 }
 
+/* 输入条平时只有半亮的受光边；有内容（待发送）时整圈提亮，作为“可以发了”的状态提示 */
+.input-row::before {
+  opacity: 0.55;
+  transition: opacity 240ms var(--ease-snap);
+}
+
+.input-row:focus-within::before,
+.input-row.filled::before {
+  opacity: 1;
+}
+
+/* 发送/打断按钮换了角色时弹进来，避免按钮位突然换一个图标 */
+.input-row .send-btn,
+.input-row .stop-btn {
+  animation: btn-pop 300ms var(--ease-spring);
+}
+
+@keyframes btn-pop {
+  from {
+    transform: scale(0.72);
+  }
+  60% {
+    transform: scale(1.05);
+  }
+  to {
+    transform: none;
+  }
+}
+
 /* 输入条内的按钮退成无边框圆形，只保留发送/麦克风的状态高亮 */
 .input-row .icon-btn {
   width: 40px;
@@ -1312,6 +1643,7 @@ html[data-theme='light'] .app::after {
   outline: none;
   background: transparent;
   color: var(--ink);
+  caret-color: var(--accent);
   font: inherit;
   font-size: 0.96rem;
   line-height: 1.55;
@@ -1324,6 +1656,11 @@ html[data-theme='light'] .app::after {
 
 .input-text::placeholder {
   color: var(--faint);
+  transition: opacity 200ms var(--ease-snap);
+}
+
+.input-text:focus::placeholder {
+  opacity: 0.55;
 }
 
 .mic-btn {
@@ -1362,7 +1699,10 @@ html[data-theme='light'] .app::after {
 }
 
 .input-row .stop-btn:not(:disabled) {
-  animation: stop-glow 1.9s ease-in-out infinite;
+  /* 先弹进来，再接力呼吸光，避免两条 animation 互相覆盖 */
+  animation:
+    btn-pop 300ms var(--ease-spring),
+    stop-glow 1.9s 300ms ease-in-out infinite;
 }
 
 @keyframes stop-glow {
@@ -1383,6 +1723,11 @@ html[data-theme='light'] .app::after {
   .input-row .send-btn:not(:disabled):hover {
     transform: translateY(-1px) scale(1.04);
     box-shadow: 0 12px 28px -10px var(--accent-glow), var(--shadow-inset);
+  }
+
+  /* 纸飞机在悬停时朝发送方向轻推 */
+  .input-row .send-btn:not(:disabled):hover > svg {
+    transform: translate(1.5px, -1.5px) rotate(4deg);
   }
 }
 
@@ -1978,6 +2323,64 @@ html[data-theme='light'] .app::after {
   background: var(--chip);
 }
 
+/* 抽屉内容错峰落位：一次编排完成，而不是整块同时跳出来 */
+.drawer-body > section,
+.history-item,
+.drawer-empty {
+  animation: drawer-item-in 320ms var(--ease-spring) backwards;
+}
+
+.drawer-body > section:nth-child(2),
+.history-item:nth-child(2) {
+  animation-delay: 22ms;
+}
+
+.drawer-body > section:nth-child(3),
+.history-item:nth-child(3) {
+  animation-delay: 44ms;
+}
+
+.drawer-body > section:nth-child(4),
+.history-item:nth-child(4) {
+  animation-delay: 66ms;
+}
+
+.drawer-body > section:nth-child(5),
+.history-item:nth-child(5) {
+  animation-delay: 88ms;
+}
+
+.drawer-body > section:nth-child(6),
+.history-item:nth-child(6) {
+  animation-delay: 110ms;
+}
+
+.drawer-body > section:nth-child(7),
+.history-item:nth-child(7) {
+  animation-delay: 132ms;
+}
+
+.drawer-body > section:nth-child(8),
+.history-item:nth-child(8) {
+  animation-delay: 154ms;
+}
+
+/* 长历史列表只编排首屏，后面的条目不再延迟出现 */
+.history-item:nth-child(n + 9) {
+  animation: none;
+}
+
+@keyframes drawer-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .drawer-body section h3 {
   display: flex;
   align-items: center;
@@ -2119,6 +2522,31 @@ html[data-theme='light'] .app::after {
   background: var(--accent-soft);
 }
 
+/* 当前会话在左侧立一条发光短杠，比只换底色更容易一眼定位 */
+.history-item.current::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 11px;
+  bottom: 11px;
+  width: 3px;
+  border-radius: 0 999px 999px 0;
+  background: linear-gradient(180deg, var(--accent), var(--secondary));
+  box-shadow: 0 0 12px -2px var(--accent-glow);
+  animation: bar-grow 360ms var(--ease-spring);
+}
+
+@keyframes bar-grow {
+  from {
+    opacity: 0;
+    transform: scaleY(0.35);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .history-snippet {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -2241,6 +2669,7 @@ html[data-theme='light'] .app::after {
   display: flex;
   align-items: center;
   gap: 8px;
+  animation: content-in 220ms var(--ease-snap);
 }
 
 .bg-grid {
@@ -2302,6 +2731,7 @@ html[data-theme='light'] .app::after {
   border-radius: 50%;
   background: var(--accent);
   box-shadow: 0 0 8px var(--accent-glow);
+  animation: dot-pop 360ms var(--ease-spring);
 }
 
 /* 自定义开关 */
@@ -2441,6 +2871,10 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
     0 6px 16px -6px oklch(62% 0.18 var(--dot-hue) / 0.7);
 }
 
+.hue-dot:active {
+  transform: scale(0.94);
+}
+
 .account-name {
   color: var(--muted);
   margin-bottom: 4px;
@@ -2483,6 +2917,7 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
   border: 1px solid var(--line);
   border-radius: 10px;
   color: var(--ink);
+  caret-color: var(--accent);
   padding: 7px 10px;
   font: inherit;
   font-size: 0.84rem;
@@ -2649,6 +3084,7 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
   border: 1px solid var(--line);
   border-radius: 13px;
   color: var(--ink);
+  caret-color: var(--accent);
   padding: 11px 12px;
   font-family: var(--font-mono);
   font-size: 0.78rem;
@@ -2709,6 +3145,7 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
   color: var(--muted);
   word-break: break-word;
   margin-top: 4px;
+  transition: color 220ms var(--ease-snap);
 }
 
 .mcp-status.connected {
@@ -2760,6 +3197,26 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
   overflow: hidden;
   pointer-events: auto;
   animation: toast-in 300ms var(--ease-spring);
+  transition:
+    transform 200ms var(--ease-spring),
+    border-color 200ms var(--ease-snap),
+    box-shadow 200ms var(--ease-snap);
+}
+
+@media (hover: hover) {
+  .toast:hover {
+    transform: translateY(-1px);
+    border-color: var(--line-strong);
+  }
+}
+
+.toast:active {
+  transform: scale(0.985);
+}
+
+/* 悬停时进度条和计时器一起停住，读完再走 */
+.toast:hover::after {
+  animation-play-state: paused;
 }
 
 .toast::after {

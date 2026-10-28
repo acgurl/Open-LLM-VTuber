@@ -46,7 +46,13 @@ export default function App() {
 
   return (
     <div className="app">
-      {background && <div className="bg-layer" style={{ backgroundImage: `url(${background})` }} />}
+      {background && (
+        <div
+          key={background}
+          className="bg-layer"
+          style={{ backgroundImage: `url(${background})` }}
+        />
+      )}
       <Live2DStage />
       <div className="atmosphere" aria-hidden="true" />
       <TopBar />

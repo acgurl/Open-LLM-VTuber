@@ -13,10 +13,22 @@ export function ThinkBlock({ text, active = false }: { text: string; active?: bo
   }, [active]);
 
   return (
-    <div className={`think-block ${open ? 'open' : ''}`}>
-      <button className="think-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+    <div className={`think-block ${open ? 'open' : ''}${active ? ' active' : ''}`}>
+      <button
+        className="think-toggle"
+        aria-expanded={open}
+        aria-busy={active}
+        onClick={() => setOpen((v) => !v)}
+      >
         <span className="think-chevron">▸</span>
         {t('think.label')}
+        {active && (
+          <span className="think-live" aria-hidden="true">
+            <i />
+            <i />
+            <i />
+          </span>
+        )}
       </button>
       <div className={`collapsible${open ? ' open' : ''}`} aria-hidden={!open}>
         <div className="collapsible-inner">
