@@ -29,6 +29,21 @@ export function InputBar() {
   const mediaMenuPresence = usePresence(mediaMenuOpen, 140);
   const fileRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+
+  // 窄屏聊天区贴输入框上沿，输入条自身会长高（换行、附图条），高度得上报给 CSS
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const apply = () => {
+      document.documentElement.style.setProperty('--input-bar-h', `${el.offsetHeight}px`);
+    };
+    apply();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(apply);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     const el = textRef.current;
@@ -127,7 +142,7 @@ export function InputBar() {
   const hasContent = text.trim().length > 0 || images.length > 0;
 
   return (
-    <div className="input-bar">
+    <div className="input-bar" ref={barRef}>
       {images.length > 0 && (
         <div className="image-strip">
           {images.map((img, i) => (
