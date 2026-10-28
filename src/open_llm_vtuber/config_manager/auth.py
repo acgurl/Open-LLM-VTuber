@@ -24,6 +24,10 @@ class OIDCConfig(BaseModel):
     client_id: str = Field("", alias="client_id")
     client_secret: str = Field("", alias="client_secret")
     redirect_uri: str = Field("", alias="redirect_uri")
+    # Extra registered callbacks for the same client. Login picks the entry
+    # whose host matches the request Host, so one deployment can answer on
+    # several front-door domains (each keeps its own host-only session cookie).
+    redirect_uris: List[str] = Field(default_factory=list, alias="redirect_uris")
     post_logout_redirect_uri: str = Field("", alias="post_logout_redirect_uri")
     scopes: List[str] = Field(
         default_factory=lambda: ["openid", "profile", "email"],
@@ -56,6 +60,22 @@ class OIDCConfig(BaseModel):
     def check_redirect_uri(cls, value: str) -> str:
         # Must match the provider registration byte-for-byte.
         return cls._require_http_url(value, "OIDC redirect URI")
+
+    @field_validator("redirect_uris")
+    @classmethod
+    def check_redirect_uris(cls, value: List[str]) -> List[str]:
+        uris = [
+            cls._require_http_url(uri.strip(), "OIDC redirect URI")
+            for uri in value
+            if uri and uri.strip()
+        ]
+        return list(dict.fromkeys(uris))
+
+    @model_validator(mode="after")
+    def include_primary_redirect_uri(self) -> "OIDCConfig":
+        if self.redirect_uri and self.redirect_uri not in self.redirect_uris:
+            self.redirect_uris = [self.redirect_uri, *self.redirect_uris]
+        return self
 
     @field_validator("scopes")
     @classmethod

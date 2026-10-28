@@ -22,9 +22,10 @@ def init_auth_routes(auth: AuthManager) -> APIRouter:
 
         state = auth.new_state()
         nonce = auth.new_nonce()
+        redirect_uri = auth.redirect_uri_for(request.headers.get("host"))
         try:
             authorization_url = await auth.oidc.authorization_url(
-                state=state, nonce=nonce
+                state=state, nonce=nonce, redirect_uri=redirect_uri
             )
         except OIDCError as exc:
             logger.error(f"OIDC login initialization failed: {exc}")
@@ -36,7 +37,12 @@ def init_auth_routes(auth: AuthManager) -> APIRouter:
         response = RedirectResponse(authorization_url, status_code=302)
         response.set_cookie(
             **auth.state_cookie_kwargs(
-                auth.issue_state(state=state, nonce=nonce, next_path=next_path)
+                auth.issue_state(
+                    state=state,
+                    nonce=nonce,
+                    next_path=next_path,
+                    redirect_uri=redirect_uri,
+                )
             )
         )
         return response
@@ -68,7 +74,11 @@ def init_auth_routes(auth: AuthManager) -> APIRouter:
             )
 
         try:
-            identity = await auth.authenticate_code(code, nonce=state_payload["nonce"])
+            identity = await auth.authenticate_code(
+                code,
+                nonce=state_payload["nonce"],
+                redirect_uri=state_payload.get("redirect_uri"),
+            )
         except (OIDCError, AuthError, ValueError) as exc:
             logger.error(f"OIDC callback failed: {exc}")
             return JSONResponse({"error": "Login failed"}, status_code=401)

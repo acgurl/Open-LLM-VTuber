@@ -4,7 +4,7 @@ import hmac
 import secrets
 import time
 from typing import Any, Mapping
-from urllib.parse import unquote
+from urllib.parse import unquote, urlsplit
 
 from loguru import logger
 
@@ -125,20 +125,38 @@ class AuthManager:
         kwargs["httponly"] = False
         return kwargs
 
-    def issue_state(self, *, state: str, nonce: str, next_path: str) -> str:
+    def redirect_uri_for(self, host: str | None) -> str:
+        """Pick the registered callback that matches the requested host."""
+        candidates = self.config.oidc.redirect_uris or [self.config.oidc.redirect_uri]
+        wanted = (host or "").split(":")[0].strip().lower()
+        if wanted:
+            for uri in candidates:
+                if (urlsplit(uri).hostname or "").lower() == wanted:
+                    return uri
+        return self.config.oidc.redirect_uri or candidates[0]
+
+    def issue_state(
+        self,
+        *,
+        state: str,
+        nonce: str,
+        next_path: str,
+        redirect_uri: str | None = None,
+    ) -> str:
         if self._signer is None:
             raise AuthError("OIDC is not enabled")
         now = int(time.time())
-        return self._signer.dumps(
-            {
-                "v": 1,
-                "state": state,
-                "nonce": nonce,
-                "next": safe_next_path(next_path),
-                "iat": now,
-                "exp": now + self.config.state_max_age_seconds,
-            }
-        )
+        payload = {
+            "v": 1,
+            "state": state,
+            "nonce": nonce,
+            "next": safe_next_path(next_path),
+            "iat": now,
+            "exp": now + self.config.state_max_age_seconds,
+        }
+        if redirect_uri:
+            payload["redirect_uri"] = redirect_uri
+        return self._signer.dumps(payload)
 
     def verify_state(self, token: str | None, state: str) -> dict | None:
         if self._signer is None:
@@ -169,9 +187,11 @@ class AuthManager:
     def new_nonce(self) -> str:
         return secrets.token_urlsafe(32)
 
-    async def authenticate_code(self, code: str, *, nonce: str) -> Identity:
+    async def authenticate_code(
+        self, code: str, *, nonce: str, redirect_uri: str | None = None
+    ) -> Identity:
         """Exchange an authorization code and map the subject to a local user."""
-        tokens = await self.oidc.exchange_code(code)
+        tokens = await self.oidc.exchange_code(code, redirect_uri=redirect_uri)
         claims = await self.oidc.validate_id_token(tokens["id_token"], nonce=nonce)
 
         if not claims.get("name") or not claims.get("email"):

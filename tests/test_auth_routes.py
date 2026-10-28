@@ -35,13 +35,17 @@ class FakeOIDC:
     async def discovery(self):
         return {"issuer": "https://sso.example.com"}
 
-    async def authorization_url(self, *, state: str, nonce: str) -> str:
+    async def authorization_url(
+        self, *, state: str, nonce: str, redirect_uri: str | None = None
+    ) -> str:
+        self.last_redirect_uri = redirect_uri
         return (
             "https://sso.example.com/authorize"
             f"?state={state}&nonce={nonce}&client_id=client-id"
         )
 
-    async def exchange_code(self, code: str):
+    async def exchange_code(self, code: str, *, redirect_uri: str | None = None):
+        self.last_exchange_redirect_uri = redirect_uri
         return {"id_token": "id-token", "access_token": "access-token"}
 
     async def validate_id_token(self, token: str, *, nonce: str):
@@ -69,6 +73,10 @@ def make_config() -> AuthConfig:
             client_id="client-id",
             client_secret="client-secret",
             redirect_uri="http://testserver/auth/callback",
+            redirect_uris=[
+                "http://testserver/auth/callback",
+                "http://ai.testserver/auth/callback",
+            ],
         ),
     )
 
@@ -168,6 +176,36 @@ class AuthRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("vtuber_uid=", set_cookie)
         self.assertIn("Max-Age=0", set_cookie)
         self.assertIsNone(self.client.cookies.get("vtuber_uid"))
+
+    def test_alternate_host_uses_its_own_redirect_uri(self):
+        client = TestClient(self.app, base_url="http://ai.testserver")
+
+        response = client.get("/auth/login", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self.auth._oidc.last_redirect_uri, "http://ai.testserver/auth/callback"
+        )
+        state = parse_qs(urlsplit(response.headers["location"]).query)["state"][0]
+
+        response = client.get(
+            f"/auth/callback?code=code-1&state={state}",
+            follow_redirects=False,
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self.auth._oidc.last_exchange_redirect_uri,
+            "http://ai.testserver/auth/callback",
+        )
+        self.assertIn("vtuber_session=", response.headers.get("set-cookie", ""))
+
+    def test_unknown_host_falls_back_to_primary_redirect_uri(self):
+        self.assertEqual(
+            self.auth.redirect_uri_for("other.example.com"),
+            "http://testserver/auth/callback",
+        )
+        self.assertEqual(
+            self.auth.redirect_uri_for(None), "http://testserver/auth/callback"
+        )
 
     def test_session_endpoint_backfills_uid_cookie(self):
         state = self._login()

@@ -88,7 +88,9 @@ class OIDCProvider:
         self._discovery = data
         return data
 
-    async def authorization_url(self, *, state: str, nonce: str) -> str:
+    async def authorization_url(
+        self, *, state: str, nonce: str, redirect_uri: str | None = None
+    ) -> str:
         discovery = await self.discovery()
         endpoint = str(discovery["authorization_endpoint"])
         parts = urlsplit(endpoint)
@@ -97,7 +99,7 @@ class OIDCProvider:
             {
                 "response_type": "code",
                 "client_id": self.config.client_id,
-                "redirect_uri": self.config.redirect_uri,
+                "redirect_uri": redirect_uri or self.config.redirect_uri,
                 "scope": " ".join(self.config.scopes),
                 "state": state,
                 "nonce": nonce,
@@ -109,12 +111,14 @@ class OIDCProvider:
             (parts.scheme, parts.netloc, parts.path, urlencode(params), parts.fragment)
         )
 
-    async def exchange_code(self, code: str) -> dict[str, Any]:
+    async def exchange_code(
+        self, code: str, *, redirect_uri: str | None = None
+    ) -> dict[str, Any]:
         discovery = await self.discovery()
         data = {
             "grant_type": "authorization_code",
             "code": code,
-            "redirect_uri": self.config.redirect_uri,
+            "redirect_uri": redirect_uri or self.config.redirect_uri,
             "client_id": self.config.client_id,
         }
         auth = None
