@@ -21,6 +21,8 @@ const FRAME_TOP_RATIO = 0.12;
 const FRAME_WIDTH_RATIO = 0.92;
 const ALPHA_THRESHOLD = 24;
 const TAP_GUARD_MS = 400;
+// 启动幕等待“舞台就位”：首次装载尝试结束（成功、失败或无模型）时派发一次。
+export const STAGE_SETTLED_EVENT = 'vtuber:stage-settled';
 
 type Rect = { x: number; y: number; width: number; height: number };
 type DrawableHost = {
@@ -63,6 +65,7 @@ class Live2DController {
   private tapGuardUntil = 0;
   private loadSeq = 0;
   private loadingUrl: string | null = null;
+  private stageSettled = false;
   private dragArmed = false;
   private dragging = false;
   private hovering = false;
@@ -93,6 +96,16 @@ class Live2DController {
       this.pendingInfo = null;
       void this.load(info);
     }
+  }
+
+  get isStageSettled() {
+    return this.stageSettled;
+  }
+
+  private settleStage() {
+    if (this.stageSettled) return;
+    this.stageSettled = true;
+    window.dispatchEvent(new Event(STAGE_SETTLED_EVENT));
   }
 
   async load(info: ModelInfo | null) {
@@ -130,6 +143,7 @@ class Live2DController {
     this.loadingUrl = url;
     if (url === null) {
       this.loadingUrl = null;
+      this.settleStage();
       return;
     }
     try {
@@ -169,8 +183,12 @@ class Live2DController {
       this.measureContent();
       this.layout();
       void cacheModelAssets(url);
+      this.settleStage();
     } catch (err) {
-      if (seq === this.loadSeq) console.error('Live2D load failed', err);
+      if (seq === this.loadSeq) {
+        console.error('Live2D load failed', err);
+        this.settleStage();
+      }
     } finally {
       if (seq === this.loadSeq) this.loadingUrl = null;
     }

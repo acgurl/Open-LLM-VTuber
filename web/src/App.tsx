@@ -12,6 +12,7 @@ import { CameraWindow } from './components/CameraWindow';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { SettingsDrawer } from './components/SettingsDrawer';
 import { Toasts } from './components/Toasts';
+import { BootScreen } from './components/BootScreen';
 
 export default function App() {
   const { t } = useTranslation();
@@ -62,6 +63,7 @@ export default function App() {
       <HistoryDrawer />
       <SettingsDrawer />
       <Toasts />
+      <BootScreen />
       {status === 'failed' && (
         <div className="boot-failure" role="status">
           {t('boot.unreachable')}

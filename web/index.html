@@ -7,6 +7,58 @@
     <title>Open-LLM-VTuber</title>
     <link rel="preload" href="/assets/fonts/dm-sans-latin-v1.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/assets/fonts/comfortaa-latin-v1.woff2" as="font" type="font/woff2" crossorigin />
+    <!-- 启动幕必须内联：bundle 解析前就要盖住首屏，等不到 styles.css。 -->
+    <style>
+      #boot {
+        --boot-bg: #121212;
+        --boot-accent: oklch(78% 0.125 var(--hue, 220.44));
+        --boot-track: rgba(255, 255, 255, 0.14);
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: grid;
+        place-items: center;
+        background: var(--boot-bg);
+        transition: opacity 280ms ease;
+      }
+      html[data-theme='light'] #boot {
+        --boot-bg: #f7f8fb;
+        --boot-accent: oklch(54% 0.16 var(--hue, 220.44));
+        --boot-track: rgba(20, 22, 30, 0.12);
+      }
+      #boot.is-done {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .boot-spinner {
+        width: 30px;
+        height: 30px;
+        border: 2px solid var(--boot-track);
+        border-top-color: var(--boot-accent);
+        border-radius: 50%;
+        animation:
+          boot-spin 760ms linear infinite,
+          boot-in 320ms ease-out;
+      }
+      @keyframes boot-in {
+        from {
+          opacity: 0;
+        }
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot {
+          transition: none;
+        }
+        .boot-spinner {
+          animation: none;
+        }
+      }
+    </style>
     <!-- 首屏前先落主题与色相，避免闪白和颜色跳变；键名与 src/utils/storage.ts、src/stores/theme.ts 保持一致。 -->
     <script>
       (function () {
@@ -57,11 +109,40 @@
         }
       })();
     </script>
+    <!-- React 就绪后通过这个桥接口淡出启动幕。 -->
+    <script>
+      window.__bootStartedAt = performance.now();
+      window.bootScreen = (function () {
+        var done = false;
+        return {
+          finish: function () {
+            if (done) return;
+            done = true;
+            var boot = document.getElementById('boot');
+            if (!boot) return;
+            boot.classList.add('is-done');
+            setTimeout(function () {
+              boot.remove();
+            }, 700);
+          },
+        };
+      })();
+    </script>
     <script src="./libs/live2d.min.js"></script>
     <script src="./libs/live2dcubismcore.min.js"></script>
   </head>
   <body>
+    <div id="boot" role="status" aria-label="加载中">
+      <span class="boot-spinner"></span>
+    </div>
     <div id="root"></div>
+    <script>
+      (function () {
+        // 幕布消失前，背后的应用不接收键盘与指针
+        var root = document.getElementById('root');
+        if (root) root.setAttribute('inert', '');
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
