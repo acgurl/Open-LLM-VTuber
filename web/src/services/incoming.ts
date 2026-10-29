@@ -21,7 +21,13 @@ import i18n from '../i18n';
 import type { ServerMessage } from '../protocol/types';
 
 export function onConnected() {
-  // 坑 3：连接建立时 history_uid 为空，不落库；必须显式建历史
+  // Reconnects and refreshes must resume the active history; only a tab with
+  // no history (or an explicit New chat) starts a fresh one.
+  const currentUid = useHistory.getState().currentUid;
+  if (currentUid) {
+    wsClient.send({ type: 'fetch-and-set-history', history_uid: currentUid });
+    return;
+  }
   wsClient.send({ type: 'create-new-history' });
 }
 
@@ -117,9 +123,16 @@ export function handleServerMessage(msg: ServerMessage) {
       useHistory.getState().setHistories(msg.histories ?? []);
       break;
 
-    case 'history-data':
-      chat.loadHistory(msg.messages ?? []);
+    case 'history-data': {
+      const messages = msg.messages ?? [];
+      chat.loadHistory(messages);
+      // Reattaching to an empty history (e.g. right after a reconnect) should
+      // keep showing the welcome text instead of clearing the chat.
+      if (messages.length === 0 && conn.welcomeMessage) {
+        chat.addAiMessage(conn.welcomeMessage);
+      }
       break;
+    }
 
     case 'new-history-created': {
       useHistory.getState().setCurrentUid(msg.history_uid);

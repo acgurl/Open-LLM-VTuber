@@ -255,7 +255,7 @@ Cookie（`auth/manager.py`）：
 | type | 字段 | 服务端响应 |
 | --- | --- | --- |
 | `fetch-history-list` | 无 | `history-list` |
-| `fetch-and-set-history` | `history_uid`: string（必填，缺失则静默无响应） | `history-data` |
+| `fetch-and-set-history` | `history_uid`: string（必填，缺失则静默无响应） | `history-data`；历史不存在或不属于当前角色时，服务端会新建一个历史并在 `history-data` 后补发 `new-history-created` |
 | `create-new-history` | 无 | `new-history-created` |
 | `delete-history` | `history_uid`: string（必填，缺失则静默无响应） | `history-deleted` |
 
@@ -474,7 +474,7 @@ Cookie（`auth/manager.py`）：
 - `latest_message.name` / `avatar` 可能不存在（`storage/sqlite.py:93-103`）
 - 存储异常时降级为 `histories: []`，不报错
 
-**`history-data`**（`websocket_handler.py:554-561`）：`{ "type":"history-data", "messages":[HistoryMessage...] }`，**`role == "system"` 的消息被过滤掉**。`HistoryMessage` 结构见 `storage/base.py:18-24`：`{role: "human"|"ai"|"system", timestamp: str, content: str, name?: str, avatar?: str}`。历史不存在或不属于该用户 → 回空数组（不报错）。
+**`history-data`**（`websocket_handler.py:554-561`）：`{ "type":"history-data", "messages":[HistoryMessage...] }`，**`role == "system"` 的消息被过滤掉**。`HistoryMessage` 结构见 `storage/base.py:18-24`：`{role: "human"|"ai"|"system", timestamp: str, content: str, name?: str, avatar?: str}`。历史不存在或不属于该用户 → 先回空数组，再新建一个历史并补发 `new-history-created`（客户端应更新当前 UID，不要继续使用旧值）。
 
 **`new-history-created`** — `{ "type":"new-history-created", "history_uid":"<服务端生成的 uuid>" }`。
 
@@ -721,6 +721,7 @@ LLM 被提示在句子里插入方括号关键字（提示词 `prompts/utils/liv
 服务端每个连接维护一个"当前活动历史" `context.history_uid`：
 
 - **连接刚建立时为空字符串 `""`**（`service_context.py:79`）→ 此时对话**不会落库**！必须显式调用 `create-new-history` 或 `fetch-and-set-history` 才开始记录。
+- 客户端应在同一标签页内持久化当前 `history_uid`，连接建立/重连/刷新时优先用 `fetch-and-set-history` 恢复；只有新标签页或用户显式“新建会话”时才调用 `create-new-history`。后端在历史不存在时会自动新建并补发 `new-history-created`。
 - `switch-config` 成功后被重置为 `None`（`service_context.py:680`）→ 换角色后同样需要重新选择/新建历史。
 - `delete-history` 删掉当前活动历史后也被置 `None`（`websocket_handler.py:614-615`）。
 - 两种空值（`""` / `None`）对落库判断等效，`store_history_message` 都会直接返回（`service_context.py:269-270`）。

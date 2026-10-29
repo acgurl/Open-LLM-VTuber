@@ -581,14 +581,27 @@ class WebSocketHandler:
             return
 
         context = self.client_contexts[client_uid]
-        if context.history is None:
-            messages = []
-        else:
+        messages = []
+        created_uid: str | None = None
+        if context.history is not None:
             try:
                 messages = await context.load_history(history_uid)
             except (HistoryNotFoundError, ValueError):
-                logger.warning(f"History not found for client {client_uid}")
-                messages = []
+                # The client reconnected with a stale history (deleted, or from
+                # another character). Start a fresh one so the next turn is
+                # stored instead of silently dropped.
+                logger.info(
+                    f"History {history_uid} unavailable for client {client_uid}; "
+                    "creating a new one"
+                )
+                try:
+                    created_uid = await context.history.create_history(
+                        context.character_config.conf_uid
+                    )
+                    await context.load_history(created_uid)
+                except Exception:
+                    logger.exception("Failed to create replacement history")
+                    created_uid = None
             except Exception:
                 logger.exception("Failed to load chat history")
                 messages = []
@@ -601,6 +614,15 @@ class WebSocketHandler:
                 }
             )
         )
+        if created_uid:
+            await websocket.send_text(
+                json.dumps(
+                    {
+                        "type": "new-history-created",
+                        "history_uid": created_uid,
+                    }
+                )
+            )
 
     async def _handle_create_history(
         self, websocket: WebSocket, client_uid: str, data: WSMessage
