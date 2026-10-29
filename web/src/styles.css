@@ -98,6 +98,8 @@
   --blur: 20px;
   --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-snap: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* 收起/合拢专用：起步柔和、中段加速、末尾轻落，避免反向用展开的缓出曲线时“唰”地一下夹死 */
+  --ease-fold: cubic-bezier(0.4, 0, 0.2, 1);
   --font-body: 'DM Sans', 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans', 'Microsoft YaHei',
     system-ui, sans-serif;
   --font-round: 'Comfortaa', 'DM Sans', 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans',
@@ -646,9 +648,6 @@ html[data-theme='light'] .app::after {
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 14px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
   scrollbar-width: thin;
   scrollbar-color: var(--scroll-thumb) transparent;
   --fade-top: 0px;
@@ -695,8 +694,15 @@ html[data-theme='light'] .app::after {
   background: var(--line-strong);
 }
 
+/* 内容单独一层，用来观察高度变化（折叠/长高时才能一直吸底） */
+.chat-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 /* 内容溢出时 flex 子项会被压缩；工具卡 overflow:hidden 会因此被压没 */
-.chat-overlay > * {
+.chat-stack > * {
   flex: none;
 }
 
@@ -1247,7 +1253,8 @@ html[data-theme='light'] .app::after {
   transition:
     border-color 260ms var(--ease-snap),
     background 260ms var(--ease-snap),
-    box-shadow 260ms var(--ease-snap);
+    box-shadow 260ms var(--ease-snap),
+    padding 240ms var(--ease-fold);
 }
 
 /* 正在思考：整块轻微提亮，标签旁给三个跳动的点，说明它是活的 */
@@ -1322,12 +1329,13 @@ html[data-theme='light'] .app::after {
 .think-chevron {
   display: inline-block;
   margin-right: 5px;
-  transition: transform 240ms var(--ease-spring);
+  transition: transform 220ms var(--ease-fold);
 }
 
 .think-block.open .think-chevron,
 .tool-card .tool-head[aria-expanded='true'] .think-chevron {
   transform: rotate(90deg);
+  transition-timing-function: var(--ease-spring);
 }
 
 .think-body {
@@ -1342,16 +1350,31 @@ html[data-theme='light'] .app::after {
 .collapsible {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 280ms var(--ease-spring);
+  /* 收起走 --ease-fold，展开才用带回弹的 spring，开合不像同一段动画倒放 */
+  transition: grid-template-rows 240ms var(--ease-fold);
 }
 
 .collapsible.open {
   grid-template-rows: 1fr;
+  transition-duration: 300ms;
+  transition-timing-function: var(--ease-spring);
 }
 
 .collapsible-inner {
   min-height: 0;
   overflow: hidden;
+}
+
+/* 内容先淡出并轻轻上移，收起看起来是“收进去”而不是被裁掉 */
+.collapsible-inner > * {
+  transition:
+    opacity 220ms var(--ease-fold),
+    transform 260ms var(--ease-fold);
+}
+
+.collapsible:not(.open) .collapsible-inner > * {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 
 .tool-card {
@@ -1399,47 +1422,48 @@ html[data-theme='light'] .app::after {
 /* 状态落定的一次性回执：完成时一圈绿光收掉，出错时一圈红光，不循环 */
 .tool-card.status-completed {
   border-color: color-mix(in oklab, var(--ok) 24%, transparent);
-  animation: tool-settle 520ms var(--ease-spring);
 }
 
 .tool-card.status-error {
   border-color: var(--danger-line);
-  animation: tool-settle-danger 520ms var(--ease-spring);
 }
 
-@keyframes tool-settle {
-  from {
-    box-shadow:
-      0 0 0 0 color-mix(in oklab, var(--ok) 40%, transparent),
-      var(--shadow-soft),
-      var(--shadow-inset);
-  }
-  45% {
-    box-shadow:
-      0 0 26px -6px color-mix(in oklab, var(--ok) 55%, transparent),
-      var(--shadow-soft),
-      var(--shadow-inset);
-  }
-  to {
-    box-shadow: var(--shadow-soft), var(--shadow-inset);
-  }
+/* 收光只动 opacity 的内圈，不再逐帧重绘 box-shadow——那一帧正好还要折叠，叠起来会掉帧 */
+.tool-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
 }
 
-@keyframes tool-settle-danger {
-  from {
-    box-shadow:
-      0 0 0 0 color-mix(in oklab, var(--danger) 38%, transparent),
-      var(--shadow-soft),
-      var(--shadow-inset);
+.tool-card.status-completed::before {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--ok) 45%, transparent),
+    inset 0 -14px 22px -18px var(--ok);
+  animation: settle-ring 460ms var(--ease-spring);
+}
+
+.tool-card.status-error::before {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--danger) 45%, transparent),
+    inset 0 -14px 22px -18px var(--danger);
+  animation: settle-ring 460ms var(--ease-spring);
+}
+
+@keyframes settle-ring {
+  0% {
+    opacity: 0;
+    transform: scale(0.994);
   }
-  45% {
-    box-shadow:
-      0 0 26px -6px color-mix(in oklab, var(--danger) 50%, transparent),
-      var(--shadow-soft),
-      var(--shadow-inset);
+  35% {
+    opacity: 1;
   }
-  to {
-    box-shadow: var(--shadow-soft), var(--shadow-inset);
+  100% {
+    opacity: 0;
+    transform: none;
   }
 }
 

@@ -12,6 +12,8 @@ export function ChatOverlay() {
   const entries = useChat((s) => s.entries);
   const busy = useConnection((s) => s.busy);
   const ref = useRef<HTMLDivElement>(null);
+  const stackRef = useRef<HTMLDivElement>(null);
+  const frame = useRef(0);
   const pinned = useRef(true);
   const jumping = useRef(false);
   const firstId = useRef<string | null>(null);
@@ -30,11 +32,22 @@ export function ChatOverlay() {
     setFade((prev) => (prev.top === top && prev.bottom === bottom ? prev : { top, bottom }));
   };
 
+  // 吸底和边缘雾化都要读布局，合并成一帧一次：流式高频更新时不会连着触发 reflow
+  const queueSync = () => {
+    if (frame.current) return;
+    frame.current = window.requestAnimationFrame(() => {
+      frame.current = 0;
+      const el = ref.current;
+      if (!el) return;
+      if (pinned.current) el.scrollTop = el.scrollHeight;
+      syncFade(el);
+    });
+  };
+
+  useEffect(() => () => window.cancelAnimationFrame(frame.current), []);
+
   // 用户停在底部时始终吸底；主动上翻后不再抢滚动位置，只提示有新内容
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
     // 换会话（首条消息变化）时重新吸底，避免沿用上一段对话的上翻状态
     const first = entries[0]?.id ?? null;
     if (first !== firstId.current) {
@@ -50,31 +63,28 @@ export function ChatOverlay() {
         setShowJump(true);
         setUnread(true);
       }
-      syncFade(el);
-      return;
     }
-    el.scrollTop = el.scrollHeight;
-    syncFade(el);
+    queueSync();
   }, [entries]);
 
-  // 面板高度随内容/视口变化时补一次吸底，否则上一条的阅读位置会被新高度打乱
+  // 内容高度变化（气泡长高、工具卡折叠）时补吸底，否则上一条的阅读位置会被新高度打乱
   useEffect(() => {
     const el = ref.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
+    const stack = stackRef.current;
+    if (!el || !stack || typeof ResizeObserver === 'undefined') return;
+    // 观察的是内容而不是滚动容器：滚动容器自身高度不变，等不到折叠这种内部变化
     const ro = new ResizeObserver(() => {
       if (pinned.current) el.scrollTop = el.scrollHeight;
       syncFade(el);
     });
+    ro.observe(stack);
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
   // 输入气泡出现/消失不经过 entries，需要单独补一次吸底
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    if (pinned.current) el.scrollTop = el.scrollHeight;
-    syncFade(el);
+    queueSync();
   }, [awaiting]);
 
   const onScroll = () => {
@@ -106,26 +116,28 @@ export function ChatOverlay() {
       className={`chat-shell${fade.top ? ' fade-top' : ''}${fade.bottom ? ' fade-bottom' : ''}`}
     >
       <div className="chat-overlay" ref={ref} onScroll={onScroll}>
-        {entries.map((e: ChatEntry) =>
-          e.kind === 'text' ? (
-            <MessageBubble key={e.id} entry={e} />
-          ) : (
-            <ToolCallCard key={e.id} entry={e} />
-          ),
-        )}
-        {awaiting && (
-          <div className="bubble-row ai typing-row" aria-hidden="true">
-            <div className="bubble-stack">
-              <div className="bubble typing-bubble">
-                <span className="typing-dots">
-                  <i />
-                  <i />
-                  <i />
-                </span>
+        <div className="chat-stack" ref={stackRef}>
+          {entries.map((e: ChatEntry) =>
+            e.kind === 'text' ? (
+              <MessageBubble key={e.id} entry={e} />
+            ) : (
+              <ToolCallCard key={e.id} entry={e} />
+            ),
+          )}
+          {awaiting && (
+            <div className="bubble-row ai typing-row" aria-hidden="true">
+              <div className="bubble-stack">
+                <div className="bubble typing-bubble">
+                  <span className="typing-dots">
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
       {showJump && (
         <button

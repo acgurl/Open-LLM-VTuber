@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -18,7 +18,8 @@ const markdownComponents: Components = {
 };
 
 // AI 气泡：流式增量合并进同一个气泡；[tag] 渲染为动作块；<think> 折叠。
-export function MessageBubble({ entry }: { entry: ChatTextEntry }) {
+// memo 让流式增量只重渲染正在长的那一条，历史气泡不再每帧重新解析 markdown
+export const MessageBubble = memo(function MessageBubble({ entry }: { entry: ChatTextEntry }) {
   const { t, i18n } = useTranslation();
   const modelInfo = useConnection((s) => s.modelInfo);
   const [copied, setCopied] = useState(false);
@@ -70,7 +71,7 @@ export function MessageBubble({ entry }: { entry: ChatTextEntry }) {
       </div>
     </div>
   );
-}
+});
 
 function PlainText({ text }: { text: string }) {
   return <div className="bubble-text plain">{text}</div>;
