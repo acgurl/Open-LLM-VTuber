@@ -3345,7 +3345,7 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
     --island-h: 42px;
   }
 
-  /* 窄屏聊天区贴着输入框上沿往上长，把角色立绘让出来 */
+  /* 窄屏聊天区贴着输入框上沿往上长，长会话一直长到顶栏下方，不留空中阁楼 */
   .chat-shell {
     left: calc(12px + env(safe-area-inset-left, 0px));
     right: calc(12px + env(safe-area-inset-right, 0px));
@@ -3355,20 +3355,14 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
     );
     width: auto;
     height: auto;
-    /* 高度跟着内容走，超过上限才滚动：固定 33vh 会把长回答拦腰截断 */
-    max-height: min(
-      56vh,
-      calc(
-        100vh - 88px - var(--input-bar-h, 56px) - env(safe-area-inset-top, 0px) -
-          env(safe-area-inset-bottom, 0px)
-      )
+    /* 上限只留顶栏那一条，超过才在内部滚动 */
+    max-height: calc(
+      100vh - 96px - var(--input-bar-h, 56px) - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px)
     );
-    max-height: min(
-      56dvh,
-      calc(
-        100dvh - 88px - var(--input-bar-h, 56px) - env(safe-area-inset-top, 0px) -
-          env(safe-area-inset-bottom, 0px)
-      )
+    max-height: calc(
+      100dvh - 96px - var(--input-bar-h, 56px) - env(safe-area-inset-top, 0px) -
+        env(safe-area-inset-bottom, 0px)
     );
   }
 
