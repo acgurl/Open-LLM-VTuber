@@ -128,8 +128,11 @@
         };
       })();
     </script>
-    <script src="./libs/live2d.min.js"></script>
-    <script src="./libs/live2dcubismcore.min.js"></script>
+    <!-- defer + preload：库照常并行下载，但不阻塞启动幕绘制；模块脚本在其后执行。 -->
+    <link rel="preload" as="script" href="./libs/live2d.min.js" />
+    <link rel="preload" as="script" href="./libs/live2dcubismcore.min.js" />
+    <script defer src="./libs/live2d.min.js"></script>
+    <script defer src="./libs/live2dcubismcore.min.js"></script>
   </head>
   <body>
     <div id="boot" role="status" aria-label="加载中">

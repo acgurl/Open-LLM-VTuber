@@ -1036,6 +1036,11 @@ html[data-theme='light'] .app::after {
   text-wrap: pretty;
 }
 
+/* markdown 渲染器懒加载期间的占位：保留换行，避免解析器到位时整块跳动。 */
+.md-pending {
+  white-space: pre-wrap;
+}
+
 .bubble-text p {
   margin: 0.32em 0;
 }

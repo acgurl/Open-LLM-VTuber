@@ -1,21 +1,11 @@
-import { memo, useState } from 'react';
+import { lazy, memo, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import ReactMarkdown, { type Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
 import { useConnection } from '../stores/connection';
 import { buildTagSet, splitByTags, splitThink, stripTags } from '../utils/text';
 import type { ChatTextEntry } from '../stores/chat';
 import { ThinkBlock } from './ThinkBlock';
 
-// 模型输出的链接一律新标签页打开，避免整页被打断。
-const markdownComponents: Components = {
-  p: 'span',
-  a: ({ children, href, title }) => (
-    <a href={href} title={title} target="_blank" rel="noopener noreferrer">
-      {children}
-    </a>
-  ),
-};
+const MarkdownText = lazy(() => import('./MarkdownText'));
 
 // AI 气泡：流式增量合并进同一个气泡；[tag] 渲染为动作块；<think> 折叠。
 // memo 让流式增量只重渲染正在长的那一条，历史气泡不再每帧重新解析 markdown
@@ -125,13 +115,19 @@ function TaggedMarkdown({
             {tok.value}
           </span>
         ) : (
-          <ReactMarkdown key={i} remarkPlugins={[remarkGfm]} components={markdownComponents}>
-            {tok.value}
-          </ReactMarkdown>
+          <LazyMarkdown key={i} text={tok.value} />
         ),
       )}
       {caret && <span className="caret" />}
     </div>
+  );
+}
+
+function LazyMarkdown({ text }: { text: string }) {
+  return (
+    <Suspense fallback={<span className="md-pending">{text}</span>}>
+      <MarkdownText text={text} />
+    </Suspense>
   );
 }
 
