@@ -67,7 +67,7 @@ export function TopBar() {
           className="icon-btn theme-toggle"
           aria-label={t(theme === 'light' ? 'theme.toDark' : 'theme.toLight')}
           title={t(theme === 'light' ? 'theme.toDark' : 'theme.toLight')}
-          onClick={toggleTheme}
+          onClick={(e) => toggleTheme(e.currentTarget)}
         >
           {theme === 'light' ? <MoonIcon /> : <SunIcon />}
         </button>

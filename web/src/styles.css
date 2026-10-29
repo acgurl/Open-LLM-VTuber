@@ -175,6 +175,28 @@ html {
   transition: --hue 520ms var(--ease-spring);
 }
 
+/* ---------- 明暗切换 ----------
+   新旧界面各拍一张快照：旧的留在底层，新的按圆形从触发按钮处铺开。
+   整屏只有一层裁切在动，不用逐属性过渡去重绘带 backdrop-filter 的玻璃层。 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-new(root) {
+  animation: theme-reveal 520ms var(--ease-spring) both;
+}
+
+@keyframes theme-reveal {
+  from {
+    clip-path: circle(0px at var(--theme-x, 50%) var(--theme-y, 50%));
+  }
+  to {
+    clip-path: circle(var(--theme-r, 150vmax) at var(--theme-x, 50%) var(--theme-y, 50%));
+  }
+}
+
 ::selection {
   background: color-mix(in oklab, var(--accent) 34%, transparent);
   color: var(--ink);
@@ -616,21 +638,8 @@ html[data-theme='light'] .app::after {
   transform: scale(0.84);
 }
 
-/* 日夜图标切换时转进来，替代硬切 */
-.theme-toggle > svg {
-  animation: icon-turn 520ms var(--ease-spring);
-}
-
-@keyframes icon-turn {
-  from {
-    opacity: 0;
-    transform: rotate(-70deg) scale(0.6);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
+/* 图标随新快照一起换掉，不要再给它挂挂载动画：
+   圆形展开结束时动画会补播一次，看起来像图标又动了一下。 */
 
 /* ---------- 聊天区 ---------- */
 .chat-shell {

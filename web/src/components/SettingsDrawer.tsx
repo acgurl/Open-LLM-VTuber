@@ -126,7 +126,7 @@ export function SettingsDrawer() {
               <span>{t('settings.theme')}</span>
               <select
                 value={themeMode}
-                onChange={(e) => setThemeMode(e.target.value as ThemeMode)}
+                onChange={(e) => setThemeMode(e.target.value as ThemeMode, e.currentTarget)}
               >
                 <option value="auto">{t('settings.themeAuto')}</option>
                 <option value="light">{t('settings.themeLight')}</option>
