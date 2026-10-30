@@ -126,6 +126,54 @@ class SQLiteHistoryRepositoryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0]["content"], "hello")
 
+    async def test_tool_calls_follow_their_turn_and_cascade_on_delete(self):
+        history_uid = await self.alice.create_history("conf")
+        await self.alice.store_message("conf", history_uid, "human", "第一问")
+        await self.alice.store_tool_call(
+            "conf", history_uid, tool_id="t1", tool_name="kb_search", status="running"
+        )
+        await self.alice.store_tool_call(
+            "conf",
+            history_uid,
+            tool_id="t1",
+            tool_name="kb_search",
+            status="completed",
+            content='{"ok": true}',
+        )
+        await self.alice.store_message("conf", history_uid, "ai", "第一答")
+        await self.alice.store_message("conf", history_uid, "human", "第二问")
+        await self.alice.store_tool_call(
+            "conf", history_uid, tool_id="t2", tool_name="card", status="error"
+        )
+
+        calls = await self.alice.list_tool_calls("conf", history_uid)
+        self.assertEqual([call["tool_id"] for call in calls], ["t1", "t2"])
+        self.assertEqual(calls[0]["status"], "completed")
+        self.assertEqual(calls[0]["content"], '{"ok": true}')
+        self.assertEqual(calls[0]["turn_index"], 0)
+        self.assertEqual(calls[1]["turn_index"], 1)
+        self.assertEqual(await self.bob.list_tool_calls("conf", history_uid), [])
+
+        self.assertTrue(await self.alice.delete_history("conf", history_uid))
+        self.assertEqual(await self.alice.list_tool_calls("conf", history_uid), [])
+
+    async def test_unfinished_tool_call_reads_as_error(self):
+        history_uid = await self.alice.create_history("conf")
+        await self.alice.store_message("conf", history_uid, "human", "问题")
+        await self.alice.store_tool_call(
+            "conf", history_uid, tool_id="t1", tool_name="kb_search", status="running"
+        )
+
+        calls = await self.alice.list_tool_calls("conf", history_uid)
+        self.assertEqual(calls[0]["status"], "error")
+
+    async def test_tool_call_without_history_is_ignored(self):
+        await self.alice.store_tool_call(
+            "conf", "missing_history", tool_id="t1", tool_name="kb", status="completed"
+        )
+
+        self.assertFalse(await self.alice.history_exists("conf", "missing_history"))
+
     async def test_import_history_preserves_timestamps_and_metadata(self):
         messages = [
             {

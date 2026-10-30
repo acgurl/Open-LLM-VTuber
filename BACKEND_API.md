@@ -474,7 +474,7 @@ Cookie（`auth/manager.py`）：
 - `latest_message.name` / `avatar` 可能不存在（`storage/sqlite.py:93-103`）
 - 存储异常时降级为 `histories: []`，不报错
 
-**`history-data`**（`websocket_handler.py:554-561`）：`{ "type":"history-data", "messages":[HistoryMessage...] }`，**`role == "system"` 的消息被过滤掉**。`HistoryMessage` 结构见 `storage/base.py:18-24`：`{role: "human"|"ai"|"system", timestamp: str, content: str, name?: str, avatar?: str}`。历史不存在或不属于该用户 → 先回空数组，再新建一个历史并补发 `new-history-created`（客户端应更新当前 UID，不要继续使用旧值）。
+**`history-data`**（`websocket_handler.py:554-561`）：`{ "type":"history-data", "messages":[HistoryMessage...], "tool_calls":[HistoryToolCall...] }`，**`role == "system"` 的消息被过滤掉**。`HistoryMessage` 结构见 `storage/base.py:18-24`：`{role: "human"|"ai"|"system", timestamp: str, content: str, name?: str, avatar?: str}`。`tool_calls` 是该历史持久化的工具调用（见 12.5），按 `turn_index`、调用顺序排列；客户端应把它们插在对应提问之后。历史不存在或不属于该用户 → 先回空数组，再新建一个历史并补发 `new-history-created`（客户端应更新当前 UID，不要继续使用旧值）。
 
 **`new-history-created`** — `{ "type":"new-history-created", "history_uid":"<服务端生成的 uuid>" }`。
 
@@ -733,6 +733,7 @@ LLM 被提示在句子里插入方括号关键字（提示词 `prompts/utils/liv
 | 场景 | 写入内容 |
 | --- | --- |
 | 正常一轮 | `role:"human"`（用户输入文本，含 ASR 结果）在轮次开始时写入；`role:"ai"`（完整回复）在**文本生成完毕时立即写入**，早于 TTS 播放结束与 `frontend-playback-complete` |
+| 工具调用 | 每次 `tool_call_status` 转发后按 `tool_id` upsert 到 `tool_calls` 表，归到当前轮（该轮 human 消息的序号 `turn_index`）；刷新/换设备后随 `history-data` 返回 |
 | 主动说话 `ai-speak-signal` | **都不写**（`skip_history`） |
 | 打断（回复尚未生成完） | `role:"ai"` = 用户听到的部分 + `role:"system"` = `[Interrupted by user]`，写入该轮开始时的历史 |
 | 打断（回复已生成完、只是播放没结束） | **不写**：完整回复已在生成完毕时落库，打断只停播放 |
@@ -755,7 +756,25 @@ type HistoryMessage = {
 
 `content` 是**原始文本**（可能含 `[joy]` 标签、Markdown）。渲染历史时需要走与实时消息相同的标签/Markdown 处理。
 
-### 12.5 不支持的操作
+### 12.5 工具调用
+
+```ts
+type HistoryToolCall = {
+  tool_id: string;
+  tool_name: string;
+  status: "running" | "completed" | "error";
+  content: string;
+  timestamp: string;
+  turn_index: number;     // 该轮 human 消息的 0 基序号
+}
+```
+
+- 每次 `tool_call_status`（running → completed/error）都会 upsert 到 SQLite `tool_calls` 表，主键是 `(history_id, tool_id)`。
+- `turn_index` 在首次写入时按当时已落库的 human 消息数计算；客户端把它插到该提问之后，恢复“问题 → 工具卡 → 回答”的顺序。
+- 历史读取时，持久化状态为 `running` 的记录一律返回 `error`（说明那一轮没有走完），避免刷新后出现永远转圈的卡片。
+- 群聊不写工具调用（每人的上下文没有绑定 `turn_history_uid`）；实时卡片仍照常下发。
+
+### 12.6 不支持的操作
 
 - **没有重命名接口。** `rename_history` / `modify_latest_message` 只存在于存储层（`storage/base.py:189-209`），未通过 WS 暴露。
 - 没有分页：`fetch-history-list` 一次返回全部非空历史。

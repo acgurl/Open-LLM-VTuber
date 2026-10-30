@@ -23,6 +23,21 @@ class HistoryMessage(TypedDict, total=False):
     avatar: str
 
 
+class ToolCallRecord(TypedDict, total=False):
+    """A tool execution attached to one turn of a history.
+
+    ``turn_index`` is the 0-based index of the human message whose turn ran the
+    tool, so clients can put the card back between the question and the reply.
+    """
+
+    tool_id: str
+    tool_name: str
+    status: Literal["running", "completed", "error"]
+    content: str
+    timestamp: str
+    turn_index: int
+
+
 class UserMCPServer(TypedDict, total=False):
     """A user-scoped remote MCP server configuration.
 
@@ -172,6 +187,31 @@ class HistoryRepository(ABC):
         timestamp: str | None = None,
     ) -> None:
         """Append a message to a history."""
+
+    @abstractmethod
+    async def store_tool_call(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+        tool_id: str,
+        tool_name: str,
+        status: str,
+        content: str = "",
+        timestamp: str | None = None,
+    ) -> None:
+        """Insert or update a tool execution for the current turn of a history."""
+
+    @abstractmethod
+    async def list_tool_calls(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+    ) -> list[ToolCallRecord]:
+        """Return the tool executions of a history ordered by turn and call order."""
 
     @abstractmethod
     async def get_metadata(

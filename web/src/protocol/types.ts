@@ -92,6 +92,16 @@ export interface HistoryMessage {
   avatar?: string;
 }
 
+export interface HistoryToolCall {
+  tool_id: string;
+  tool_name: string;
+  status: 'running' | 'completed' | 'error';
+  content: string;
+  timestamp: string;
+  /** 0-based index of the human message whose turn ran this tool. */
+  turn_index: number;
+}
+
 export interface HistorySummary {
   uid: string;
   latest_message?: HistoryMessage;
@@ -139,7 +149,7 @@ export type ServerMessage =
   | { type: 'group-update'; members: string[]; is_owner: boolean }
   | { type: 'group-operation-result'; success: boolean; message: string }
   | { type: 'history-list'; histories: HistorySummary[] }
-  | { type: 'history-data'; messages: HistoryMessage[] }
+  | { type: 'history-data'; messages: HistoryMessage[]; tool_calls?: HistoryToolCall[] }
   | { type: 'new-history-created'; history_uid: string }
   | { type: 'history-deleted'; success: boolean; history_uid: string }
   | { type: 'heartbeat-ack' }

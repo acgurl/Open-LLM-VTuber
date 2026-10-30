@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { HistoryToolCall } from '../protocol/types';
 
 export interface ChatTextEntry {
   kind: 'text';
@@ -42,6 +43,7 @@ interface ChatState {
   upsertTool: (t: Omit<ToolEntry, 'kind' | 'id'>) => void;
   loadHistory: (
     msgs: { role: string; content: string; name?: string; avatar?: string; timestamp?: string }[],
+    toolCalls?: HistoryToolCall[],
   ) => void;
   clear: () => void;
 }
@@ -103,24 +105,55 @@ export const useChat = create<ChatState>((set) => ({
       return { entries: [...stopStreaming(s.entries), { kind: 'tool', id: nextId(), ...t }] };
     }),
 
-  loadHistory: (msgs) =>
-    set(() => ({
-      entries: msgs
-        .filter((m) => m.role === 'human' || m.role === 'ai')
-        .map((m) => {
-          const parsed = m.timestamp ? Date.parse(m.timestamp) : NaN;
-          return {
-            kind: 'text' as const,
-            id: nextId(),
-            role: m.role as 'human' | 'ai',
-            text: m.content,
-            name: m.name,
-            avatar: m.avatar,
-            ts: Number.isFinite(parsed) ? parsed : Date.now(),
-            streaming: false,
-          };
-        }),
-    })),
+  // 历史里的工具卡没有独立消息位：按 turn_index 挂回对应提问之后，
+  // 这样刷新后工具卡仍出现在「问题之后、回答之前」。
+  loadHistory: (msgs, toolCalls = []) =>
+    set(() => {
+      const byTurn = new Map<number, HistoryToolCall[]>();
+      for (const call of toolCalls) {
+        const list = byTurn.get(call.turn_index) ?? [];
+        list.push(call);
+        byTurn.set(call.turn_index, list);
+      }
+
+      const toolEntries = (turn: number): ToolEntry[] =>
+        (byTurn.get(turn) ?? []).map((call) => ({
+          kind: 'tool',
+          id: nextId(),
+          tool_id: call.tool_id,
+          tool_name: call.tool_name,
+          status: call.status,
+          content: call.content,
+          timestamp: call.timestamp,
+        }));
+
+      const entries: ChatEntry[] = [];
+      let turn = 0;
+      for (const m of msgs) {
+        if (m.role !== 'human' && m.role !== 'ai') continue;
+        const parsed = m.timestamp ? Date.parse(m.timestamp) : NaN;
+        entries.push({
+          kind: 'text',
+          id: nextId(),
+          role: m.role,
+          text: m.content,
+          name: m.name,
+          avatar: m.avatar,
+          ts: Number.isFinite(parsed) ? parsed : Date.now(),
+          streaming: false,
+        });
+        if (m.role === 'human') {
+          entries.push(...toolEntries(turn));
+          byTurn.delete(turn);
+          turn += 1;
+        }
+      }
+      // 找不到对应提问的调用（历史被裁剪等）放到末尾，至少不丢。
+      [...byTurn.keys()]
+        .sort((a, b) => a - b)
+        .forEach((index) => entries.push(...toolEntries(index)));
+      return { entries };
+    }),
 
   clear: () => set({ entries: [] }),
 }));

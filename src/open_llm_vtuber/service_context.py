@@ -494,6 +494,43 @@ class ServiceContext:
             avatar=avatar,
         )
 
+    async def store_history_tool_call(
+        self,
+        *,
+        tool_id: str,
+        tool_name: str,
+        status: str,
+        content: str = "",
+        timestamp: str | None = None,
+        history_uid: str | None = None,
+    ) -> bool:
+        """Persist a tool execution; failures must never break the live stream."""
+        target_uid = history_uid if history_uid is not None else self.history_uid
+        if self.history is None or not target_uid or not tool_id:
+            return False
+        try:
+            await self.history.store_tool_call(
+                self.character_config.conf_uid,
+                target_uid,
+                tool_id=tool_id,
+                tool_name=tool_name,
+                status=status,
+                content=content,
+                timestamp=timestamp,
+            )
+            return True
+        except Exception:
+            logger.exception("Failed to store tool call in history")
+            return False
+
+    async def get_history_tool_calls(self, history_uid: str | None = None):
+        target_uid = history_uid if history_uid is not None else self.history_uid
+        if self.history is None or not target_uid:
+            return []
+        return await self.history.list_tool_calls(
+            self.character_config.conf_uid, target_uid
+        )
+
     async def update_history_metadata(self, metadata: dict) -> bool:
         if self.history is None or not self.history_uid:
             return False

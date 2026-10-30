@@ -5,6 +5,7 @@ from typing import Literal
 from .base import (
     HistoryMessage,
     HistoryRepository,
+    ToolCallRecord,
     validate_user_id,
 )
 
@@ -74,6 +75,41 @@ class UserHistoryStore:
 
     async def get_metadata(self, conf_uid: str, history_uid: str) -> dict:
         return await self.repository.get_metadata(
+            user_id=self.user_id,
+            conf_uid=conf_uid,
+            history_uid=history_uid,
+        )
+
+    async def store_tool_call(
+        self,
+        conf_uid: str,
+        history_uid: str,
+        *,
+        tool_id: str,
+        tool_name: str,
+        status: str,
+        content: str = "",
+        timestamp: str | None = None,
+    ) -> None:
+        if not history_uid:
+            return
+        await self.repository.store_tool_call(
+            user_id=self.user_id,
+            conf_uid=conf_uid,
+            history_uid=history_uid,
+            tool_id=tool_id,
+            tool_name=tool_name,
+            status=status,
+            content=content,
+            timestamp=timestamp,
+        )
+
+    async def list_tool_calls(
+        self, conf_uid: str, history_uid: str
+    ) -> list[ToolCallRecord]:
+        if not history_uid:
+            return []
+        return await self.repository.list_tool_calls(
             user_id=self.user_id,
             conf_uid=conf_uid,
             history_uid=history_uid,

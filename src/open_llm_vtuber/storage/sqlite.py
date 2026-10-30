@@ -13,6 +13,7 @@ from .base import (
     HistoryMessage,
     HistoryNotFoundError,
     HistoryRepository,
+    ToolCallRecord,
     UserMCPServer,
     validate_identity,
     validate_key,
@@ -71,6 +72,22 @@ CREATE TABLE IF NOT EXISTS messages (
 
 CREATE INDEX IF NOT EXISTS idx_messages_history_id
     ON messages(history_id, id);
+
+CREATE TABLE IF NOT EXISTS tool_calls (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    history_id TEXT NOT NULL
+        REFERENCES histories(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    turn_index INTEGER NOT NULL,
+    tool_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'error')),
+    content TEXT NOT NULL DEFAULT '',
+    timestamp TEXT NOT NULL,
+    UNIQUE (history_id, tool_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_calls_history_id
+    ON tool_calls(history_id, id);
 
 CREATE TABLE IF NOT EXISTS user_mcp_servers (
     id TEXT PRIMARY KEY,
@@ -218,7 +235,8 @@ class SQLiteHistoryRepository(HistoryRepository):
             # Version 1: histories/messages/users. Version 2: OIDC identities.
             # Version 3: per-user MCP servers. Version 4: local/remote mode.
             # Version 5: transport (Streamable HTTP / legacy SSE).
-            for version in (1, 2, 3, 4, 5):
+            # Version 6: persisted tool calls.
+            for version in (1, 2, 3, 4, 5, 6):
                 conn.execute(
                     "INSERT OR IGNORE INTO schema_migrations(version, applied_at) "
                     "VALUES(?, ?)",
@@ -523,6 +541,128 @@ class SQLiteHistoryRepository(HistoryRepository):
                 "UPDATE histories SET updated_at = ? WHERE id = ?",
                 (timestamp, history_uid),
             )
+
+    async def store_tool_call(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+        tool_id: str,
+        tool_name: str,
+        status: str,
+        content: str = "",
+        timestamp: str | None = None,
+    ) -> None:
+        validate_user_id(user_id)
+        validate_key(conf_uid, "conf_uid")
+        validate_key(history_uid, "history_uid")
+        validate_key(tool_id, "tool_id")
+        if status not in {"running", "completed", "error"}:
+            raise ValueError(f"Invalid tool status: {status!r}")
+        await self._run(
+            self._store_tool_call_sync,
+            user_id,
+            conf_uid,
+            history_uid,
+            tool_id,
+            tool_name,
+            status,
+            content,
+            timestamp or _now_iso(),
+        )
+
+    def _store_tool_call_sync(
+        self,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+        tool_id: str,
+        tool_name: str,
+        status: str,
+        content: str,
+        timestamp: str,
+    ) -> None:
+        with self._conn:
+            row = self._conn.execute(
+                "SELECT user_id, conf_uid FROM histories WHERE id = ?",
+                (history_uid,),
+            ).fetchone()
+            # Tool events always follow the turn's human message, so a missing
+            # history means the turn is already gone; do not resurrect one.
+            if row is None or row["user_id"] != user_id or row["conf_uid"] != conf_uid:
+                return
+
+            turn_index = self._conn.execute(
+                "SELECT COUNT(*) FROM messages WHERE history_id = ? AND role = 'human'",
+                (history_uid,),
+            ).fetchone()[0]
+            # The turn's question is already stored, so the last human row is
+            # this tool call's turn.
+            self._conn.execute(
+                "INSERT INTO tool_calls("
+                "history_id, turn_index, tool_id, tool_name, status, content, timestamp"
+                ") VALUES(?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(history_id, tool_id) DO UPDATE SET "
+                "tool_name = excluded.tool_name, "
+                "status = excluded.status, "
+                "content = excluded.content, "
+                "timestamp = excluded.timestamp",
+                (
+                    history_uid,
+                    max(turn_index - 1, 0),
+                    tool_id,
+                    tool_name,
+                    status,
+                    content,
+                    timestamp,
+                ),
+            )
+
+    async def list_tool_calls(
+        self,
+        *,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+    ) -> list[ToolCallRecord]:
+        validate_user_id(user_id)
+        validate_key(conf_uid, "conf_uid")
+        validate_key(history_uid, "history_uid")
+        return await self._run(
+            self._list_tool_calls_sync, user_id, conf_uid, history_uid
+        )
+
+    def _list_tool_calls_sync(
+        self, user_id: str, conf_uid: str, history_uid: str
+    ) -> list[ToolCallRecord]:
+        rows = self._conn.execute(
+            "SELECT c.tool_id, c.tool_name, c.status, c.content, c.timestamp, "
+            "c.turn_index "
+            "FROM tool_calls c "
+            "JOIN histories h ON h.id = c.history_id "
+            "WHERE h.id = ? AND h.user_id = ? AND h.conf_uid = ? "
+            "ORDER BY c.turn_index, c.id",
+            (history_uid, user_id, conf_uid),
+        ).fetchall()
+        records: list[ToolCallRecord] = []
+        for row in rows:
+            status = row["status"]
+            # A persisted running status can only mean the turn died before the
+            # tool settled; show it as failed instead of an endless spinner.
+            if status == "running":
+                status = "error"
+            records.append(
+                ToolCallRecord(
+                    tool_id=row["tool_id"],
+                    tool_name=row["tool_name"],
+                    status=status,
+                    content=row["content"],
+                    timestamp=row["timestamp"],
+                    turn_index=int(row["turn_index"]),
+                )
+            )
+        return records
 
     async def get_metadata(
         self,

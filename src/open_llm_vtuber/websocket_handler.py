@@ -606,11 +606,20 @@ class WebSocketHandler:
                 logger.exception("Failed to load chat history")
                 messages = []
 
+        tool_calls = []
+        load_tool_calls = getattr(context, "get_history_tool_calls", None)
+        if context.history is not None and load_tool_calls is not None:
+            try:
+                tool_calls = await load_tool_calls(created_uid or history_uid)
+            except Exception:
+                logger.exception("Failed to load tool calls for history")
+
         await websocket.send_text(
             json.dumps(
                 {
                     "type": "history-data",
                     "messages": [msg for msg in messages if msg["role"] != "system"],
+                    "tool_calls": tool_calls,
                 }
             )
         )

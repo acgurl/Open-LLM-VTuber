@@ -176,6 +176,17 @@ async def consume_agent_stream(
                 await text_delta_buffer.flush()
                 output_item["name"] = context.character_config.character_name
                 await send_text_delta(output_item)
+                # Persist after sending: the live card must not wait on SQLite.
+                store_tool_call = getattr(context, "store_history_tool_call", None)
+                if store_tool_call is not None and output_item.get("tool_id"):
+                    await store_tool_call(
+                        tool_id=str(output_item.get("tool_id")),
+                        tool_name=str(output_item.get("tool_name") or ""),
+                        status=str(output_item.get("status") or ""),
+                        content=str(output_item.get("content") or ""),
+                        timestamp=output_item.get("timestamp"),
+                        history_uid=getattr(context, "turn_history_uid", None),
+                    )
             elif isinstance(output_item, (SentenceOutput, AudioOutput)):
                 await text_delta_buffer.flush()
                 response_part = await process_agent_output(

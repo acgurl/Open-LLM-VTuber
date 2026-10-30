@@ -125,7 +125,7 @@ export function handleServerMessage(msg: ServerMessage) {
 
     case 'history-data': {
       const messages = msg.messages ?? [];
-      chat.loadHistory(messages);
+      chat.loadHistory(messages, msg.tool_calls ?? []);
       // Reattaching to an empty history (e.g. right after a reconnect) should
       // keep showing the welcome text instead of clearing the chat.
       if (messages.length === 0 && conn.welcomeMessage) {
