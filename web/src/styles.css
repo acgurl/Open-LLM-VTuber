@@ -82,7 +82,13 @@
   --pending: #f4c76b;
 
   --bubble-ai: rgba(30, 30, 34, 0.7);
-  --bubble-human: color-mix(in oklab, var(--secondary) 22%, rgba(30, 30, 34, 0.7));
+  /* 用户气泡取主色相的淡玻璃：同一个色相舞台里靠位置和色阶区分说话人，不再引入补色 */
+  --bubble-human: color-mix(in oklab, var(--accent) 18%, rgba(30, 30, 34, 0.7));
+  --bubble-human-line: color-mix(in oklab, var(--accent) 32%, transparent);
+  /* 消息面板共用几何：气泡与工具卡落在同一套圆角与内边距上 */
+  --surface-r: 20px;
+  --surface-pad-y: 11px;
+  --surface-pad-x: 15px;
 
   --stage-glow: color-mix(in oklab, var(--accent) 13%, transparent);
   --stage-glow-2: color-mix(in oklab, var(--secondary) 10%, transparent);
@@ -150,7 +156,8 @@ html[data-theme='light'] {
   --pending: #9b6b11;
 
   --bubble-ai: rgba(255, 255, 255, 0.8);
-  --bubble-human: color-mix(in oklab, var(--secondary) 12%, rgba(255, 255, 255, 0.82));
+  --bubble-human: color-mix(in oklab, var(--accent) 12%, rgba(255, 255, 255, 0.82));
+  --bubble-human-line: color-mix(in oklab, var(--accent) 28%, transparent);
 
   --stage-glow: color-mix(in oklab, var(--accent) 11%, transparent);
   --stage-glow-2: color-mix(in oklab, var(--secondary) 9%, transparent);
@@ -703,11 +710,12 @@ html[data-theme='light'] .app::after {
   background: var(--line-strong);
 }
 
-/* 内容单独一层，用来观察高度变化（折叠/长高时才能一直吸底） */
+/* 内容单独一层，用来观察高度变化（折叠/长高时才能一直吸底）。
+   gap 是所有卡片之间唯一的间距来源，气泡不再用额外的元信息行撑高。 */
 .chat-stack {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
 }
 
 /* 内容溢出时 flex 子项会被压缩；工具卡 overflow:hidden 会因此被压没 */
@@ -821,26 +829,15 @@ html[data-theme='light'] .app::after {
   }
 }
 
-@keyframes message-in {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.985);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
 .bubble-row.human {
   justify-content: flex-end;
 }
 
 .bubble-stack {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 5px;
   min-width: 0;
   max-width: 100%;
 }
@@ -849,34 +846,36 @@ html[data-theme='light'] .app::after {
   align-items: flex-end;
 }
 
-.bubble {
+/* 一块“消息面板”：气泡与工具卡共用同一层玻璃、同一圈圆角，只靠位置和状态色区分角色 */
+.bubble,
+.tool-card {
   position: relative;
-  max-width: 100%;
-  padding: 11px 15px;
-  border-radius: 20px;
-  border-top-left-radius: 7px;
+  border: 1px solid var(--line);
+  border-radius: var(--surface-r);
   background:
     linear-gradient(180deg, var(--sheen), transparent 62%),
     var(--bubble-ai);
-  border: 1px solid var(--line);
   backdrop-filter: blur(14px) saturate(1.15);
   -webkit-backdrop-filter: blur(14px) saturate(1.15);
   box-shadow: var(--shadow-soft), var(--shadow-inset);
-  font-size: 0.95rem;
-  line-height: 1.7;
-  word-break: break-word;
   transition:
     border-color 240ms var(--ease-snap),
     box-shadow 240ms var(--ease-snap);
 }
 
+.bubble {
+  max-width: 100%;
+  padding: var(--surface-pad-y) var(--surface-pad-x);
+  font-size: 0.95rem;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
 .bubble-row.human .bubble {
-  border-top-left-radius: 20px;
-  border-top-right-radius: 7px;
   background:
     linear-gradient(180deg, var(--sheen), transparent 62%),
     var(--bubble-human);
-  border-color: var(--secondary-line);
+  border-color: var(--bubble-human-line);
 }
 
 .bubble.streaming {
@@ -901,11 +900,12 @@ html[data-theme='light'] .app::after {
   }
 }
 
-/* 等待首字：一个安静的“对方正在输入”气泡，收在左下，不与正式回答抢注意力 */
+/* 等待首字：一个安静的“对方正在输入”气泡，高度与普通气泡对齐，不与正式回答抢注意力 */
 .typing-bubble {
   display: inline-flex;
   align-items: center;
-  padding: 13px 17px;
+  min-height: 48px;
+  padding: 0 17px;
   border-color: var(--line-strong);
 }
 
@@ -947,12 +947,17 @@ html[data-theme='light'] .app::after {
   }
 }
 
+/* 时间和复制跟着气泡挂在卡片间隙里：不占布局高度，所以每张卡片之间永远只隔一个 gap。
+   行高与 gap 一致，文字正好落在两张卡片中间。 */
 .bubble-meta {
+  position: absolute;
+  top: 100%;
+  left: 2px;
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 18px;
-  padding: 0 5px;
+  height: 20px;
+  padding: 0 3px;
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
   color: var(--faint);
@@ -961,6 +966,11 @@ html[data-theme='light'] .app::after {
   transition:
     opacity 180ms var(--ease-snap),
     transform 180ms var(--ease-snap);
+}
+
+.bubble-row.human .bubble-meta {
+  left: auto;
+  right: 2px;
 }
 
 .bubble-row:hover .bubble-meta,
@@ -978,7 +988,7 @@ html[data-theme='light'] .app::after {
   align-items: center;
   justify-content: center;
   width: 20px;
-  height: 18px;
+  height: 16px;
   padding: 0;
   border: none;
   border-radius: 6px;
@@ -1391,26 +1401,19 @@ html[data-theme='light'] .app::after {
   transform: translateY(-4px);
 }
 
+/* 工具卡是“AIRI 做了一步”的消息，不是独立面板：贴内容宽度，几何与气泡一致；
+   只有异常状态（进行中/失败）才在描边上加一点色。 */
 .tool-card {
-  position: relative;
-  align-self: stretch;
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  background:
-    linear-gradient(180deg, var(--sheen), transparent 62%),
-    var(--bubble-ai);
-  backdrop-filter: blur(14px) saturate(1.1);
-  -webkit-backdrop-filter: blur(14px) saturate(1.1);
-  box-shadow: var(--shadow-soft), var(--shadow-inset);
+  align-self: flex-start;
+  width: fit-content;
+  min-width: min(100%, 232px);
+  max-width: 100%;
   overflow: hidden;
-  animation: message-in 360ms var(--ease-spring) backwards;
-  transition:
-    border-color 240ms var(--ease-snap),
-    box-shadow 240ms var(--ease-snap);
+  animation: bubble-in-ai 380ms var(--ease-spring) backwards;
 }
 
 .tool-card.status-running {
-  border-color: color-mix(in oklab, var(--pending) 30%, transparent);
+  border-color: color-mix(in oklab, var(--pending) 34%, transparent);
 }
 
 .tool-card.status-running::after {
@@ -1433,11 +1436,8 @@ html[data-theme='light'] .app::after {
   }
 }
 
-/* 状态落定的一次性回执：完成时一圈绿光收掉，出错时一圈红光，不循环 */
-.tool-card.status-completed {
-  border-color: color-mix(in oklab, var(--ok) 24%, transparent);
-}
-
+/* 状态落定的一次性回执：完成时一圈绿光收掉，出错时一圈红光，不循环。
+   完成态不再常驻绿色描边——成功是默认结果，留一个绿点就够了。 */
 .tool-card.status-error {
   border-color: var(--danger-line);
 }
@@ -1486,7 +1486,8 @@ html[data-theme='light'] .app::after {
   align-items: center;
   gap: 9px;
   width: 100%;
-  padding: 9px 13px;
+  min-height: 48px;
+  padding: 0 var(--surface-pad-x);
   background: none;
   border: none;
   color: var(--ink);
@@ -1550,23 +1551,42 @@ html[data-theme='light'] .app::after {
 }
 
 .tool-name {
+  min-width: 0;
   font-family: var(--font-mono);
-  font-size: 0.9em;
+  font-size: 0.82rem;
+  letter-spacing: -0.01em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .tool-status {
-  color: var(--muted);
   margin-left: auto;
+  padding-left: 10px;
+  color: var(--muted);
   white-space: nowrap;
-  font-size: 0.9em;
+  font-size: 0.76rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 处理中/失败才让状态词带颜色；完成是最常见的结果，保持安静 */
+.tool-card.status-running .tool-status {
+  color: var(--pending);
+}
+
+.tool-card.status-error .tool-status {
+  color: var(--danger);
+}
+
+.tool-head .think-chevron {
+  margin: 0 0 0 1px;
+  font-size: 0.68rem;
+  color: var(--faint);
 }
 
 .tool-body {
   margin: 0;
-  padding: 10px 13px;
+  padding: var(--surface-pad-y) var(--surface-pad-x);
   max-height: 220px;
   overflow: auto;
   font-family: var(--font-mono);
@@ -3485,8 +3505,12 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
   }
 }
 
-/* 触屏放大次级控件命中区 */
+/* 触屏放大次级控件命中区；时间行常驻在间隙里，间距同步让出它的高度 */
 @media (pointer: coarse) {
+  .chat-stack {
+    gap: 28px;
+  }
+
   .bubble-copy {
     width: 28px;
     height: 26px;
@@ -3517,7 +3541,7 @@ html[data-theme='light'] .setting-row input[type='checkbox']::after {
   }
 
   .tool-head {
-    padding: 11px 13px;
+    min-height: 50px;
   }
 }
 
