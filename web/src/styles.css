@@ -1401,12 +1401,10 @@ html[data-theme='light'] .app::after {
   transform: translateY(-4px);
 }
 
-/* 工具卡是“AIRI 做了一步”的消息，不是独立面板：贴内容宽度，几何与气泡一致；
-   只有异常状态（进行中/失败）才在描边上加一点色。 */
+/* 工具卡是“AIRI 做了一步”的消息，不是独立面板：固定占满消息列宽度，
+   折叠内容的长短不会改变卡片宽度；几何与气泡一致，只有异常状态才在描边上加一点色。 */
 .tool-card {
-  align-self: flex-start;
-  width: fit-content;
-  min-width: min(100%, 232px);
+  align-self: stretch;
   max-width: 100%;
   overflow: hidden;
   animation: bubble-in-ai 380ms var(--ease-spring) backwards;
