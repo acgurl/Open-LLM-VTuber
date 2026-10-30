@@ -837,13 +837,14 @@ html[data-theme='light'] .app::after {
   position: relative;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
+  width: 100%;
   min-width: 0;
   max-width: 100%;
 }
 
 .bubble-row.human .bubble-stack {
-  align-items: flex-end;
+  align-items: stretch;
 }
 
 /* 一块“消息面板”：气泡与工具卡共用同一层玻璃、同一圈圆角，只靠位置和状态色区分角色 */
@@ -863,8 +864,9 @@ html[data-theme='light'] .app::after {
     box-shadow 240ms var(--ease-snap);
 }
 
+/* 所有消息卡统一占满消息列，宽度不再随内容长短变化；说话人靠色相区分 */
 .bubble {
-  max-width: 100%;
+  width: 100%;
   padding: var(--surface-pad-y) var(--surface-pad-x);
   font-size: 0.95rem;
   line-height: 1.7;
