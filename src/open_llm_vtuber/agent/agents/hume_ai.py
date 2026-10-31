@@ -1,6 +1,6 @@
 import asyncio
 import base64
-from typing import AsyncIterator, Awaitable, Callable, Optional
+from collections.abc import AsyncIterator, Awaitable, Callable
 import json
 import websockets
 from loguru import logger
@@ -23,7 +23,7 @@ class HumeAIAgent(AgentInterface):
         self,
         api_key: str,
         host: str = "api.hume.ai",
-        config_id: Optional[str] = None,
+        config_id: str | None = None,
         idle_timeout: int = 15,
         metadata_writer: Callable[[dict], Awaitable[bool]] | None = None,
     ):
@@ -53,7 +53,7 @@ class HumeAIAgent(AgentInterface):
         self.cache_dir = Path("./cache")
         self.cache_dir.mkdir(exist_ok=True)
 
-    async def connect(self, resume_chat_group_id: Optional[str] = None):
+    async def connect(self, resume_chat_group_id: str | None = None):
         """
         Establish WebSocket connection with optional chat group resumption
 

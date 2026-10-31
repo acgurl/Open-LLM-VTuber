@@ -1,15 +1,8 @@
 import asyncio
-import sys
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.proxy_handler import ProxyHandler
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.proxy_handler import ProxyHandler
 
 
 class ProxyReconnectTests(unittest.IsolatedAsyncioTestCase):

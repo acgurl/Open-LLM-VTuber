@@ -148,11 +148,3 @@ class TTSEngine(TTSInterface):
 
 
 # Code Used to Test Cartesia TTS Engine
-# if __name__ == "__main__":
-#     tts_engine = TTSEngine()
-#     test_text = "Hello world! This is a test using Cartesia."
-#     audio_path = tts_engine.generate_audio(test_text, "cartesia_test")
-#     if audio_path:
-#         print(f"Generated audio saved to: {audio_path}")
-#     else:
-#         print("Failed to generate audio.")

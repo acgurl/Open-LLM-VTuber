@@ -1,22 +1,15 @@
-import sys
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber import service_context as service_context_module
-    from open_llm_vtuber.agent.transformers import actions_extractor
-    from open_llm_vtuber.service_context import ServiceContext
-    from open_llm_vtuber.utils.sentence_divider import (
-        SentenceWithTags,
-        TagInfo,
-        TagState,
-    )
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber import service_context as service_context_module
+from open_llm_vtuber.agent.transformers import actions_extractor
+from open_llm_vtuber.service_context import ServiceContext
+from open_llm_vtuber.utils.sentence_divider import (
+    SentenceWithTags,
+    TagInfo,
+    TagState,
+)
 
 
 class Live2DFallbackTests(unittest.IsolatedAsyncioTestCase):

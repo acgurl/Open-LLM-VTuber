@@ -21,7 +21,6 @@ class TTSEngine(TTSInterface):
         self.model = TTS(language=language, device=device)
         self.speaker_id = self.model.hps.data.spk2id[speaker]
 
-        self.temp_audio_file = "temp"
         self.file_extension = "wav"
 
     def generate_audio(self, text, file_name_no_ext=None):

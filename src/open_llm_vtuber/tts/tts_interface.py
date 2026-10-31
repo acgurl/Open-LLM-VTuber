@@ -41,7 +41,7 @@ class TTSInterface(metaclass=abc.ABCMeta):
         """
         raise NotImplementedError
 
-    def close(self) -> None:
+    def close(self) -> None:  # noqa: B027 - optional hook, no-op by default
         """Release reusable resources such as pooled API clients."""
 
     def remove_partial_file(self, filepath) -> None:

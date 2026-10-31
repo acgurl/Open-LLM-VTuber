@@ -3,7 +3,7 @@
 import asyncio
 import json
 
-from typing import Dict, Optional, List, Tuple, Any
+from typing import Any
 from loguru import logger
 
 from .types import FormattedTool
@@ -22,7 +22,7 @@ from .user_servers import (
 class ToolAdapter:
     """Dynamically fetches tool information from enabled MCP servers and formats it."""
 
-    def __init__(self, server_registry: Optional[ServerRegistry] = None) -> None:
+    def __init__(self, server_registry: ServerRegistry | None = None) -> None:
         """Initialize with an ServerRegistry."""
         self.server_registry = server_registry or ServerRegistry()
 
@@ -50,7 +50,7 @@ class ToolAdapter:
             )
         return await client.list_tools(server_name)
 
-    async def _fetch_all_tools(self, enabled_servers: List[str]) -> Dict[str, Any]:
+    async def _fetch_all_tools(self, enabled_servers: list[str]) -> dict[str, Any]:
         """Fetch every enabled server's tools, keeping configured order.
 
         Deployment servers keep the original sequential path (some use stdio
@@ -58,7 +58,7 @@ class ToolAdapter:
         concurrently so one slow endpoint cannot multiply the session start
         time.
         """
-        results: Dict[str, Any] = {}
+        results: dict[str, Any] = {}
         scoped_servers = [
             name for name in enabled_servers if self._is_scoped_server(name)
         ]
@@ -81,15 +81,15 @@ class ToolAdapter:
                 ),
                 return_exceptions=True,
             )
-            results.update(zip(scoped_servers, scoped_results))
+            results.update(zip(scoped_servers, scoped_results, strict=True))
         return results
 
     def _register_server_tools(
         self,
         server_name: str,
         tools: list,
-        servers_info: Dict[str, Dict[str, str]],
-        formatted_tools: Dict[str, FormattedTool],
+        servers_info: dict[str, dict[str, str]],
+        formatted_tools: dict[str, FormattedTool],
     ) -> None:
         logger.debug(f"MC: Found {len(tools)} tools on server '{server_name}'")
         namespace_prefix = self._namespace_prefix(server_name)
@@ -145,11 +145,11 @@ class ToolAdapter:
             )
 
     async def get_server_and_tool_info(
-        self, enabled_servers: List[str]
-    ) -> Tuple[Dict[str, Dict[str, str]], Dict[str, FormattedTool]]:
+        self, enabled_servers: list[str]
+    ) -> tuple[dict[str, dict[str, str]], dict[str, FormattedTool]]:
         """Fetch tool information from specified enabled MCP servers."""
-        servers_info: Dict[str, Dict[str, str]] = {}
-        formatted_tools: Dict[str, FormattedTool] = {}
+        servers_info: dict[str, dict[str, str]] = {}
+        formatted_tools: dict[str, FormattedTool] = {}
 
         if not enabled_servers:
             logger.warning(
@@ -181,8 +181,8 @@ class ToolAdapter:
 
     def construct_mcp_prompt_string(
         self,
-        servers_info: Dict[str, Dict[str, str]],
-        display_names: Optional[Dict[str, str]] = None,
+        servers_info: dict[str, dict[str, str]],
+        display_names: dict[str, str] | None = None,
     ) -> str:
         """Build a single prompt string describing enabled servers and their tools."""
         full_prompt_content = ""
@@ -240,8 +240,8 @@ class ToolAdapter:
         return full_prompt_content.strip()  # Remove trailing newline
 
     def format_tools_for_api(
-        self, formatted_tools_dict: Dict[str, FormattedTool]
-    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        self, formatted_tools_dict: dict[str, FormattedTool]
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """Format tools to OpenAI and Claude function-calling compatible schemas."""
         openai_tools = []
         claude_tools = []
@@ -260,7 +260,7 @@ class ToolAdapter:
                 continue
 
             input_schema = data_object.input_schema
-            properties: Dict[str, Dict[str, str]] = input_schema.get("properties", {})
+            properties: dict[str, dict[str, str]] = input_schema.get("properties", {})
             tool_description = data_object.description or "No description provided."
             required_params = input_schema.get("required", [])
 
@@ -322,9 +322,9 @@ class ToolAdapter:
         return openai_tools, claude_tools
 
     async def build_tools(
-        self, enabled_servers: List[str]
-    ) -> Tuple[
-        str, List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, FormattedTool]
+        self, enabled_servers: list[str]
+    ) -> tuple[
+        str, list[dict[str, Any]], list[dict[str, Any]], dict[str, FormattedTool]
     ]:
         """Fetch tool info once and return prompt, API schemas, and raw tools."""
         logger.info(
@@ -339,8 +339,8 @@ class ToolAdapter:
         return mcp_prompt_string, openai_tools, claude_tools, formatted_tools_dict
 
     async def get_tools(
-        self, enabled_servers: List[str]
-    ) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]]]:
+        self, enabled_servers: list[str]
+    ) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
         """Run the dynamic fetching and formatting process."""
         mcp_prompt_string, openai_tools, claude_tools, _ = await self.build_tools(
             enabled_servers

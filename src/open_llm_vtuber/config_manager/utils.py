@@ -1,7 +1,8 @@
 # config_manager/utils.py
 import yaml
 from pathlib import Path
-from typing import Union, Dict, Any, TypeVar, Callable
+from typing import Any, TypeVar
+from collections.abc import Callable
 from pydantic import BaseModel, ValidationError
 import os
 import re
@@ -14,7 +15,7 @@ from ..utils.security import redact_secrets
 T = TypeVar("T", bound=BaseModel)
 
 
-def read_yaml(config_path: str) -> Dict[str, Any]:
+def read_yaml(config_path: str) -> dict[str, Any]:
     """
     Read the specified YAML configuration file with environment variable substitution
     and guess encoding. Return the configuration data as a dictionary.
@@ -35,7 +36,7 @@ def read_yaml(config_path: str) -> Dict[str, Any]:
 
     content = load_text_file_with_guess_encoding(config_path)
     if not content:
-        raise IOError(f"Failed to read configuration file: {config_path}")
+        raise OSError(f"Failed to read configuration file: {config_path}")
 
     # Replace environment variables
     pattern = re.compile(r"\$\{(\w+)\}")
@@ -97,7 +98,7 @@ def load_text_file_with_guess_encoding(file_path: str) -> str | None:
 
     for encoding in encodings:
         try:
-            with open(file_path, "r", encoding=encoding) as file:
+            with open(file_path, encoding=encoding) as file:
                 return file.read()
         except UnicodeDecodeError:
             continue
@@ -113,7 +114,7 @@ def load_text_file_with_guess_encoding(file_path: str) -> str | None:
     return None
 
 
-def save_config(config: BaseModel, config_path: Union[str, Path]):
+def save_config(config: BaseModel, config_path: str | Path):
     """
     Saves a Pydantic model to a YAML configuration file.
 
@@ -130,7 +131,7 @@ def save_config(config: BaseModel, config_path: Union[str, Path]):
         with open(config_file, "w", encoding="utf-8") as f:
             yaml.dump(config_data, f, allow_unicode=True)
     except yaml.YAMLError as e:
-        raise yaml.YAMLError(f"Error writing YAML file: {e}")
+        raise yaml.YAMLError(f"Error writing YAML file: {e}") from e
 
 
 def _config_display_name(config: Any, fallback: str) -> str:
@@ -214,7 +215,7 @@ def scan_config_alts_directory(
 def scan_bg_directory() -> list[str]:
     bg_files = []
     bg_dir = "backgrounds"
-    for root, _, files in os.walk(bg_dir):
+    for _root, _, files in os.walk(bg_dir):
         for file in files:
             if file.endswith((".jpg", ".jpeg", ".png", ".gif")):
                 bg_files.append(file)

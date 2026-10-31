@@ -1,4 +1,4 @@
-from typing import Callable, Dict, Optional
+from collections.abc import Callable
 
 from .vad_interface import VADInterface
 
@@ -17,14 +17,14 @@ def _build_silero_vad(kwargs: dict) -> VADInterface:
     )
 
 
-_VAD_BUILDERS: Dict[str, Callable[[dict], VADInterface]] = {
+_VAD_BUILDERS: dict[str, Callable[[dict], VADInterface]] = {
     "silero_vad": _build_silero_vad,
 }
 
 
 class VADFactory:
     @staticmethod
-    def get_vad_engine(engine_type, **kwargs) -> Optional[VADInterface]:
+    def get_vad_engine(engine_type, **kwargs) -> VADInterface | None:
         if engine_type is None:
             return None
 

@@ -9,7 +9,6 @@ class GroupBridge {
   private bc: BroadcastChannel | null = null;
   private myUid: string | null = null;
   private peers = new Map<string, number>();
-  private timer: number | null = null;
 
   setUid(uid: string) {
     this.myUid = uid;
@@ -31,7 +30,7 @@ class GroupBridge {
       }
     };
     this.bc.postMessage({ kind: 'who', uid: 'bootstrap' });
-    this.timer = window.setInterval(() => {
+    window.setInterval(() => {
       this.announce();
       this.prune();
     }, ANNOUNCE_INTERVAL_MS);

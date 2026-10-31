@@ -175,7 +175,7 @@ def parse_mcp_url(url: Any):
     if not parsed.hostname:
         raise ValueError("url must include a host")
     try:
-        parsed.port
+        _ = parsed.port  # Accessing the property validates the port.
     except ValueError as exc:
         raise ValueError("url contains an invalid port") from exc
     return parsed

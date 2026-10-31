@@ -1,14 +1,13 @@
 import asyncio
-from typing import Optional
 
 from loguru import logger
 
 
 async def cancel_and_wait(
-    task: Optional[asyncio.Task],
+    task: asyncio.Task | None,
     *,
     failure_message: str,
-    cancel_message: Optional[str] = None,
+    cancel_message: str | None = None,
 ) -> None:
     """Cancel a task and wait for it, logging unexpected failures."""
     if task is None or task.done():

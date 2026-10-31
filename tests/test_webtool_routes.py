@@ -1,16 +1,9 @@
-import sys
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from fastapi import FastAPI
+from starlette.testclient import TestClient
 
-try:
-    from fastapi import FastAPI
-    from starlette.testclient import TestClient
-
-    from open_llm_vtuber.routes import init_webtool_routes
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.routes import init_webtool_routes
 
 
 class FakeTTSEngine:

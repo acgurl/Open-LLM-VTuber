@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 import asyncio
 import json
 from loguru import logger
@@ -26,16 +26,16 @@ from .tts_manager import TTSTaskManager
 
 
 async def process_group_conversation(
-    client_contexts: Dict[str, ServiceContext],
-    client_connections: Dict[str, WebSocket],
+    client_contexts: dict[str, ServiceContext],
+    client_connections: dict[str, WebSocket],
     broadcast_func: BroadcastFunc,
-    group_members: List[str],
+    group_members: list[str],
     initiator_client_uid: str,
     group_id: str,
-    user_input: Union[str, np.ndarray],
-    images: Optional[List[Dict[str, Any]]] = None,
+    user_input: str | np.ndarray,
+    images: list[dict[str, Any]] | None = None,
     session_emoji: str = np.random.choice(EMOJI_LIST),
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     """Process group conversation
 
@@ -66,9 +66,9 @@ async def process_group_conversation(
             group_id=group_id,
             session_emoji=session_emoji,
             group_queue=list(group_members),
-            memory_index={
-                uid: 0 for uid in group_members
-            },  # Initialize memory index for each member
+            memory_index=dict.fromkeys(
+                group_members, 0
+            ),  # Initialize memory index for each member
         )
 
         # Initialize group conversation context for each AI
@@ -135,7 +135,7 @@ async def process_group_conversation(
             except Exception as e:
                 logger.error(f"Error in group member turn: {e}")
                 await handle_member_error(
-                    broadcast_func, group_members, f"Error in conversation: {str(e)}"
+                    broadcast_func, group_members, f"Error in conversation: {e!s}"
                 )
 
     except asyncio.CancelledError:
@@ -146,7 +146,7 @@ async def process_group_conversation(
     except Exception as e:
         logger.error(f"Error in group conversation chain: {e}")
         await handle_member_error(
-            broadcast_func, group_members, f"Fatal error in conversation: {str(e)}"
+            broadcast_func, group_members, f"Fatal error in conversation: {e!s}"
         )
         raise
     finally:
@@ -158,8 +158,8 @@ async def process_group_conversation(
 
 
 def init_group_conversation_contexts(
-    client_contexts: Dict[str, ServiceContext],
-    group_members: List[str],
+    client_contexts: dict[str, ServiceContext],
+    group_members: list[str],
 ) -> None:
     """Initialize group conversation context for each AI participant"""
     member_contexts = [
@@ -185,11 +185,11 @@ def init_group_conversation_contexts(
 
 
 async def process_group_input(
-    user_input: Union[str, np.ndarray],
+    user_input: str | np.ndarray,
     initiator_context: ServiceContext,
     initiator_ws_send: WebSocketSend,
     broadcast_func: BroadcastFunc,
-    group_members: List[str],
+    group_members: list[str],
     initiator_client_uid: str,
 ) -> str:
     """Process and broadcast user input to group"""
@@ -204,7 +204,7 @@ async def process_group_input(
 
 async def broadcast_transcription(
     broadcast_func: BroadcastFunc,
-    group_members: List[str],
+    group_members: list[str],
     text: str,
     exclude_uid: str,
 ) -> None:
@@ -222,13 +222,13 @@ async def broadcast_transcription(
 async def handle_group_member_turn(
     current_member_uid: str,
     state: GroupConversationState,
-    client_contexts: Dict[str, ServiceContext],
-    client_connections: Dict[str, WebSocket],
+    client_contexts: dict[str, ServiceContext],
+    client_connections: dict[str, WebSocket],
     broadcast_func: BroadcastFunc,
-    group_members: List[str],
-    images: Optional[List[Dict[str, Any]]],
+    group_members: list[str],
+    images: list[dict[str, Any]] | None,
     tts_manager: TTSTaskManager,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
     skip_history: bool = False,
 ) -> None:
     """Handle a single group member's conversation turn"""
@@ -305,7 +305,7 @@ async def handle_group_member_turn(
 
 
 async def broadcast_thinking_state(
-    broadcast_func: BroadcastFunc, group_members: List[str]
+    broadcast_func: BroadcastFunc, group_members: list[str]
 ) -> None:
     """Broadcast thinking state to group"""
     await broadcast_func(
@@ -320,7 +320,7 @@ async def broadcast_thinking_state(
 
 async def handle_member_error(
     broadcast_func: BroadcastFunc,
-    group_members: List[str],
+    group_members: list[str],
     error_message: str,
 ) -> None:
     """Handle and broadcast member error"""
@@ -338,12 +338,12 @@ async def process_member_response(
     batch_input: Any,
     channels: OutboundChannels,
     tts_manager: TTSTaskManager,
-    broadcast_func: Optional[BroadcastFunc] = None,
-    group_members: Optional[List[str]] = None,
+    broadcast_func: BroadcastFunc | None = None,
+    group_members: list[str] | None = None,
 ) -> str:
     """Process group member's response, handling text/audio and tool status events."""
 
-    async def send_text_delta(message: Dict[str, Any]) -> None:
+    async def send_text_delta(message: dict[str, Any]) -> None:
         if message.get("type") == "tool_call_status" and message.get("scoped"):
             # User/browser-scoped MCP tools may expose personal files or
             # credentials in their input/results; keep them on the owner's

@@ -1,15 +1,8 @@
 import re
-import sys
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.utils.audio import new_audio_file_stem
-    from open_llm_vtuber.utils.text import is_silent_text
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.utils.audio import new_audio_file_stem
+from open_llm_vtuber.utils.text import is_silent_text
 
 
 class TextUtilsTests(unittest.TestCase):

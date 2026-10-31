@@ -74,8 +74,8 @@ def compare_yaml_values(dict1, dict2):
 if __name__ == "__main__":
     yaml = YAML(typ="safe")
     with (
-        open(conf1, "r", encoding="utf-8") as f1,
-        open(conf2, "r", encoding="utf-8") as f2,
+        open(conf1, encoding="utf-8") as f1,
+        open(conf2, encoding="utf-8") as f2,
     ):
         config1 = yaml.load(f1)
         config2 = yaml.load(f2)

@@ -1,12 +1,8 @@
-import sys
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-import open_llm_vtuber.utils.tts_preprocessor as preprocessor  # noqa: E402
-from open_llm_vtuber.utils.tts_preprocessor import (  # noqa: E402
+import open_llm_vtuber.utils.tts_preprocessor as preprocessor
+from open_llm_vtuber.utils.tts_preprocessor import (
     markdown_to_plain_text,
     tts_filter,
 )

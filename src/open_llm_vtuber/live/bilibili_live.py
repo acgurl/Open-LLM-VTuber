@@ -5,7 +5,8 @@ import http.cookies
 import inspect
 import traceback
 import json
-from typing import Callable, Dict, Any, List, Optional
+from typing import Any
+from collections.abc import Callable
 from loguru import logger
 import aiohttp
 import websockets
@@ -39,7 +40,7 @@ class BiliBiliLivePlatform(LivePlatformInterface):
     Connects to a BiliBili live room and forwards danmaku messages to the VTuber.
     """
 
-    def __init__(self, room_ids: List[int], sessdata: str = ""):
+    def __init__(self, room_ids: list[int], sessdata: str = ""):
         """
         Initialize the BiliBili Live platform client.
 
@@ -54,12 +55,12 @@ class BiliBiliLivePlatform(LivePlatformInterface):
 
         self._room_ids = room_ids
         self._sessdata = sessdata
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._clients: List[blivedm.BLiveClient] = []
-        self._websocket: Optional[websockets.WebSocketClientProtocol] = None
+        self._session: aiohttp.ClientSession | None = None
+        self._clients: list[blivedm.BLiveClient] = []
+        self._websocket: websockets.WebSocketClientProtocol | None = None
         self._connected = False
         self._running = False
-        self._message_handlers: List[Callable[[Dict[str, Any]], None]] = []
+        self._message_handlers: list[Callable[[dict[str, Any]], None]] = []
         self._conversation_active = False
         self._background_tasks: set[asyncio.Task] = set()
 
@@ -71,10 +72,9 @@ class BiliBiliLivePlatform(LivePlatformInterface):
                 return (
                     self._connected and self._websocket and not self._websocket.closed
                 )
-            elif hasattr(self._websocket, "open"):
+            if hasattr(self._websocket, "open"):
                 return self._connected and self._websocket and self._websocket.open
-            else:
-                return self._connected and self._websocket is not None
+            return self._connected and self._websocket is not None
         except Exception:
             return False
 
@@ -174,7 +174,7 @@ class BiliBiliLivePlatform(LivePlatformInterface):
         return False
 
     async def register_message_handler(
-        self, handler: Callable[[Dict[str, Any]], None]
+        self, handler: Callable[[dict[str, Any]], None]
     ) -> None:
         """
         Register a callback for handling incoming messages.
@@ -263,7 +263,7 @@ class BiliBiliLivePlatform(LivePlatformInterface):
         except Exception as e:
             logger.error(f"Error in message receiving loop: {e}")
 
-    async def handle_incoming_messages(self, message: Dict[str, Any]) -> None:
+    async def handle_incoming_messages(self, message: dict[str, Any]) -> None:
         """
         Process messages received from the VTuber.
 

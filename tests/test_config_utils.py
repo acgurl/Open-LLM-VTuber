@@ -1,12 +1,9 @@
 import os
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-from open_llm_vtuber.config_manager.utils import scan_config_alts_directory  # noqa: E402
+from open_llm_vtuber.config_manager.utils import scan_config_alts_directory
 
 
 class ScanConfigAltsDirectoryTests(unittest.TestCase):

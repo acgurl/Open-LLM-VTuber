@@ -1,19 +1,12 @@
-import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from pydantic import ValidationError
 
-try:
-    from pydantic import ValidationError
-
-    from open_llm_vtuber.config_manager import read_yaml, validate_config
-    from open_llm_vtuber.config_manager.asr import ASRConfig
-    from open_llm_vtuber.config_manager.tts import TTSConfig
-    from open_llm_vtuber.config_manager.vad import VADConfig
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
-
+from open_llm_vtuber.config_manager import read_yaml, validate_config
+from open_llm_vtuber.config_manager.asr import ASRConfig
+from open_llm_vtuber.config_manager.tts import TTSConfig
+from open_llm_vtuber.config_manager.vad import VADConfig
 
 TEMPLATE = (
     Path(__file__).resolve().parents[1] / "config_templates" / "conf.default.yaml"

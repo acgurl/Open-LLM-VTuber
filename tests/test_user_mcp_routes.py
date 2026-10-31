@@ -1,22 +1,15 @@
 import asyncio
 import socket
-import sys
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
-try:
-    from fastapi import FastAPI
-    from fastapi.testclient import TestClient
-
-    from open_llm_vtuber.mcp_routes import init_user_mcp_routes
-    from open_llm_vtuber.service_context import ServiceContext
-    from open_llm_vtuber.storage.sqlite import SQLiteHistoryRepository
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.mcp_routes import init_user_mcp_routes
+from open_llm_vtuber.service_context import ServiceContext
+from open_llm_vtuber.storage.sqlite import SQLiteHistoryRepository
 
 
 def _public_dns(*args, **kwargs):

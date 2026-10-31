@@ -61,7 +61,7 @@ def _repository(context: ServiceContext) -> HistoryRepository | None:
 
 
 def _mask_headers(headers: dict[str, str]) -> dict[str, str]:
-    return {key: _MASKED_VALUE for key in headers}
+    return dict.fromkeys(headers, _MASKED_VALUE)
 
 
 def _resolve_masked_headers(

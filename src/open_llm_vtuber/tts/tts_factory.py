@@ -1,4 +1,4 @@
-from typing import Callable, Dict
+from collections.abc import Callable
 
 from .tts_interface import TTSInterface
 
@@ -231,7 +231,7 @@ def _build_piper(kwargs: dict) -> TTSInterface:
     )
 
 
-_TTS_ENGINE_BUILDERS: Dict[str, Callable[[dict], TTSInterface]] = {
+_TTS_ENGINE_BUILDERS: dict[str, Callable[[dict], TTSInterface]] = {
     "azure_tts": _build_azure,
     "bark_tts": _build_bark,
     "edge_tts": _build_edge,

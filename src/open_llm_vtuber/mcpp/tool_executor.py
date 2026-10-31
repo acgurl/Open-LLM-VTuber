@@ -3,13 +3,10 @@ import datetime
 from dataclasses import dataclass, field
 from loguru import logger
 from typing import (
-    Dict,
     Any,
-    List,
     Literal,
-    Union,
-    AsyncIterator,
 )
+from collections.abc import AsyncIterator
 
 from .types import ToolCallObject
 from .mcp_client import MCPClient
@@ -31,8 +28,8 @@ class ParsedToolCall:
 class ToolRunResult:
     is_error: bool
     text_content: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    content_items: List[Dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    content_items: list[dict[str, Any]] = field(default_factory=list)
 
 
 class ToolExecutor:
@@ -46,9 +43,7 @@ class ToolExecutor:
         self._tool_manager = tool_manager
         self._local_bridge = local_bridge
 
-    def parse_tool_call(
-        self, call: Union[Dict[str, Any], ToolCallObject]
-    ) -> ParsedToolCall:
+    def parse_tool_call(self, call: dict[str, Any] | ToolCallObject) -> ParsedToolCall:
         """Parse a tool call from either provider's wire format."""
         tool_name: str = ""
         tool_id: str = ""
@@ -106,9 +101,9 @@ class ToolExecutor:
         self,
         caller_mode: Literal["Claude", "OpenAI", "Prompt"],
         tool_id: str,
-        result_content: str | List[Dict[str, Any]],
+        result_content: str | list[dict[str, Any]],
         is_error: bool,
-    ) -> Dict[str, Any] | None:
+    ) -> dict[str, Any] | None:
         """Format tool result for LLM API."""
         if caller_mode == "Claude":
             # Claude expects content as a list of blocks or a simple string
@@ -132,14 +127,14 @@ class ToolExecutor:
                 "content": content_to_send,
                 "is_error": is_error,
             }
-        elif caller_mode == "OpenAI":
+        if caller_mode == "OpenAI":
             # OpenAI expects content as a string
             return {
                 "role": "tool",
                 "tool_call_id": tool_id,
                 "content": str(result_content),
             }
-        elif caller_mode == "Prompt":
+        if caller_mode == "Prompt":
             # Prompt mode also expects a string content for now
             return {
                 "tool_id": tool_id,
@@ -149,8 +144,8 @@ class ToolExecutor:
         return None
 
     def process_tool_from_prompt_json(
-        self, data: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, data: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """Process tool data from JSON in prompt mode."""
         parsed_tools = []
         for item in data:
@@ -186,7 +181,7 @@ class ToolExecutor:
         status: str,
         content: str,
         **extra: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         update = {
             "type": "tool_call_status",
             "tool_id": tool_id,
@@ -202,7 +197,7 @@ class ToolExecutor:
     def _split_image_content(
         caller_mode: str,
         text_content: str,
-        content_items: List[Dict[str, Any]],
+        content_items: list[dict[str, Any]],
     ) -> tuple[str, Any]:
         """Return the status text and the LLM-facing content."""
         image_items = [
@@ -234,7 +229,7 @@ class ToolExecutor:
                 )
         return status_content, claude_blocks if claude_blocks else ""
 
-    def _scoped_status_extra(self, tool_name: str) -> Dict[str, Any]:
+    def _scoped_status_extra(self, tool_name: str) -> dict[str, Any]:
         """Mark status events group chat must keep on the owner's socket."""
         tool_info = self._tool_manager.get_tool(tool_name)
         is_scoped_tool = bool(
@@ -256,8 +251,8 @@ class ToolExecutor:
         self,
         parsed: ParsedToolCall,
         caller_mode: Literal["Claude", "OpenAI", "Prompt"],
-        scoped_extra: Dict[str, Any],
-    ) -> tuple[Dict[str, Any], Dict[str, Any] | None]:
+        scoped_extra: dict[str, Any],
+    ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         logger.warning(
             f"Skipping tool call due to parsing error: {parsed.result_content}"
         )
@@ -283,8 +278,8 @@ class ToolExecutor:
     def _completed_status_extra(
         tool_name: str,
         result: ToolRunResult,
-        scoped_extra: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        scoped_extra: dict[str, Any],
+    ) -> dict[str, Any]:
         extra = dict(scoped_extra)
         if tool_name == "stagehand_navigate" and not result.is_error:
             live_view_data = result.metadata.get("liveViewData", {})
@@ -297,9 +292,9 @@ class ToolExecutor:
 
     async def execute_tools(
         self,
-        tool_calls: Union[List[Dict[str, Any]], List[ToolCallObject]],
+        tool_calls: list[dict[str, Any]] | list[ToolCallObject],
         caller_mode: Literal["Claude", "OpenAI", "Prompt"],
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Execute tools and yield status updates."""
         tool_results_for_llm = []
 
@@ -366,8 +361,8 @@ class ToolExecutor:
         self,
         tool_info: Any,
         tool_name: str,
-        tool_input: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        tool_input: dict[str, Any],
+    ) -> dict[str, Any]:
         remote_name = tool_info.remote_name or tool_name
         if tool_info.related_server.startswith("local:"):
             if self._local_bridge is None:
@@ -387,7 +382,7 @@ class ToolExecutor:
 
     @staticmethod
     def _first_result_text(
-        content_items: List[Dict[str, Any]],
+        content_items: list[dict[str, Any]],
     ) -> tuple[bool, str]:
         """Read the first content item the MCP server reported."""
         if content_items and content_items[0].get("type") == "error":
@@ -399,7 +394,7 @@ class ToolExecutor:
         return False, ""
 
     @staticmethod
-    def _log_content_items(tool_name: str, content_items: List[Dict[str, Any]]) -> None:
+    def _log_content_items(tool_name: str, content_items: list[dict[str, Any]]) -> None:
         logger.info(f"Content items from tool '{tool_name}':")
         for item in content_items:
             item_type = item.get("type", "unknown")

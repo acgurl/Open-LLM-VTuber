@@ -1,15 +1,8 @@
-import sys
 import unittest
-from pathlib import Path
 from typing import get_args
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.agent.agent_factory import AgentFactory
-    from open_llm_vtuber.config_manager.agent import AgentConfig
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.agent.agent_factory import AgentFactory
+from open_llm_vtuber.config_manager.agent import AgentConfig
 
 
 class Mem0RemovalTests(unittest.TestCase):

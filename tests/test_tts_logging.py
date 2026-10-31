@@ -2,12 +2,9 @@ import importlib
 import sys
 import types
 import unittest
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 from loguru import logger
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 
 class FishKeyLoggingTests(unittest.TestCase):

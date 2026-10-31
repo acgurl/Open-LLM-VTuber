@@ -2,7 +2,7 @@ import json
 import unittest
 from types import SimpleNamespace
 
-from src.open_llm_vtuber.websocket_handler import WebSocketHandler
+from open_llm_vtuber.websocket_handler import WebSocketHandler
 
 
 class FakeWebSocket:

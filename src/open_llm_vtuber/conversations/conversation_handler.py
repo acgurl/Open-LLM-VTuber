@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Dict, Optional, Callable
+from collections.abc import Callable
 
 import numpy as np
 from fastapi import WebSocket
@@ -19,13 +19,13 @@ from prompts import prompt_loader
 MAX_CONCURRENT_CONVERSATIONS = 16
 
 
-def _active_task_count(tasks: Dict[str, Optional[asyncio.Task]]) -> int:
+def _active_task_count(tasks: dict[str, asyncio.Task | None]) -> int:
     return sum(1 for task in tasks.values() if task and not task.done())
 
 
 async def _reject_if_at_capacity(
     websocket: WebSocket,
-    tasks: Dict[str, Optional[asyncio.Task]],
+    tasks: dict[str, asyncio.Task | None],
 ) -> bool:
     if _active_task_count(tasks) < MAX_CONCURRENT_CONVERSATIONS:
         return False
@@ -42,7 +42,7 @@ async def _reject_if_at_capacity(
 
 
 async def _cancel_previous_task(
-    tasks: Dict[str, Optional[asyncio.Task]], task_key: str
+    tasks: dict[str, asyncio.Task | None], task_key: str
 ) -> None:
     previous = tasks.get(task_key)
     await cancel_and_wait(
@@ -51,7 +51,7 @@ async def _cancel_previous_task(
 
 
 def _track_task(
-    tasks: Dict[str, Optional[asyncio.Task]], task_key: str, task: asyncio.Task
+    tasks: dict[str, asyncio.Task | None], task_key: str, task: asyncio.Task
 ) -> None:
     tasks[task_key] = task
 
@@ -100,11 +100,11 @@ async def handle_conversation_trigger(
     client_uid: str,
     context: ServiceContext,
     websocket: WebSocket,
-    client_contexts: Dict[str, ServiceContext],
-    client_connections: Dict[str, WebSocket],
+    client_contexts: dict[str, ServiceContext],
+    client_connections: dict[str, WebSocket],
     chat_group_manager: ChatGroupManager,
-    received_data_buffers: Dict[str, np.ndarray],
-    current_conversation_tasks: Dict[str, Optional[asyncio.Task]],
+    received_data_buffers: dict[str, np.ndarray],
+    current_conversation_tasks: dict[str, asyncio.Task | None],
     broadcast_to_group: Callable,
 ) -> None:
     """Handle triggers that start a conversation"""
@@ -174,7 +174,7 @@ async def handle_conversation_trigger(
 
 async def handle_individual_interrupt(
     client_uid: str,
-    current_conversation_tasks: Dict[str, Optional[asyncio.Task]],
+    current_conversation_tasks: dict[str, asyncio.Task | None],
     context: ServiceContext,
     heard_response: str,
 ):
@@ -216,9 +216,9 @@ async def handle_individual_interrupt(
 async def handle_group_interrupt(
     group_id: str,
     heard_response: str,
-    current_conversation_tasks: Dict[str, Optional[asyncio.Task]],
+    current_conversation_tasks: dict[str, asyncio.Task | None],
     chat_group_manager: ChatGroupManager,
-    client_contexts: Dict[str, ServiceContext],
+    client_contexts: dict[str, ServiceContext],
     broadcast_to_group: Callable,
 ) -> None:
     """Handles interruption for a group conversation"""

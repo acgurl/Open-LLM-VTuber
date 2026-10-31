@@ -31,7 +31,7 @@ def _load_file_content(file_path: str) -> str:
 
     for encoding in encodings:
         try:
-            with open(file_path, "r", encoding=encoding) as file:
+            with open(file_path, encoding=encoding) as file:
                 return file.read()
         except UnicodeDecodeError:
             continue
@@ -52,16 +52,6 @@ def _load_file_content(file_path: str) -> str:
         logger.error(f"Error detecting encoding for {file_path}: {e}")
 
     raise UnicodeError(f"Failed to decode {file_path} with any encoding")
-
-
-def load_persona(persona_name: str) -> str:
-    """Load the content of a specific persona prompt file."""
-    persona_file_path = os.path.join(PERSONA_PROMPT_DIR, f"{persona_name}.txt")
-    try:
-        return _load_file_content(persona_file_path)
-    except Exception as e:
-        logger.error(f"Error loading persona {persona_name}: {e}")
-        raise
 
 
 def load_util(util_name: str) -> str:

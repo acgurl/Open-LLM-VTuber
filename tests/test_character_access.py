@@ -1,19 +1,16 @@
 import json
 import os
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-from open_llm_vtuber.config_manager.access import (  # noqa: E402
+from open_llm_vtuber.config_manager.access import (
     is_user_allowed,
     parse_allowed_users,
 )
-from open_llm_vtuber.config_manager.utils import (  # noqa: E402
+from open_llm_vtuber.config_manager.utils import (
     scan_config_alts_directory,
 )
 

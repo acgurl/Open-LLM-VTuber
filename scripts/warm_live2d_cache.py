@@ -98,7 +98,7 @@ def main() -> int:
         try:
             status, cache, length = fetch(url, args.timeout)
             return f"{status} {cache:8s} {length:>9s} {url}"
-        except Exception as exc:  # noqa: BLE001 - report and keep warming the rest
+        except Exception as exc:
             return f"ERR {type(exc).__name__}: {exc} {url}"
 
     with ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as pool:

@@ -1,4 +1,4 @@
-from typing import Callable, Dict
+from collections.abc import Callable
 
 from .deeplx import DeepLXTranslate
 from .tencent import TencentTranslate
@@ -22,7 +22,7 @@ def _build_tencent(config: dict) -> TranslateInterface:
     )
 
 
-_TRANSLATOR_BUILDERS: Dict[str, Callable[[dict], TranslateInterface]] = {
+_TRANSLATOR_BUILDERS: dict[str, Callable[[dict], TranslateInterface]] = {
     "deeplx": _build_deeplx,
     "tencent": _build_tencent,
 }

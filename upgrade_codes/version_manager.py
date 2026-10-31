@@ -72,7 +72,7 @@ class VersionUpgradeManager:
 
         try:
             model_path = Path("model_dict.json")
-            with open(model_path, "r", encoding="utf-8") as f:
+            with open(model_path, encoding="utf-8") as f:
                 model_dict = json.load(f)
 
             if isinstance(model_dict, list):

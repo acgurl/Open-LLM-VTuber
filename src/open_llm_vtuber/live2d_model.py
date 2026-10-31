@@ -1,6 +1,7 @@
 import json
-import chardet
 from loguru import logger
+
+from .config_manager.utils import load_text_file_with_guess_encoding
 
 # This class will only prepare the payload for the live2d model
 # the process of sending the payload should be done by the caller
@@ -50,42 +51,20 @@ class Live2dModel:
         self.emo_map: dict = {
             k.lower(): v for k, v in self.model_info["emotionMap"].items()
         }
-        self.emo_str: str = " ".join([f"[{key}]," for key in self.emo_map.keys()])
+        self.emo_str: str = " ".join([f"[{key}]," for key in self.emo_map])
         # emo_str is a string of the keys in the emoMap dictionary. The keys are enclosed in square brackets.
         # example: `"[fear], [anger], [disgust], [sadness], [joy], [neutral], [surprise]"`
         self.motion_map: dict = {
             k.lower(): v for k, v in self.model_info.get("motionMap", {}).items()
         }
-        self.motion_str: str = " ".join([f"[{key}]," for key in self.motion_map.keys()])
+        self.motion_str: str = " ".join([f"[{key}]," for key in self.motion_map])
 
     def _load_file_content(self, file_path: str) -> str:
         """Load the content of a file with robust encoding handling."""
-        # Try common encodings first
-        encodings = ["utf-8", "utf-8-sig", "gbk", "gb2312", "ascii"]
-
-        for encoding in encodings:
-            try:
-                with open(file_path, "r", encoding=encoding) as file:
-                    return file.read()
-            except UnicodeDecodeError:
-                continue
-
-        # If all common encodings fail, try to detect encoding
-        try:
-            with open(file_path, "rb") as file:
-                raw_data = file.read()
-            detected = chardet.detect(raw_data)
-            detected_encoding = detected["encoding"]
-
-            if detected_encoding:
-                try:
-                    return raw_data.decode(detected_encoding)
-                except UnicodeDecodeError:
-                    pass
-        except Exception as e:
-            logger.error(f"Error detecting encoding for {file_path}: {e}")
-
-        raise UnicodeError(f"Failed to decode {file_path} with any encoding")
+        content = load_text_file_with_guess_encoding(file_path)
+        if content is None:
+            raise UnicodeError(f"Failed to decode {file_path} with any encoding")
+        return content
 
     def _lookup_model_info(self, model_name: str) -> dict:
         """
@@ -168,7 +147,7 @@ class Live2dModel:
             if str_to_check[i] != "[":
                 i += 1
                 continue
-            for key in self.emo_map.keys():
+            for key in self.emo_map:
                 emo_tag = f"[{key}]"
                 if str_to_check[i : i + len(emo_tag)] == emo_tag:
                     expression_list.append(self.emo_map[key])
@@ -196,7 +175,7 @@ class Live2dModel:
             if str_to_check[i] != "[":
                 i += 1
                 continue
-            for key in self.motion_map.keys():
+            for key in self.motion_map:
                 motion_tag = f"[{key}]"
                 if str_to_check[i : i + len(motion_tag)] == motion_tag:
                     motion_list.append(self.motion_map[key])
@@ -204,25 +183,3 @@ class Live2dModel:
                     break
             i += 1
         return motion_list
-
-    def remove_emotion_keywords(self, target_str: str) -> str:
-        """
-        Remove the emotion keywords from the input string and return the cleaned string.
-
-        Parameters:
-            str_to_check (str): The string to check for emotions.
-
-        Returns:
-            str: The cleaned string with the emotion keywords removed.
-        """
-
-        lower_str = target_str.lower()
-
-        for key in self.emo_map.keys():
-            lower_key = f"[{key}]".lower()
-            while lower_key in lower_str:
-                start_index = lower_str.find(lower_key)
-                end_index = start_index + len(lower_key)
-                target_str = target_str[:start_index] + target_str[end_index:]
-                lower_str = lower_str[:start_index] + lower_str[end_index:]
-        return target_str

@@ -1,15 +1,8 @@
-import sys
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.agent.agents.basic_memory_agent import BasicMemoryAgent
-    from open_llm_vtuber.mcpp.json_detector import StreamJSONDetector
-    from open_llm_vtuber.mcpp.types import ToolCallFunctionObject, ToolCallObject
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.agent.agents.basic_memory_agent import BasicMemoryAgent
+from open_llm_vtuber.mcpp.json_detector import StreamJSONDetector
+from open_llm_vtuber.mcpp.types import ToolCallFunctionObject, ToolCallObject
 
 
 class DrainToolExecutorTests(unittest.IsolatedAsyncioTestCase):

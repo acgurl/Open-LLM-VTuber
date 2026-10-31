@@ -1,7 +1,6 @@
 import asyncio
 import json
 import time
-from typing import List, Optional, Dict
 from loguru import logger
 
 from ..agent.output_types import DisplayText, Actions
@@ -21,14 +20,14 @@ class TTSTaskManager:
     """Manages TTS tasks and ensures ordered delivery to frontend while allowing parallel TTS generation"""
 
     def __init__(self, cache_scope: str | None = None) -> None:
-        self.task_list: List[asyncio.Task] = []
+        self.task_list: list[asyncio.Task] = []
         self._lock = asyncio.Lock()
         # Per-user subdirectory for generated audio (None in single-user mode).
         self.cache_scope = cache_scope
         # Queue to store ordered payloads
-        self._payload_queue: asyncio.Queue[Dict] = asyncio.Queue()
+        self._payload_queue: asyncio.Queue[dict] = asyncio.Queue()
         # Task to handle sending payloads in order
-        self._sender_task: Optional[asyncio.Task] = None
+        self._sender_task: asyncio.Task | None = None
         # Counter for maintaining order
         self._sequence_counter = 0
         self._next_sequence_to_send = 0
@@ -37,7 +36,7 @@ class TTSTaskManager:
         self,
         tts_text: str,
         display_text: DisplayText,
-        actions: Optional[Actions],
+        actions: Actions | None,
         live2d_model: Live2dModel,
         tts_engine: TTSInterface,
         audio_send: WebSocketSend,
@@ -99,7 +98,7 @@ class TTSTaskManager:
         Process and send payloads in correct order.
         Runs continuously until all payloads are processed.
         """
-        buffered_payloads: Dict[int, Dict] = {}
+        buffered_payloads: dict[int, dict] = {}
 
         while True:
             in_flight = False
@@ -132,7 +131,7 @@ class TTSTaskManager:
     async def _send_silent_payload(
         self,
         display_text: DisplayText,
-        actions: Optional[Actions],
+        actions: Actions | None,
         sequence_number: int,
         streamed: bool = False,
     ) -> None:
@@ -149,7 +148,7 @@ class TTSTaskManager:
         self,
         tts_text: str,
         display_text: DisplayText,
-        actions: Optional[Actions],
+        actions: Actions | None,
         live2d_model: Live2dModel,
         tts_engine: TTSInterface,
         sequence_number: int,

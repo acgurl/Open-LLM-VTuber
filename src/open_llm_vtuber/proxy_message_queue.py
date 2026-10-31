@@ -1,5 +1,6 @@
 import asyncio
-from typing import Dict, Optional, Deque, Any, Callable
+from typing import Any
+from collections.abc import Callable
 from collections import deque
 from loguru import logger
 
@@ -12,7 +13,7 @@ class ProxyMessageQueue:
 
     def __init__(self):
         """Initialize the message queue manager"""
-        self.message_queue: Deque[Dict] = deque()
+        self.message_queue: deque[dict] = deque()
         self._conversation_active = False
         self.lock = asyncio.Lock()
         self._consumer_task = None
@@ -21,7 +22,7 @@ class ProxyMessageQueue:
         self._forward_tasks: set[asyncio.Task] = set()
         self._wake_event = asyncio.Event()
 
-    def initialize(self, forward_func: Callable[[Dict, Optional[str]], Any]):
+    def initialize(self, forward_func: Callable[[dict, str | None], Any]):
         """
         Initialize the queue with a message forwarding function.
 
@@ -31,7 +32,7 @@ class ProxyMessageQueue:
         self._forward_func = forward_func
         logger.debug("Message queue initialized with forward function")
 
-    def queue_message(self, message: Dict, sender_id: Optional[str] = None) -> None:
+    def queue_message(self, message: dict, sender_id: str | None = None) -> None:
         """
         Add a message to the queue.
 
@@ -79,7 +80,7 @@ class ProxyMessageQueue:
         """
         return len(self.message_queue) > 0
 
-    def _spawn_forward(self, message: Dict, sender_id: Optional[str]) -> None:
+    def _spawn_forward(self, message: dict, sender_id: str | None) -> None:
         task = asyncio.create_task(self._forward_message(message, sender_id))
         self._forward_tasks.add(task)
         task.add_done_callback(self._forward_tasks.discard)
@@ -128,7 +129,7 @@ class ProxyMessageQueue:
             self._running = False
             logger.debug("Message consumer task ended")
 
-    async def _forward_message(self, message: Dict, sender_id: Optional[str] = None):
+    async def _forward_message(self, message: dict, sender_id: str | None = None):
         """Forward a message using the provided forward function"""
         try:
             if self._forward_func:

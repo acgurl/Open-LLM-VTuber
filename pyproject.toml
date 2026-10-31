@@ -65,5 +65,29 @@ cudatoolkit = ">=11.0,<12"
 target-version = "py310"
 
 [tool.ruff.lint]
+extend-select = [
+    "B",      # flake8-bugbear: likely bugs
+    "UP",     # pyupgrade: modern syntax for the py310 target
+    "SIM",    # flake8-simplify
+    "PIE",    # flake8-pie
+    "C4",     # flake8-comprehensions
+    "ASYNC",  # flake8-async
+    "RET501", "RET502", "RET505", "RET506",
+    "RUF005", "RUF010", "RUF013", "RUF015", "RUF019", "RUF100",
+]
+ignore = [
+    "SIM102",  # nested `if` often mirrors the decision being made
+    "SIM105",  # explicit try/except/pass is clearer around task cancellation
+    "SIM117",  # nested `with` blocks often read better around long context managers
+]
 # Ignore E402 (module level import not at top of file) for the run_bilibili_live.py script
 per-file-ignores = { "scripts/run_bilibili_live.py" = ["E402"] }
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI dependency markers are meant to be called in argument defaults.
+extend-immutable-calls = ["fastapi.File", "fastapi.Depends", "fastapi.Query"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `prompts/` lives at the repo root and `open_llm_vtuber` under `src/`.
+pythonpath = [".", "src"]

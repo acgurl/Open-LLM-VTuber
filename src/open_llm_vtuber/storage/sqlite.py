@@ -159,8 +159,8 @@ def _mcp_server_from_row(row: sqlite3.Row) -> UserMCPServer:
         "url": row["url"],
         "headers": headers,
         "enabled": bool(row["enabled"]),
-        "mode": row["mode"] if "mode" in row.keys() else "remote",
-        "transport": row["transport"] if "transport" in row.keys() else "http",
+        "mode": row["mode"],
+        "transport": row["transport"],
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }

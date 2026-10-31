@@ -1,4 +1,5 @@
-from typing import Any, Callable, Dict, Literal, Optional
+from typing import Any, Literal
+from collections.abc import Callable
 
 from loguru import logger
 
@@ -42,8 +43,8 @@ def _build_basic_memory_agent(
     )
 
     tool_prompts = kwargs.get("system_config", {}).get("tool_prompts", {})
-    tool_manager: Optional[ToolManager] = kwargs.get("tool_manager")
-    tool_executor: Optional[ToolExecutor] = kwargs.get("tool_executor")
+    tool_manager: ToolManager | None = kwargs.get("tool_manager")
+    tool_executor: ToolExecutor | None = kwargs.get("tool_executor")
     mcp_prompt_string: str = kwargs.get("mcp_prompt_string", "")
 
     return BasicMemoryAgent(
@@ -107,7 +108,7 @@ AgentBuilder = Callable[
     AgentInterface,
 ]
 
-_AGENT_BUILDERS: Dict[str, AgentBuilder] = {
+_AGENT_BUILDERS: dict[str, AgentBuilder] = {
     "basic_memory_agent": _build_basic_memory_agent,
     "hume_ai_agent": _build_hume_ai_agent,
     "letta_agent": _build_letta_agent,

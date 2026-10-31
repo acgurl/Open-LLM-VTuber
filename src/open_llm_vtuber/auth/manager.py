@@ -3,7 +3,8 @@
 import hmac
 import secrets
 import time
-from typing import Any, Mapping
+from typing import Any
+from collections.abc import Mapping
 from urllib.parse import unquote, urlsplit
 
 from loguru import logger

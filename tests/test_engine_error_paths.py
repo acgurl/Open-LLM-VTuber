@@ -1,20 +1,13 @@
 import inspect
-import sys
 import unittest
-from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.agent.stateless_llm import stateless_llm_with_template
-    from open_llm_vtuber.agent.stateless_llm.stateless_llm_with_template import (
-        AsyncLLMWithTemplate,
-    )
-    from open_llm_vtuber.tts.cartesia_tts import TTSEngine as CartesiaTTSEngine
-    from open_llm_vtuber.tts.gpt_sovits_tts import TTSEngine as GPTSoVITSTTSEngine
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.agent.stateless_llm import stateless_llm_with_template
+from open_llm_vtuber.agent.stateless_llm.stateless_llm_with_template import (
+    AsyncLLMWithTemplate,
+)
+from open_llm_vtuber.tts.cartesia_tts import TTSEngine as CartesiaTTSEngine
+from open_llm_vtuber.tts.gpt_sovits_tts import TTSEngine as GPTSoVITSTTSEngine
 
 
 class CartesiaFailureTests(unittest.TestCase):

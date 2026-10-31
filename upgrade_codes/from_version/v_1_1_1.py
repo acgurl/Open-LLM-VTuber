@@ -76,7 +76,7 @@ class to_v_1_2_1:
 
     def _upgrade_conf_yaml(self):
         try:
-            with open(self.conf_yaml_path, "r", encoding="utf-8") as f:
+            with open(self.conf_yaml_path, encoding="utf-8") as f:
                 data = yaml.safe_load(f)
 
             # Update system version number
@@ -109,7 +109,7 @@ class to_v_1_2_1:
                 )  # Auto formatting with '
 
         except Exception as e:
-            raise RuntimeError(f"Failed to upgrade conf.yaml: {e}")
+            raise RuntimeError(f"Failed to upgrade conf.yaml: {e}") from e
 
     def _migrate_field(self, config_section: dict, field_name: str):
         if field_name in config_section:

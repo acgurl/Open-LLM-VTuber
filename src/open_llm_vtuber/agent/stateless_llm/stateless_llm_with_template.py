@@ -8,7 +8,8 @@ import json
 import httpx
 from jinja2 import Template
 from loguru import logger
-from typing import AsyncIterator, List, Dict, Any
+from typing import Any
+from collections.abc import AsyncIterator
 
 from .stateless_llm_interface import StatelessLLMInterface
 
@@ -119,7 +120,7 @@ class AsyncLLMWithTemplate(StatelessLLMInterface):
         )
 
     async def chat_completion(
-        self, messages: List[Dict[str, Any]], system: str = None
+        self, messages: list[dict[str, Any]], system: str | None = None
     ) -> AsyncIterator[str]:
         """
         Generates a chat completion using the OpenAI API asynchronously.
@@ -140,7 +141,7 @@ class AsyncLLMWithTemplate(StatelessLLMInterface):
         bos_token = "<|begin_of_text|>"
         try:
             # If system prompt is provided, add it to the messages
-            messages_with_system: List[Dict[str, Any]] = messages
+            messages_with_system: list[dict[str, Any]] = messages
             if system:
                 messages_with_system = [
                     {"role": "system", "content": system},
@@ -151,7 +152,7 @@ class AsyncLLMWithTemplate(StatelessLLMInterface):
                 bos_token=bos_token,
                 add_generation_prompt=True,
             )
-            data: Dict = {
+            data: dict = {
                 "stream": True,
                 "temperature": self.temperature,
                 "prompt": prompt,
@@ -190,6 +191,6 @@ class AsyncLLMWithTemplate(StatelessLLMInterface):
         return json.loads(line)
 
     def _process_line(self, line):
-        if not (("stop" in line) and (line["stop"])):
+        if not (line.get("stop")):
             token = line["content"]
             return token

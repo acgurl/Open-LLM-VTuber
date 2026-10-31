@@ -1,13 +1,8 @@
 from typing import (
-    AsyncIterator,
-    List,
-    Dict,
     Any,
-    Callable,
     Literal,
-    Union,
-    Optional,
 )
+from collections.abc import AsyncIterator, Callable
 from loguru import logger
 from .agent_interface import AgentInterface
 from ..output_types import SentenceOutput
@@ -45,9 +40,9 @@ class BasicMemoryAgent(AgentInterface):
         segment_method: str = "pysbd",
         use_mcpp: bool = False,
         interrupt_method: Literal["system", "user"] = "user",
-        tool_prompts: Dict[str, str] = None,
-        tool_manager: Optional[ToolManager] = None,
-        tool_executor: Optional[ToolExecutor] = None,
+        tool_prompts: dict[str, str] | None = None,
+        tool_manager: ToolManager | None = None,
+        tool_executor: ToolExecutor | None = None,
         mcp_prompt_string: str = "",
     ):
         """Initialize agent with LLM and configuration."""
@@ -121,10 +116,10 @@ class BasicMemoryAgent(AgentInterface):
         system: str,
         live2d_model=None,
         tts_preprocessor_config: TTSPreprocessorConfig = None,
-        tool_manager: Optional[ToolManager] = None,
-        tool_executor: Optional[ToolExecutor] = None,
+        tool_manager: ToolManager | None = None,
+        tool_executor: ToolExecutor | None = None,
         mcp_prompt_string: str = "",
-        use_mcpp: Optional[bool] = None,
+        use_mcpp: bool | None = None,
     ) -> "BasicMemoryAgent":
         """Create an agent with independent memory that reuses this agent's LLM client."""
         return BasicMemoryAgent(
@@ -150,8 +145,8 @@ class BasicMemoryAgent(AgentInterface):
 
     def set_tooling(
         self,
-        tool_manager: Optional[ToolManager],
-        tool_executor: Optional[ToolExecutor],
+        tool_manager: ToolManager | None,
+        tool_executor: ToolExecutor | None,
         mcp_prompt_string: str = "",
         *,
         enabled: bool = True,
@@ -179,7 +174,7 @@ class BasicMemoryAgent(AgentInterface):
 
     def _add_message(
         self,
-        message: Union[str, List[Dict[str, Any]]],
+        message: str | list[dict[str, Any]],
         role: str,
     ):
         """Add message to memory."""
@@ -239,9 +234,9 @@ class BasicMemoryAgent(AgentInterface):
 
     async def _stream_with_text_deltas(
         self,
-        stream: AsyncIterator[Union[str, Dict[str, Any]]],
+        stream: AsyncIterator[str | dict[str, Any]],
         enabled: Callable[[], bool] = lambda: True,
-    ) -> AsyncIterator[Union[str, Dict[str, Any]]]:
+    ) -> AsyncIterator[str | dict[str, Any]]:
         """Pass the raw agent stream through while emitting displayable text deltas."""
         async for item in stream:
             if isinstance(item, str):
@@ -294,7 +289,7 @@ class BasicMemoryAgent(AgentInterface):
 
         return "\n".join(message_parts).strip()
 
-    def _to_messages(self, input_data: BatchInput) -> List[Dict[str, Any]]:
+    def _to_messages(self, input_data: BatchInput) -> list[dict[str, Any]]:
         """Prepare messages for LLM API call."""
         messages = self._memory.copy()
         user_content = []
@@ -344,10 +339,10 @@ class BasicMemoryAgent(AgentInterface):
 
     async def _drain_tool_executor(
         self,
-        tool_executor_iterator: AsyncIterator[Dict[str, Any]],
-        results: List[Dict[str, Any]],
+        tool_executor_iterator: AsyncIterator[dict[str, Any]],
+        results: list[dict[str, Any]],
         label: str,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Forward executor updates and collect the final tool results."""
         try:
             while True:
@@ -361,12 +356,12 @@ class BasicMemoryAgent(AgentInterface):
 
     async def _execute_tool_calls(
         self,
-        tool_calls: Union[List[ToolCallObject], List[Dict[str, Any]]],
+        tool_calls: list[ToolCallObject] | list[dict[str, Any]],
         *,
         caller_mode: Literal["Claude", "OpenAI", "Prompt"],
         label: str,
-        results: List[Dict[str, Any]],
-    ) -> AsyncIterator[Dict[str, Any]]:
+        results: list[dict[str, Any]],
+    ) -> AsyncIterator[dict[str, Any]]:
         """Run tools, forwarding progress updates and collecting final results."""
         tool_executor_iterator = self._tool_executor.execute_tools(
             tool_calls=tool_calls,
@@ -379,9 +374,9 @@ class BasicMemoryAgent(AgentInterface):
 
     async def _claude_tool_interaction_loop(
         self,
-        initial_messages: List[Dict[str, Any]],
-        tools: List[Dict[str, Any]],
-    ) -> AsyncIterator[Union[str, Dict[str, Any]]]:
+        initial_messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> AsyncIterator[str | dict[str, Any]]:
         """Handle Claude interaction loop with tool support."""
         messages = initial_messages.copy()
         current_turn_text = ""
@@ -422,9 +417,6 @@ class BasicMemoryAgent(AgentInterface):
                             "input": tool_call_data["input"],
                         }
                     )
-                # elif event["type"] == "message_delta":
-                #     if event["data"]["delta"].get("stop_reason"):
-                #         stop_reason = event["data"]["delta"].get("stop_reason")
                 elif event["type"] == "message_stop":
                     break
                 elif event["type"] == "error":
@@ -475,7 +467,6 @@ class BasicMemoryAgent(AgentInterface):
                 if tool_results_for_llm:
                     messages.append({"role": "user", "content": tool_results_for_llm})
 
-                # stop_reason = None
                 continue
             else:
                 if current_turn_text:
@@ -484,13 +475,13 @@ class BasicMemoryAgent(AgentInterface):
 
     async def _openai_tool_interaction_loop(
         self,
-        initial_messages: List[Dict[str, Any]],
-        tools: List[Dict[str, Any]],
-    ) -> AsyncIterator[Union[str, Dict[str, Any]]]:
+        initial_messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+    ) -> AsyncIterator[str | dict[str, Any]]:
         """Handle OpenAI interaction with tool support."""
         messages = initial_messages.copy()
         current_turn_text = ""
-        pending_tool_calls: Union[List[ToolCallObject], List[Dict[str, Any]]] = []
+        pending_tool_calls: list[ToolCallObject] | list[dict[str, Any]] = []
         current_system_prompt = self._system
 
         while True:
@@ -644,7 +635,7 @@ class BasicMemoryAgent(AgentInterface):
 
     def _chat_function_factory(
         self,
-    ) -> Callable[[BatchInput], AsyncIterator[Union[SentenceOutput, Dict[str, Any]]]]:
+    ) -> Callable[[BatchInput], AsyncIterator[SentenceOutput | dict[str, Any]]]:
         """Create the chat pipeline function."""
 
         @tts_filter(self._tts_preprocessor_config)
@@ -657,7 +648,7 @@ class BasicMemoryAgent(AgentInterface):
         )
         async def chat_with_memory(
             input_data: BatchInput,
-        ) -> AsyncIterator[Union[str, Dict[str, Any]]]:
+        ) -> AsyncIterator[str | dict[str, Any]]:
             """Process chat with memory and tools."""
             self.reset_interrupt()
             self.prompt_mode_flag = False
@@ -734,7 +725,7 @@ class BasicMemoryAgent(AgentInterface):
     async def chat(
         self,
         input_data: BatchInput,
-    ) -> AsyncIterator[Union[SentenceOutput, Dict[str, Any]]]:
+    ) -> AsyncIterator[SentenceOutput | dict[str, Any]]:
         """Run chat pipeline."""
         chat_func_decorated = self._chat_function_factory()
         async for output in chat_func_decorated(input_data):
@@ -745,7 +736,7 @@ class BasicMemoryAgent(AgentInterface):
         self._interrupt_handled = False
 
     def start_group_conversation(
-        self, human_name: str, ai_participants: List[str]
+        self, human_name: str, ai_participants: list[str]
     ) -> None:
         """Start a group conversation."""
         if not self._tool_prompts:

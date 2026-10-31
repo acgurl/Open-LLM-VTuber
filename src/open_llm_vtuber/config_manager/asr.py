@@ -1,6 +1,6 @@
 # config_manager/asr.py
-from pydantic import ValidationInfo, Field, model_validator
-from typing import Literal, Optional, Dict, ClassVar
+from pydantic import Field, model_validator
+from typing import Literal, ClassVar
 from .i18n import I18nMixin, Description
 
 
@@ -11,7 +11,7 @@ class AzureASRConfig(I18nMixin):
     region: str = Field(..., alias="region")
     languages: list[str] = Field(["en-US", "zh-CN"], alias="languages")
 
-    DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "api_key": Description(
             en="API key for Azure ASR service", zh="Azure ASR 服务的 API 密钥"
         ),
@@ -30,13 +30,13 @@ class FasterWhisperConfig(I18nMixin):
 
     model_path: str = Field(..., alias="model_path")
     download_root: str = Field(..., alias="download_root")
-    language: Optional[str] = Field(None, alias="language")
+    language: str | None = Field(None, alias="language")
     device: str = Field("auto", alias="device")
     compute_type: Literal["int8", "float16", "float32"] = Field(
         "int8", alias="compute_type"
     )
     prompt: str | None = Field(None, alias="prompt")
-    DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "model_path": Description(
             en="Path to the Faster Whisper model", zh="Faster Whisper 模型路径"
         ),
@@ -71,7 +71,7 @@ class WhisperCPPConfig(I18nMixin):
     print_progress: bool = Field(False, alias="print_progress")
     language: str = Field("auto", alias="language")
     prompt: str | None = Field(None, alias="prompt")
-    DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "model_name": Description(
             en="Name of the Whisper model", zh="Whisper 模型名称"
         ),
@@ -101,7 +101,7 @@ class WhisperConfig(I18nMixin):
     download_root: str = Field(..., alias="download_root")
     device: Literal["cpu", "cuda"] = Field("cpu", alias="device")
     prompt: str | None = Field(None, alias="prompt")
-    DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "name": Description(en="Name of the Whisper model", zh="Whisper 模型名称"),
         "download_root": Description(
             en="Root directory for downloading models", zh="模型下载根目录"
@@ -129,7 +129,7 @@ class FunASRConfig(I18nMixin):
     use_itn: bool = Field(False, alias="use_itn")
     language: str = Field("auto", alias="language")
 
-    DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "model_name": Description(en="Name of the FunASR model", zh="FunASR 模型名称"),
         "vad_model": Description(
             en="Voice Activity Detection model", zh="语音活动检测模型"
@@ -164,9 +164,9 @@ class GroqWhisperASRConfig(I18nMixin):
 
     api_key: str = Field(..., alias="api_key")
     model: str = Field("whisper-large-v3-turbo", alias="model")
-    lang: Optional[str] = Field(None, alias="lang")
+    lang: str | None = Field(None, alias="lang")
 
-    DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "api_key": Description(
             en="API key for Groq Whisper ASR", zh="Groq Whisper ASR 的 API 密钥"
         ),
@@ -194,24 +194,24 @@ class SherpaOnnxASRConfig(I18nMixin):
         "sense_voice",
         "fire_red_asr",
     ] = Field(..., alias="model_type")
-    encoder: Optional[str] = Field(None, alias="encoder")
-    decoder: Optional[str] = Field(None, alias="decoder")
-    joiner: Optional[str] = Field(None, alias="joiner")
-    paraformer: Optional[str] = Field(None, alias="paraformer")
-    nemo_ctc: Optional[str] = Field(None, alias="nemo_ctc")
-    wenet_ctc: Optional[str] = Field(None, alias="wenet_ctc")
-    tdnn_model: Optional[str] = Field(None, alias="tdnn_model")
-    whisper_encoder: Optional[str] = Field(None, alias="whisper_encoder")
-    whisper_decoder: Optional[str] = Field(None, alias="whisper_decoder")
-    sense_voice: Optional[str] = Field(None, alias="sense_voice")
-    fire_red_asr_encoder: Optional[str] = Field(None, alias="fire_red_asr_encoder")
-    fire_red_asr_decoder: Optional[str] = Field(None, alias="fire_red_asr_decoder")
+    encoder: str | None = Field(None, alias="encoder")
+    decoder: str | None = Field(None, alias="decoder")
+    joiner: str | None = Field(None, alias="joiner")
+    paraformer: str | None = Field(None, alias="paraformer")
+    nemo_ctc: str | None = Field(None, alias="nemo_ctc")
+    wenet_ctc: str | None = Field(None, alias="wenet_ctc")
+    tdnn_model: str | None = Field(None, alias="tdnn_model")
+    whisper_encoder: str | None = Field(None, alias="whisper_encoder")
+    whisper_decoder: str | None = Field(None, alias="whisper_decoder")
+    sense_voice: str | None = Field(None, alias="sense_voice")
+    fire_red_asr_encoder: str | None = Field(None, alias="fire_red_asr_encoder")
+    fire_red_asr_decoder: str | None = Field(None, alias="fire_red_asr_decoder")
     tokens: str = Field(..., alias="tokens")
     num_threads: int = Field(4, alias="num_threads")
     use_itn: bool = Field(True, alias="use_itn")
     provider: Literal["cpu", "cuda", "rocm"] = Field("cpu", alias="provider")
 
-    DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "model_type": Description(
             en="Type of ASR model to use", zh="要使用的 ASR 模型类型"
         ),
@@ -260,57 +260,57 @@ class SherpaOnnxASRConfig(I18nMixin):
     }
 
     @model_validator(mode="after")
-    def check_model_paths(cls, values: "SherpaOnnxASRConfig", info: ValidationInfo):
-        model_type = values.model_type
+    def check_model_paths(self) -> "SherpaOnnxASRConfig":
+        model_type = self.model_type
 
         if model_type == "transducer":
-            if not all([values.encoder, values.decoder, values.joiner, values.tokens]):
+            if not all([self.encoder, self.decoder, self.joiner, self.tokens]):
                 raise ValueError(
                     "encoder, decoder, joiner, and tokens must be provided for transducer model type"
                 )
         elif model_type == "paraformer":
-            if not all([values.paraformer, values.tokens]):
+            if not all([self.paraformer, self.tokens]):
                 raise ValueError(
                     "paraformer and tokens must be provided for paraformer model type"
                 )
         elif model_type == "nemo_ctc":
-            if not all([values.nemo_ctc, values.tokens]):
+            if not all([self.nemo_ctc, self.tokens]):
                 raise ValueError(
                     "nemo_ctc and tokens must be provided for nemo_ctc model type"
                 )
         elif model_type == "wenet_ctc":
-            if not all([values.wenet_ctc, values.tokens]):
+            if not all([self.wenet_ctc, self.tokens]):
                 raise ValueError(
                     "wenet_ctc and tokens must be provided for wenet_ctc model type"
                 )
         elif model_type == "tdnn_ctc":
-            if not all([values.tdnn_model, values.tokens]):
+            if not all([self.tdnn_model, self.tokens]):
                 raise ValueError(
                     "tdnn_model and tokens must be provided for tdnn_ctc model type"
                 )
         elif model_type == "whisper":
-            if not all([values.whisper_encoder, values.whisper_decoder, values.tokens]):
+            if not all([self.whisper_encoder, self.whisper_decoder, self.tokens]):
                 raise ValueError(
                     "whisper_encoder, whisper_decoder, and tokens must be provided for whisper model type"
                 )
         elif model_type == "sense_voice":
-            if not all([values.sense_voice, values.tokens]):
+            if not all([self.sense_voice, self.tokens]):
                 raise ValueError(
                     "sense_voice and tokens must be provided for sense_voice model type"
                 )
         elif model_type == "fire_red_asr":
             if not all(
                 [
-                    values.fire_red_asr_encoder,
-                    values.fire_red_asr_decoder,
-                    values.tokens,
+                    self.fire_red_asr_encoder,
+                    self.fire_red_asr_decoder,
+                    self.tokens,
                 ]
             ):
                 raise ValueError(
                     "fire_red_asr_encoder, fire_red_asr_decoder, and tokens must be provided for fire_red_asr model type"
                 )
 
-        return values
+        return self
 
 
 _ASR_CONFIG_FIELDS = {
@@ -336,19 +336,17 @@ class ASRConfig(I18nMixin):
         "groq_whisper_asr",
         "sherpa_onnx_asr",
     ] = Field(..., alias="asr_model")
-    azure_asr: Optional[AzureASRConfig] = Field(None, alias="azure_asr")
-    faster_whisper: Optional[FasterWhisperConfig] = Field(None, alias="faster_whisper")
-    whisper_cpp: Optional[WhisperCPPConfig] = Field(None, alias="whisper_cpp")
-    whisper: Optional[WhisperConfig] = Field(None, alias="whisper")
-    fun_asr: Optional[FunASRConfig] = Field(None, alias="fun_asr")
-    groq_whisper_asr: Optional[GroqWhisperASRConfig] = Field(
+    azure_asr: AzureASRConfig | None = Field(None, alias="azure_asr")
+    faster_whisper: FasterWhisperConfig | None = Field(None, alias="faster_whisper")
+    whisper_cpp: WhisperCPPConfig | None = Field(None, alias="whisper_cpp")
+    whisper: WhisperConfig | None = Field(None, alias="whisper")
+    fun_asr: FunASRConfig | None = Field(None, alias="fun_asr")
+    groq_whisper_asr: GroqWhisperASRConfig | None = Field(
         None, alias="groq_whisper_asr"
     )
-    sherpa_onnx_asr: Optional[SherpaOnnxASRConfig] = Field(
-        None, alias="sherpa_onnx_asr"
-    )
+    sherpa_onnx_asr: SherpaOnnxASRConfig | None = Field(None, alias="sherpa_onnx_asr")
 
-    DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "asr_model": Description(
             en="Speech-to-text model to use", zh="要使用的语音识别模型"
         ),

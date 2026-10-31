@@ -1,26 +1,19 @@
 import json
-import sys
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.agent.output_types import (
-        Actions,
-        DisplayText,
-        SentenceOutput,
-    )
-    from open_llm_vtuber.conversations import (
-        conversation_utils,
-        group_conversation,
-        single_conversation,
-    )
-    from open_llm_vtuber.conversations.types import OutboundChannels
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.agent.output_types import (
+    Actions,
+    DisplayText,
+    SentenceOutput,
+)
+from open_llm_vtuber.conversations import (
+    conversation_utils,
+    group_conversation,
+    single_conversation,
+)
+from open_llm_vtuber.conversations.types import OutboundChannels
 
 
 class _FakeAgent:

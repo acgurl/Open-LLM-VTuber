@@ -1,5 +1,6 @@
 import asyncio
-from typing import Awaitable, Callable, Optional, Union, Any, List, Dict
+from typing import Any
+from collections.abc import Awaitable, Callable
 import numpy as np
 import json
 from loguru import logger
@@ -24,9 +25,9 @@ class TextDeltaBuffer:
 
     def __init__(
         self,
-        send: Callable[[Dict[str, Any]], Awaitable[None]],
+        send: Callable[[dict[str, Any]], Awaitable[None]],
         character_name: str,
-        avatar: Optional[str] = None,
+        avatar: str | None = None,
         interval: float = 0.05,
     ) -> None:
         self._send = send
@@ -36,7 +37,7 @@ class TextDeltaBuffer:
         self._pending = ""
         self._full_text = ""
         self._last_sent = 0.0
-        self._timer: Optional[asyncio.Task] = None
+        self._timer: asyncio.Task | None = None
         self._lock = asyncio.Lock()
         self._closed = False
 
@@ -109,7 +110,7 @@ def should_store_history(context: Any, skip_history: bool = False) -> bool:
     return bool(context.history_uid) and not skip_history
 
 
-def _to_image_data(img: Dict[str, Any]) -> ImageData:
+def _to_image_data(img: dict[str, Any]) -> ImageData:
     """Wire payload -> ImageData.
 
     The WebSocket contract sends raw base64 in `data` (BACKEND_API.md), while
@@ -129,9 +130,9 @@ def _to_image_data(img: Dict[str, Any]) -> ImageData:
 
 def create_batch_input(
     input_text: str,
-    images: Optional[List[Dict[str, Any]]],
+    images: list[dict[str, Any]] | None,
     from_name: str,
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> BatchInput:
     """Create batch input for agent processing"""
     return BatchInput(
@@ -149,7 +150,7 @@ async def consume_agent_stream(
     context: Any,
     channels: OutboundChannels,
     tts_manager: TTSTaskManager,
-    send_text_delta: Callable[[Dict[str, Any]], Awaitable[None]],
+    send_text_delta: Callable[[dict[str, Any]], Awaitable[None]],
     error_prefix: str = "Error processing response",
 ) -> str:
     """Consume an agent stream, forwarding text deltas and TTS output."""
@@ -211,7 +212,7 @@ async def consume_agent_stream(
         logger.exception(f"{error_prefix} stream: {e}")
         await text_delta_buffer.flush()
         await channels.text(
-            json.dumps({"type": "error", "message": f"{error_prefix}: {str(e)}"})
+            json.dumps({"type": "error", "message": f"{error_prefix}: {e!s}"})
         )
     finally:
         text_delta_buffer.cancel()
@@ -220,13 +221,13 @@ async def consume_agent_stream(
 
 
 async def process_agent_output(
-    output: Union[AudioOutput, SentenceOutput],
+    output: AudioOutput | SentenceOutput,
     character_config: Any,
     live2d_model: Live2dModel,
     tts_engine: TTSInterface,
     channels: OutboundChannels,
     tts_manager: TTSTaskManager,
-    translate_engine: Optional[Any] = None,
+    translate_engine: Any | None = None,
     streamed: bool = False,
 ) -> str:
     """Process agent output with character information and optional translation"""
@@ -253,7 +254,7 @@ async def process_agent_output(
         logger.error(f"Error processing agent output: {e}")
         await channels.text(
             json.dumps(
-                {"type": "error", "message": f"Error processing response: {str(e)}"}
+                {"type": "error", "message": f"Error processing response: {e!s}"}
             )
         )
 
@@ -266,7 +267,7 @@ async def handle_sentence_output(
     tts_engine: TTSInterface,
     channels: OutboundChannels,
     tts_manager: TTSTaskManager,
-    translate_engine: Optional[Any] = None,
+    translate_engine: Any | None = None,
     streamed: bool = False,
 ) -> str:
     """Handle sentence output type with optional translation support"""
@@ -326,7 +327,7 @@ async def send_conversation_start_signals(websocket_send: WebSocketSend) -> None
 
 
 async def process_user_input(
-    user_input: Union[str, np.ndarray],
+    user_input: str | np.ndarray,
     asr_engine: ASRInterface,
     websocket_send: WebSocketSend,
 ) -> str:
@@ -345,7 +346,7 @@ async def finalize_conversation_turn(
     tts_manager: TTSTaskManager,
     channels: OutboundChannels,
     client_uid: str,
-    broadcast_ctx: Optional[BroadcastContext] = None,
+    broadcast_ctx: BroadcastContext | None = None,
 ) -> None:
     """Finalize a conversation turn"""
     if tts_manager.task_list:
@@ -384,7 +385,7 @@ async def finalize_conversation_turn(
 
 async def send_conversation_end_signal(
     websocket_send: WebSocketSend,
-    broadcast_ctx: Optional[BroadcastContext],
+    broadcast_ctx: BroadcastContext | None,
     session_emoji: str = "😊",
 ) -> None:
     """Send conversation chain end signal"""

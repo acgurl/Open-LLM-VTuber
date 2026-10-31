@@ -1,7 +1,7 @@
 import html
 import re
 import unicodedata
-from typing import Callable
+from collections.abc import Callable
 from loguru import logger
 
 
@@ -175,12 +175,7 @@ def remove_special_characters(text: str) -> str:
 
     def is_valid_char(char: str) -> bool:
         category = unicodedata.category(char)
-        return (
-            category.startswith("L")
-            or category.startswith("N")
-            or category.startswith("P")
-            or char.isspace()
-        )
+        return category.startswith(("L", "N", "P")) or char.isspace()
 
     filtered_text = "".join(char for char in normalized_text if is_valid_char(char))
     return filtered_text

@@ -1,19 +1,12 @@
-import sys
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.agent.input_types import ImageSource
-    from open_llm_vtuber.conversations.conversation_utils import (
-        consume_agent_stream,
-        create_batch_input,
-        should_store_history,
-    )
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.agent.input_types import ImageSource
+from open_llm_vtuber.conversations.conversation_utils import (
+    consume_agent_stream,
+    create_batch_input,
+    should_store_history,
+)
 
 
 class ImagePayloadTests(unittest.TestCase):

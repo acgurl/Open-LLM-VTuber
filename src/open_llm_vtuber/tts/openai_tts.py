@@ -40,7 +40,6 @@ class TTSEngine(TTSInterface):
                 f"Unsupported file extension '{self.file_extension}' configured for OpenAI TTS. Defaulting to 'mp3'."
             )
             self.file_extension = "mp3"
-        self.temp_audio_file = "temp_openai"  # Use a different temp name
 
         try:
             # Initialize OpenAI client
@@ -102,13 +101,3 @@ class TTSEngine(TTSInterface):
 
 
 # Example usage (optional, for testing with the compatible endpoint)
-# if __name__ == '__main__':
-#     # Configure TTSEngine to use the specific model and voice from the example
-#     # The base_url and api_key will use the defaults set in __init__
-#     tts_engine = TTSEngine(model="kokoro", voice="af_sky+af_bella")
-#     test_text = "Hello world! This is a test using the compatible endpoint."
-#     audio_path = tts_engine.generate_audio(test_text, "compatible_endpoint_test")
-#     if audio_path:
-#         print(f"Generated audio saved to: {audio_path}")
-#     else:
-#         print("Failed to generate audio.")
