@@ -6,48 +6,6 @@ from tqdm import tqdm
 from loguru import logger
 
 
-def get_github_asset_url(owner, repo, release_tag, filename_without_ext):
-    """
-    Fetch the URL of a GitHub release asset by its filename (without extension).
-
-    Args:
-        owner (str): The owner of the repository.
-        repo (str): The name of the repository.
-        release_tag (str): The tag of the release.
-        filename_without_ext (str): The filename to search for (without extension).
-
-    Returns:
-        str: The download URL of the matched asset, or None if no match is found.
-    """
-    url = f"https://api.github.com/repos/{owner}/{repo}/releases/tags/{release_tag}"
-    headers = {}  # Add authentication headers if needed
-
-    try:
-        # Make a GET request to fetch release data
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-
-        # Parse the JSON response
-        release_data = response.json()
-        assets = release_data.get("assets", [])
-
-        # Look for a matching file
-        for asset in assets:
-            if asset["name"].startswith(filename_without_ext):
-                logger.info(f"Match found: {asset['name']}")
-                return asset["browser_download_url"]
-
-        # If no match found, log the error
-        logger.error(
-            f"No match found for filename: {filename_without_ext} in release {release_tag}."
-        )
-        return None
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"An error occurred while fetching release data: {e}")
-        return None
-
-
 def download_and_extract(url: str, output_dir: str) -> Path:
     """
     Download a file from a URL and extract it if it is a tar.bz2 archive.
@@ -113,9 +71,8 @@ def download_and_extract(url: str, output_dir: str) -> Path:
         logger.debug(f"Deleted the compressed file: {file_name}")
 
         return extracted_dir_path
-    else:
-        logger.warning("The downloaded file is not a tar.bz2 archive.")
-        return Path(file_path)
+    logger.warning("The downloaded file is not a tar.bz2 archive.")
+    return Path(file_path)
 
 
 def check_and_extract_local_file(url: str, output_dir: str) -> Path | None:
@@ -154,23 +111,8 @@ def check_and_extract_local_file(url: str, output_dir: str) -> Path | None:
             os.remove(compressed_path)  # Remove the compressed file
             return extracted_dir
         except Exception as e:
-            logger.error(f"Fail to extract file: {str(e)}")
+            logger.error(f"Fail to extract file: {e!s}")
             return None
 
     logger.warning(f"Local file not found or not a tar.bz2 archive: {compressed_path}")
     return None
-
-
-if __name__ == "__main__":
-    url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17.tar.bz2"
-    output_dir = "./models"
-
-    # Try local extraction first.
-    local_result = check_and_extract_local_file(url, output_dir)
-
-    # Download if not available locally.
-    if local_result is None:
-        logger.info("Local archive not found. Starting download...")
-        download_and_extract(url, output_dir)
-    else:
-        logger.info("Extraction completed using local file.")

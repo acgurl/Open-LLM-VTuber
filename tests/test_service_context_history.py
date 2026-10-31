@@ -1,16 +1,10 @@
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.service_context import ServiceContext
-    from open_llm_vtuber.storage import SQLiteHistoryRepository
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.service_context import ServiceContext
+from open_llm_vtuber.storage import SQLiteHistoryRepository
 
 
 class FakeAgent:

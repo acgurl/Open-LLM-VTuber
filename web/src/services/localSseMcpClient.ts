@@ -7,23 +7,17 @@
 // for authentication on both paths.
 
 import {
+  CLIENT_INFO,
+  PROTOCOL_VERSION,
+  type JsonRpcMessage,
   type LocalMcpCallResult,
   type LocalMcpClientLike,
   type LocalMcpTool,
+  callToolVia,
   errorFromHttp,
   filterCustomHeaders,
-  normalizeContent,
+  listToolsPaged,
 } from './localMcpClient';
-
-const PROTOCOL_VERSION = '2025-03-26';
-const MAX_TOOLS = 200;
-const MAX_PAGES = 10;
-
-interface JsonRpcMessage {
-  id?: number | string;
-  result?: unknown;
-  error?: { message?: string };
-}
 
 interface PendingRequest {
   resolve: (message: JsonRpcMessage) => void;
@@ -80,7 +74,7 @@ export class LocalSseMcpClient implements LocalMcpClientLike {
       {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: {},
-        clientInfo: { name: 'ollmvt-web', version: '1.0.0' },
+        clientInfo: CLIENT_INFO,
       },
       10_000,
     );
@@ -88,73 +82,14 @@ export class LocalSseMcpClient implements LocalMcpClientLike {
   }
 
   async listTools(): Promise<LocalMcpTool[]> {
-    const tools: LocalMcpTool[] = [];
-    const seen = new Set<string>();
-    let cursor: string | undefined;
-    for (let page = 0; page < MAX_PAGES; page += 1) {
-      const response = await this.request(
-        'tools/list',
-        cursor ? { cursor } : {},
-        15_000,
-      );
-      const result = response.result;
-      const pageTools =
-        result && typeof result === 'object'
-          ? (result as Record<string, unknown>).tools
-          : undefined;
-      if (!Array.isArray(pageTools)) {
-        throw new Error('本地 SSE MCP 返回了无效的工具列表');
-      }
-      for (const tool of pageTools) {
-        if (!tool || typeof tool !== 'object') continue;
-        const record = tool as Record<string, unknown>;
-        if (typeof record.name !== 'string' || seen.has(record.name)) continue;
-        seen.add(record.name);
-        tools.push({
-          name: record.name,
-          description:
-            typeof record.description === 'string' ? record.description : '',
-          inputSchema:
-            record.inputSchema && typeof record.inputSchema === 'object'
-              ? (record.inputSchema as Record<string, unknown>)
-              : { type: 'object', properties: {} },
-        });
-        if (tools.length >= MAX_TOOLS) return tools;
-      }
-      const next =
-        result && typeof result === 'object'
-          ? (result as Record<string, unknown>).nextCursor
-          : undefined;
-      cursor = typeof next === 'string' && next ? next : undefined;
-      if (!cursor) break;
-    }
-    return tools;
+    return listToolsPaged(this.request.bind(this), '本地 SSE MCP');
   }
 
   async callTool(
     name: string,
     args: Record<string, unknown>,
   ): Promise<LocalMcpCallResult> {
-    const response = await this.request(
-      'tools/call',
-      { name, arguments: args ?? {} },
-      35_000,
-    );
-    if (response.error) {
-      throw new Error(response.error.message || '本地 SSE MCP 工具调用失败');
-    }
-    const result = response.result;
-    if (!result || typeof result !== 'object') {
-      throw new Error('本地 SSE MCP 未返回结果');
-    }
-    const record = result as Record<string, unknown>;
-    const items = Array.isArray(record.content) ? record.content : [];
-    const normalized = normalizeContent(items);
-    return {
-      contentItems:
-        normalized.length > 0 ? normalized : [{ type: 'text', text: '' }],
-      isError: Boolean(record.isError),
-    };
+    return callToolVia(this.request.bind(this), '本地 SSE MCP', name, args);
   }
 
   async close(): Promise<void> {

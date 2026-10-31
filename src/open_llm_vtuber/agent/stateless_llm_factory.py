@@ -1,4 +1,4 @@
-from typing import Callable, Dict
+from collections.abc import Callable
 
 from loguru import logger
 
@@ -61,7 +61,7 @@ def _build_claude(kwargs: dict) -> StatelessLLMInterface:
     )
 
 
-_LLM_BUILDERS: Dict[str, Callable[[dict], StatelessLLMInterface]] = {
+_LLM_BUILDERS: dict[str, Callable[[dict], StatelessLLMInterface]] = {
     "openai_compatible_llm": _build_openai_compatible,
     "openai_llm": _build_openai_compatible,
     "gemini_llm": _build_openai_compatible,

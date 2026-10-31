@@ -1,4 +1,3 @@
-import asyncio
 from collections import deque
 from enum import Enum
 
@@ -62,15 +61,11 @@ class VADEngine(VADInterface):
                 speech_prob = self.model(chunk, self.config.target_sr).item()
 
             if speech_prob:
-                # print(speech_prob)
-                iter = self.state.get_result(speech_prob, chunk_np)
-
-                for probs, dbs, chunk in iter:  # detected a sequence of voice bytes
-                    # rounded_probs = [round(x, 2) for x in probs]
-                    # rounded_dbs = [round(y, 2) for y in dbs]
-
-                    audio_chunk = bytes(chunk)
-                    yield audio_chunk
+                # Each result is a detected run of voice bytes (or a control marker).
+                for _probs, _dbs, voice_bytes in self.state.get_result(
+                    speech_prob, chunk_np
+                ):
+                    yield bytes(voice_bytes)
 
         del audio_np
 
@@ -186,42 +181,3 @@ class StateMachine:
 
     def get_result(self, input_num, chunk_np):
         yield from self.process(input_num, chunk_np)
-
-
-async def vad_main():
-    global vad, audio_queue
-    vad = VADEngine(config=SileroVADConfig())
-    audio_queue = asyncio.Queue()
-    from tqdm.asyncio import tqdm
-
-    async def data_wrapper(websocket):
-        async for chunk in websocket:
-            yield chunk
-
-    async def audio_handler(websocket):
-        async for chunk in tqdm(data_wrapper(websocket), desc="Audio chunk"):
-            # print(len(chunk))
-            for _bytes in vad.detect_speech(chunk):
-                print(_bytes[:44])
-                # await audio_queue.put(_bytes)
-                pass
-
-    async def empty_run():
-        while True:
-            await asyncio.sleep(0.1)
-
-    async def start_websocket_server():
-        import websockets
-
-        host = "localhost"
-        port = 8765
-        start_server = websockets.serve(audio_handler, host, port)
-        logger.info(f"WebSocket server started at ws://{host}:{port}")
-        await start_server  # run forever until the task is cancelled
-
-    await asyncio.gather(start_websocket_server(), empty_run())
-    # await start_playback(audio_queue, sr=vad.config.target_sr)
-
-
-if __name__ == "__main__":
-    asyncio.run(vad_main())

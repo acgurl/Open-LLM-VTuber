@@ -1,7 +1,6 @@
 import asyncio
 import json
 import uuid
-from typing import Dict, Optional
 from fastapi import WebSocket
 from loguru import logger
 import aiohttp
@@ -24,17 +23,17 @@ class ProxyHandler:
             server_url: The WebSocket URL of the actual server
         """
         self.server_url = server_url
-        self.server_ws: Optional[aiohttp.ClientWebSocketResponse] = None
-        self.clients: Dict[str, WebSocket] = {}
+        self.server_ws: aiohttp.ClientWebSocketResponse | None = None
+        self.clients: dict[str, WebSocket] = {}
         self.connected = False
-        self.server_task: Optional[asyncio.Task] = None
+        self.server_task: asyncio.Task | None = None
         self.lock = asyncio.Lock()
 
         # Initialize message queue manager
         self.message_queue = ProxyMessageQueue()
-        self._heartbeat_task: Optional[asyncio.Task] = None
+        self._heartbeat_task: asyncio.Task | None = None
         self._running = True
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
 
     async def connect_to_server(self):
         """Establish a WebSocket connection to the actual server"""
@@ -194,7 +193,7 @@ class ProxyHandler:
         self.message_queue.clear()
         logger.info("Proxy disconnected from server")
 
-    async def forward_to_server(self, message: dict, sender_id: Optional[str] = None):
+    async def forward_to_server(self, message: dict, sender_id: str | None = None):
         """
         Forward a message from a client to the server.
 
@@ -254,7 +253,7 @@ class ProxyHandler:
             logger.info("Server message forwarding ended")
 
     async def broadcast_to_clients(
-        self, message: dict, exclude_client: Optional[str] = None
+        self, message: dict, exclude_client: str | None = None
     ):
         """
         Broadcast a message to all connected clients.
@@ -298,9 +297,7 @@ class ProxyHandler:
         for client_id in disconnected_clients:
             await self.handle_client_disconnect(client_id)
 
-    async def forward_with_broadcast(
-        self, message: dict, sender_id: Optional[str] = None
-    ):
+    async def forward_with_broadcast(self, message: dict, sender_id: str | None = None):
         """
         Forward message to server and handle any necessary broadcasting
 

@@ -56,9 +56,8 @@ class TTSEngine(TTSInterface):
             with open(file_name, "wb") as audio_file:
                 audio_file.write(response.content)
             return file_name
-        else:
-            # Handle errors or unsuccessful requests
-            logger.critical(
-                f"Error: Failed to generate audio. Status code: {response.status_code}"
-            )
-            return None
+        # Handle errors or unsuccessful requests
+        logger.critical(
+            f"Error: Failed to generate audio. Status code: {response.status_code}"
+        )
+        return None

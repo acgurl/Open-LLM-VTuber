@@ -1,22 +1,15 @@
 import inspect
-import sys
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.asr import azure_asr
-    from open_llm_vtuber.asr.azure_asr import VoiceRecognition as AzureASR
-    from open_llm_vtuber.asr.sherpa_onnx_asr import (
-        VoiceRecognition as SherpaOnnxASR,
-    )
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.asr import azure_asr
+from open_llm_vtuber.asr.azure_asr import VoiceRecognition as AzureASR
+from open_llm_vtuber.asr.sherpa_onnx_asr import (
+    VoiceRecognition as SherpaOnnxASR,
+)
 
 
 class SherpaModelPathTests(unittest.TestCase):

@@ -1,14 +1,10 @@
 import os
-import sys
 import tempfile
 import threading
 import time
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-from open_llm_vtuber.tts.pooled_tts import PooledTTSEngine  # noqa: E402
+from open_llm_vtuber.tts.pooled_tts import PooledTTSEngine
 
 
 class FakeClient:

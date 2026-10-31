@@ -1,20 +1,14 @@
 import json
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.storage import (
-        HistoryNotFoundError,
-        SQLiteHistoryRepository,
-        UserHistoryStore,
-        import_legacy_histories,
-    )
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.storage import (
+    HistoryNotFoundError,
+    SQLiteHistoryRepository,
+    UserHistoryStore,
+    import_legacy_histories,
+)
 
 
 class SQLiteHistoryRepositoryTests(unittest.IsolatedAsyncioTestCase):

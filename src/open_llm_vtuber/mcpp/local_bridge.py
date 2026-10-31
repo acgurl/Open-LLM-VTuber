@@ -8,7 +8,8 @@ backend never dials the user's localhost itself.
 
 import asyncio
 import json
-from typing import Any, Callable
+from typing import Any
+from collections.abc import Callable
 from uuid import uuid4
 
 from loguru import logger

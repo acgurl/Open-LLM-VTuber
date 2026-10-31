@@ -345,8 +345,8 @@ everyone.
 ## Development
 
 ```bash
-# backend tests (same command as CI)
-uv run --frozen python -m unittest discover -s tests -v
+# backend tests (same command as CI; `src` holds the package, the repo root holds `prompts`)
+PYTHONPATH=src uv run --frozen python -m unittest discover -s tests -v
 
 # lint and formatting
 ruff check .

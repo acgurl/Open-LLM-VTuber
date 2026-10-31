@@ -1,40 +1,33 @@
 import json
 import socket
-import sys
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber import service_context as service_context_module
-    from open_llm_vtuber.mcpp import tool_adapter as tool_adapter_module
-    from open_llm_vtuber.mcpp import user_servers as user_servers_module
-    from open_llm_vtuber.mcpp.local_bridge import LocalMCPBridge
-    from open_llm_vtuber.mcpp.server_registry import ServerRegistry
-    from open_llm_vtuber.mcpp.tool_adapter import ToolAdapter
-    from open_llm_vtuber.mcpp.types import MCPServer
-    from open_llm_vtuber.mcpp.user_servers import (
-        MAX_MCP_RESULT_BYTES,
-        build_user_mcp_servers,
-        classify_mcp_url,
-        local_mcp_config_payload,
-        make_exposed_tool_name,
-        parse_user_mcp_config,
-        split_user_mcp_servers,
-        unique_tool_name,
-        validate_headers,
-        validate_local_tool,
-        validate_public_https_url,
-        validate_server_name,
-    )
-    from open_llm_vtuber.message_handler import message_handler
-    from open_llm_vtuber.service_context import ServiceContext
-    from open_llm_vtuber.storage.sqlite import SQLiteHistoryRepository
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber import service_context as service_context_module
+from open_llm_vtuber.mcpp import tool_adapter as tool_adapter_module
+from open_llm_vtuber.mcpp import user_servers as user_servers_module
+from open_llm_vtuber.mcpp.local_bridge import LocalMCPBridge
+from open_llm_vtuber.mcpp.server_registry import ServerRegistry
+from open_llm_vtuber.mcpp.tool_adapter import ToolAdapter
+from open_llm_vtuber.mcpp.types import MCPServer
+from open_llm_vtuber.mcpp.user_servers import (
+    MAX_MCP_RESULT_BYTES,
+    build_user_mcp_servers,
+    classify_mcp_url,
+    local_mcp_config_payload,
+    make_exposed_tool_name,
+    parse_user_mcp_config,
+    split_user_mcp_servers,
+    unique_tool_name,
+    validate_headers,
+    validate_local_tool,
+    validate_public_https_url,
+    validate_server_name,
+)
+from open_llm_vtuber.message_handler import message_handler
+from open_llm_vtuber.service_context import ServiceContext
+from open_llm_vtuber.storage.sqlite import SQLiteHistoryRepository
 
 
 def _public_dns(*args, **kwargs):
@@ -125,6 +118,10 @@ class UserMCPStorageTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(records[0]["id"], created["id"])
         self.assertEqual(records[0]["transport"], "sse")
+
+        stored = await self.repo.list_user_mcp_servers(user_id="alice")
+        self.assertEqual(stored[0]["mode"], "local")
+        self.assertEqual(stored[0]["transport"], "sse")
 
     async def test_duplicate_names_are_rejected(self):
         await self.repo.create_user_mcp_server(

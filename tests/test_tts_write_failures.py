@@ -1,17 +1,11 @@
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.tts import minimax_tts
-    from open_llm_vtuber.tts.minimax_tts import TTSEngine as MinimaxTTSEngine
-    from open_llm_vtuber.tts.siliconflow_tts import SiliconFlowTTS
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.tts import minimax_tts
+from open_llm_vtuber.tts.minimax_tts import TTSEngine as MinimaxTTSEngine
+from open_llm_vtuber.tts.siliconflow_tts import SiliconFlowTTS
 
 
 class _Response:

@@ -1,5 +1,5 @@
 import os
-from typing import Callable, List, Optional
+from collections.abc import Callable
 import numpy as np
 from loguru import logger
 import azure.cognitiveservices.speech as speechsdk
@@ -14,12 +14,12 @@ CACHE_DIR = "cache"
 class VoiceRecognition(ASRInterface):
     def __init__(
         self,
-        subscription_key: Optional[str] = None,
-        region: Optional[str] = None,
-        languages: Optional[List[str]] = None,
+        subscription_key: str | None = None,
+        region: str | None = None,
+        languages: list[str] | None = None,
         callback: Callable = logger.info,
     ):
-        subscription_key = subscription_key or os.getenv("AZURE_API_Key")
+        subscription_key = subscription_key or os.getenv("AZURE_API_Key")  # noqa: SIM112 - documented name
         region = region or os.getenv("AZURE_REGION")
         languages = languages or ["en-US", "zh-CN"]
 
@@ -45,27 +45,6 @@ class VoiceRecognition(ASRInterface):
             )
         except Exception as e:
             logger.error(f"Failed to initialize Azure Speech Config: {e}")
-            raise
-
-    def _create_speech_recognizer(self, uses_default_microphone: bool = True):
-        """
-        Create a speech recognizer instance with the specified configuration.
-
-        Args:
-            uses_default_microphone (bool): Whether to use default microphone
-
-        Returns:
-            SpeechRecognizer: Configured speech recognizer instance
-        """
-        try:
-            audio_config = speechsdk.AudioConfig(
-                use_default_microphone=uses_default_microphone
-            )
-            return speechsdk.SpeechRecognizer(
-                speech_config=self.speech_config, audio_config=audio_config
-            )
-        except Exception as e:
-            logger.warning(f"Failed to create speech recognizer: {e}")
             raise
 
     async def async_transcribe_np(self, audio: np.ndarray) -> str:
@@ -102,12 +81,12 @@ class VoiceRecognition(ASRInterface):
                 )
                 logger.debug(f"Detected language: {detected_language}")
                 return result.text
-            elif result.reason == speechsdk.ResultReason.NoMatch:
+            if result.reason == speechsdk.ResultReason.NoMatch:
                 logger.warning(
                     f"No speech could be recognized: {result.no_match_details}"
                 )
                 return ""
-            elif result.reason == speechsdk.ResultReason.Canceled:
+            if result.reason == speechsdk.ResultReason.Canceled:
                 cancellation_details = result.cancellation_details
                 logger.error(
                     f"Speech Recognition canceled: {cancellation_details.reason}"
@@ -160,7 +139,3 @@ class VoiceRecognition(ASRInterface):
             if created_loop and loop is not None:
                 loop.close()
                 asyncio.set_event_loop(None)
-
-
-if __name__ == "__main__":
-    service = VoiceRecognition()

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import timedelta
-from typing import Optional, Any
+from typing import Any
 
 
 @dataclass
@@ -21,16 +21,16 @@ class MCPServer:
     name: str
     command: str = ""
     args: list[str] = field(default_factory=list)
-    env: Optional[dict[str, str]] = None
+    env: dict[str, str] | None = None
     cwd: str | None = None
-    timeout: Optional[timedelta] = timedelta(seconds=30)
+    timeout: timedelta | None = timedelta(seconds=30)
     description: str = "No description available."
-    url: Optional[str] = None
-    headers: Optional[dict[str, str]] = None
+    url: str | None = None
+    headers: dict[str, str] | None = None
     # User-added servers are untrusted input: their URL is validated before
     # every connection and their tools are namespaced away from global ones.
     is_user: bool = False
-    display_name: Optional[str] = None
+    display_name: str | None = None
     # "http" = Streamable HTTP, "sse" = legacy HTTP+SSE MCP transport.
     transport: str = "http"
 
@@ -50,9 +50,9 @@ class FormattedTool:
 
     input_schema: dict[str, Any]
     related_server: str
-    generic_schema: Optional[dict[str, Any]] = None
+    generic_schema: dict[str, Any] | None = None
     description: str = "No description available."
-    remote_name: Optional[str] = None
+    remote_name: str | None = None
 
 
 @dataclass
@@ -83,7 +83,7 @@ class ToolCallObject:
         function (ToolCallFunctionObject): Function information for the tool call.
     """
 
-    id: Optional[str] = None
+    id: str | None = None
     type: str = "function"
     index: int = 0
     function: ToolCallFunctionObject = field(default_factory=ToolCallFunctionObject)

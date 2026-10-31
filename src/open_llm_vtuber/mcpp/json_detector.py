@@ -1,5 +1,5 @@
 import json
-from typing import List, Dict, Any, Optional, Tuple
+from typing import Any
 from loguru import logger
 
 
@@ -12,7 +12,7 @@ class StreamJSONDetector:
         self.completed_jsons = []  # Store completed JSON objects
         self.processed_ranges = []  # Store processed intervals [start, end]
 
-    def process_chunk(self, chunk: str) -> List[Dict[str, Any]]:
+    def process_chunk(self, chunk: str) -> list[dict[str, Any]]:
         """Process a single text chunk, return a list of complete JSON objects found in this chunk.
 
         Args:
@@ -52,12 +52,9 @@ class StreamJSONDetector:
         Returns:
             bool: True if position is within a processed range, otherwise False
         """
-        for start, end in self.processed_ranges:
-            if start <= pos <= end:
-                return True
-        return False
+        return any(start <= pos <= end for start, end in self.processed_ranges)
 
-    def _try_parse_jsons(self) -> List[Dict[str, Any]]:
+    def _try_parse_jsons(self) -> list[dict[str, Any]]:
         """Try to parse JSON objects from the current buffer.
 
         Returns:
@@ -87,7 +84,7 @@ class StreamJSONDetector:
         self.potential_jsons = remaining_potential
         return new_jsons
 
-    def _extract_json(self, start_idx: int) -> Tuple[Optional[Dict[str, Any]], int]:
+    def _extract_json(self, start_idx: int) -> tuple[dict[str, Any] | None, int]:
         """Try to extract a complete JSON object from the given position.
 
         Args:
@@ -132,14 +129,6 @@ class StreamJSONDetector:
 
         return None, -1
 
-    def get_all_jsons(self) -> List[Dict[str, Any]]:
-        """Get all JSON objects parsed so far.
-
-        Returns:
-            List[Dict[str, Any]]: List of all parsed JSON objects
-        """
-        return self.completed_jsons
-
     def reset(self) -> None:
         """Reset detector state, prepare to process a new stream."""
         self.buffer = ""
@@ -149,22 +138,3 @@ class StreamJSONDetector:
 
 
 # Usage example
-if __name__ == "__main__":
-    # Simulate streaming text reception
-    test_chunks = [
-        "This is some plain text ",
-        "Here comes JSON: {",
-        '"name": "test", "values": [1, 2, ',
-        '3]} This is text after JSON {"another": "json", ',
-        '"nested": {"key": "value"}}',
-    ]
-
-    detector = StreamJSONDetector()
-
-    for i, chunk in enumerate(test_chunks):
-        logger.info(f"Processing chunk {i + 1}: {chunk}")
-        new_jsons = detector.process_chunk(chunk)
-        if new_jsons:
-            logger.info(f"Complete JSON found in this chunk: {new_jsons}")
-
-    logger.info(f"All detected JSONs: {detector.get_all_jsons()}")

@@ -19,7 +19,6 @@ class TTSEngine(TTSInterface):
         preload_models()
         self.voice = voice
 
-        self.temp_audio_file = "temp"
         self.file_extension = "wav"
 
     def generate_audio(self, text, file_name_no_ext=None):

@@ -4,7 +4,7 @@ import shutil
 import json
 
 from pathlib import Path
-from typing import Dict, Optional, Union, Any
+from typing import Any
 from loguru import logger
 
 from .types import MCPServer
@@ -25,43 +25,42 @@ class ServerRegistry:
         self,
         config_path: str | Path = DEFAULT_CONFIG_PATH,
         *,
-        servers: Dict[str, MCPServer] | None = None,
+        servers: dict[str, MCPServer] | None = None,
     ) -> None:
         """Initialize the MCP Server Manager.
 
         ``servers`` builds an in-memory registry (used for per-session
         overlays); otherwise the deployment-managed JSON file is loaded.
         """
-        self.servers: Dict[str, MCPServer] = {}
+        self.servers: dict[str, MCPServer] = {}
 
         self.npx_available = self._detect_runtime("npx")
         self.uvx_available = self._detect_runtime("uvx")
         self.node_available = self._detect_runtime("node")
 
         if servers is not None:
-            self.config: Dict[str, Union[str, dict]] = {"mcp_servers": {}}
+            self.config: dict[str, str | dict] = {"mcp_servers": {}}
             self.servers = dict(servers)
             return
 
         try:
             config_path = validate_file(config_path, ".json")
-        except ValueError:
-            logger.error(
+        except ValueError as exc:
+            message = (
                 f"MCPSR: File '{config_path}' does not exist, or is not a json file."
             )
-            raise ValueError(
-                f"MCPSR: File '{config_path}' does not exist, or is not a json file."
-            )
+            logger.error(message)
+            raise ValueError(message) from exc
 
         self.config = json.loads(config_path.read_text(encoding="utf-8"))
 
         self.load_servers()
 
     @classmethod
-    def from_servers(cls, servers: Dict[str, MCPServer]) -> "ServerRegistry":
+    def from_servers(cls, servers: dict[str, MCPServer]) -> "ServerRegistry":
         return cls(servers=servers)
 
-    def merged_with(self, additions: Dict[str, MCPServer]) -> "ServerRegistry":
+    def merged_with(self, additions: dict[str, MCPServer]) -> "ServerRegistry":
         """Return a session-only registry with global and user servers.
 
         Global entries always win: user server keys are namespaced and an
@@ -85,7 +84,7 @@ class ServerRegistry:
 
     def load_servers(self) -> None:
         """Load servers from the config file."""
-        servers_config: Dict[str, Dict[str, Any]] = self.config.get("mcp_servers", {})
+        servers_config: dict[str, dict[str, Any]] = self.config.get("mcp_servers", {})
         if servers_config == {}:
             logger.warning("MCPSR: No servers found in the config file.")
             return
@@ -95,9 +94,7 @@ class ServerRegistry:
             if server is not None:
                 self.servers[server_name] = server
 
-    def _parse_server(
-        self, server_name: str, server_details: Any
-    ) -> Optional[MCPServer]:
+    def _parse_server(self, server_name: str, server_details: Any) -> MCPServer | None:
         if not isinstance(server_details, dict):
             logger.warning(
                 f"MCPSR: Invalid server details for '{server_name}'. Ignoring."
@@ -109,8 +106,8 @@ class ServerRegistry:
         return self._parse_stdio_server(server_name, server_details)
 
     def _parse_http_server(
-        self, server_name: str, server_details: Dict[str, Any]
-    ) -> Optional[MCPServer]:
+        self, server_name: str, server_details: dict[str, Any]
+    ) -> MCPServer | None:
         url = server_details.get("url")
         if not self._is_valid_http_url(url):
             logger.warning(f"MCPSR: Invalid HTTP url for '{server_name}'. Ignoring.")
@@ -140,13 +137,13 @@ class ServerRegistry:
             name=server_name,
             url=url,
             headers=headers,
-            timeout=server_details.get("timeout", None),
+            timeout=server_details.get("timeout"),
             transport=transport,
         )
 
     def _parse_stdio_server(
-        self, server_name: str, server_details: Dict[str, Any]
-    ) -> Optional[MCPServer]:
+        self, server_name: str, server_details: dict[str, Any]
+    ) -> MCPServer | None:
         if "command" not in server_details or "args" not in server_details:
             logger.warning(
                 f"MCPSR: Invalid server details for '{server_name}'. Ignoring."
@@ -170,9 +167,9 @@ class ServerRegistry:
             name=server_name,
             command=command,
             args=server_details["args"],
-            env=server_details.get("env", None),
-            cwd=server_details.get("cwd", None),
-            timeout=server_details.get("timeout", None),
+            env=server_details.get("env"),
+            cwd=server_details.get("cwd"),
+            timeout=server_details.get("timeout"),
         )
 
     @staticmethod
@@ -195,6 +192,6 @@ class ServerRegistry:
         except KeyError:
             logger.warning(f"MCPSR: Server '{server_name}' not found. Cannot remove.")
 
-    def get_server(self, server_name: str) -> Optional[MCPServer]:
+    def get_server(self, server_name: str) -> MCPServer | None:
         """Get the server by name."""
         return self.servers.get(server_name, None)

@@ -1,18 +1,11 @@
 import asyncio
 import json
-import sys
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.agent.output_types import Actions, DisplayText
-    from open_llm_vtuber.conversations import conversation_utils
-    from open_llm_vtuber.conversations.types import BroadcastContext, OutboundChannels
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.agent.output_types import Actions, DisplayText
+from open_llm_vtuber.conversations import conversation_utils
+from open_llm_vtuber.conversations.types import BroadcastContext, OutboundChannels
 
 
 class _AudioOutput:

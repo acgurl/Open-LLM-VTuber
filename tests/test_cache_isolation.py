@@ -1,20 +1,14 @@
 import os
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.auth.middleware import IDENTITY_SCOPE_KEY
-    from open_llm_vtuber.auth.types import Identity
-    from open_llm_vtuber.conversations.tts_manager import TTSTaskManager
-    from open_llm_vtuber.server import UserCacheStaticFiles
-    from open_llm_vtuber.tts.tts_interface import TTSInterface
-    from open_llm_vtuber.utils.audio import new_audio_file_stem
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.auth.middleware import IDENTITY_SCOPE_KEY
+from open_llm_vtuber.auth.types import Identity
+from open_llm_vtuber.conversations.tts_manager import TTSTaskManager
+from open_llm_vtuber.server import UserCacheStaticFiles
+from open_llm_vtuber.tts.tts_interface import TTSInterface
+from open_llm_vtuber.utils.audio import new_audio_file_stem
 
 
 class _DummyTTS(TTSInterface):

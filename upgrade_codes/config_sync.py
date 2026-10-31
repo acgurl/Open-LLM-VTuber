@@ -20,7 +20,7 @@ from packaging import version
 
 
 class ConfigSynchronizer:
-    def __init__(self, lang="en", logger=logging.getLogger(__name__)):
+    def __init__(self, lang="en", logger=None):
         self.lang = lang
         self.texts = TEXTS[lang]
         self.default_path = ZH_DEFAULT_CONF if lang == "zh" else EN_DEFAULT_CONF
@@ -30,7 +30,7 @@ class ConfigSynchronizer:
         self.backup_path = BACKUP_CONF
         self.texts_merge = TEXTS_MERGE.get(lang, TEXTS_MERGE["en"])
         self.texts_compare = TEXTS_COMPARE.get(lang, TEXTS_COMPARE["en"])
-        self.logger = logger
+        self.logger = logger or logging.getLogger(__name__)
         self.upgrade_utils = UpgradeUtility(self.logger, self.lang)
 
     def sync_user_config(self) -> None:
@@ -274,7 +274,7 @@ class ConfigSynchronizer:
         )
 
     def get_latest_version(self):
-        with open(self.default_path, "r", encoding="utf-8") as f:
+        with open(self.default_path, encoding="utf-8") as f:
             default_config = self.yaml.load(f)
         return default_config.get("system_config", {}).get("conf_version", "")
 
@@ -286,7 +286,7 @@ class ConfigSynchronizer:
         fallback_version = "v1.1.1"
         try:
             yaml = YAML()
-            with open(BACKUP_CONF, "r", encoding="utf-8") as f:
+            with open(BACKUP_CONF, encoding="utf-8") as f:
                 backup_conf = yaml.load(f)
                 raw_version = backup_conf.get("system_config", {}).get(
                     "conf_version", fallback_version

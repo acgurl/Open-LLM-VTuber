@@ -1,5 +1,4 @@
 import io
-import sys
 import tempfile
 import unittest
 import wave
@@ -7,14 +6,12 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-from open_llm_vtuber.storage.legacy import (  # noqa: E402
+from open_llm_vtuber.storage.legacy import (
     _get_safe_history_path,
     _sanitize_path_component,
 )
-from open_llm_vtuber.utils.audio import decode_pcm_wav  # noqa: E402
-from open_llm_vtuber.utils.security import (  # noqa: E402
+from open_llm_vtuber.utils.audio import decode_pcm_wav
+from open_llm_vtuber.utils.security import (
     redact_secrets,
     resolve_existing_file_within,
 )

@@ -11,7 +11,6 @@ class TTSEngine(TTSInterface):
     def __init__(self, voice="en-US-AvaMultilingualNeural"):
         self.voice = voice
 
-        self.temp_audio_file = "temp"
         self.file_extension = "mp3"
 
     def generate_audio(self, text, file_name_no_ext=None):

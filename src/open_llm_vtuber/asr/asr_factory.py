@@ -1,4 +1,4 @@
-from typing import Callable, Dict
+from collections.abc import Callable
 
 from .asr_interface import ASRInterface
 
@@ -69,7 +69,7 @@ def _build_sherpa_onnx(kwargs: dict) -> ASRInterface:
     return SherpaOnnxASR(**kwargs)
 
 
-_ASR_BUILDERS: Dict[str, Callable[[dict], ASRInterface]] = {
+_ASR_BUILDERS: dict[str, Callable[[dict], ASRInterface]] = {
     "faster_whisper": _build_faster_whisper,
     "whisper_cpp": _build_whisper_cpp,
     "whisper": _build_whisper,

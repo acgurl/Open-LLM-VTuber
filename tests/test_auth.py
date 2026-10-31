@@ -1,4 +1,3 @@
-import sys
 import tempfile
 import time
 import unittest
@@ -7,28 +6,23 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 from urllib.parse import parse_qs, urlsplit
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+import httpx
+import jwt
+from cryptography.hazmat.primitives.asymmetric import rsa
 
-try:
-    import httpx
-    import jwt
-    from cryptography.hazmat.primitives.asymmetric import rsa
-
-    from open_llm_vtuber.auth import (
-        AuthManager,
-        Identity,
-        OIDCError,
-        OIDCProvider,
-        safe_next_path,
-    )
-    from open_llm_vtuber.auth.cookies import SignedCookie
-    from open_llm_vtuber.chat_group import ChatGroupManager, handle_group_operation
-    from open_llm_vtuber.config_manager.auth import AuthConfig, OIDCConfig
-    from open_llm_vtuber.service_context import ServiceContext
-    from open_llm_vtuber.storage import SQLiteHistoryRepository
-    from open_llm_vtuber.websocket_handler import WebSocketHandler
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.auth import (
+    AuthManager,
+    Identity,
+    OIDCError,
+    OIDCProvider,
+    safe_next_path,
+)
+from open_llm_vtuber.auth.cookies import SignedCookie
+from open_llm_vtuber.chat_group import ChatGroupManager, handle_group_operation
+from open_llm_vtuber.config_manager.auth import AuthConfig, OIDCConfig
+from open_llm_vtuber.service_context import ServiceContext
+from open_llm_vtuber.storage import SQLiteHistoryRepository
+from open_llm_vtuber.websocket_handler import WebSocketHandler
 
 
 def oidc_config(**overrides) -> AuthConfig:

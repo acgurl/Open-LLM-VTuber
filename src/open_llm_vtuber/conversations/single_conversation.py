@@ -1,4 +1,4 @@
-from typing import Union, List, Dict, Any, Optional
+from typing import Any
 import asyncio
 import json
 from loguru import logger
@@ -23,10 +23,10 @@ async def process_single_conversation(
     context: ServiceContext,
     channels: OutboundChannels,
     client_uid: str,
-    user_input: Union[str, np.ndarray],
-    images: Optional[List[Dict[str, Any]]] = None,
+    user_input: str | np.ndarray,
+    images: list[dict[str, Any]] | None = None,
     session_emoji: str = np.random.choice(EMOJI_LIST),
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> str:
     """Process a single-user conversation turn
 
@@ -127,7 +127,7 @@ async def process_single_conversation(
     except Exception as e:
         logger.error(f"Error in conversation chain: {e}")
         await channels.text(
-            json.dumps({"type": "error", "message": f"Conversation error: {str(e)}"})
+            json.dumps({"type": "error", "message": f"Conversation error: {e!s}"})
         )
         raise
     finally:

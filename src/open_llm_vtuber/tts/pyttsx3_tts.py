@@ -12,7 +12,6 @@ from .tts_interface import TTSInterface
 class TTSEngine(TTSInterface):
     def __init__(self):
         self.engine = pyttsx3.init()
-        self.temp_audio_file = "temp"
         self.file_extension = "aiff"
         self.lock = threading.Lock()
 
@@ -26,31 +25,3 @@ class TTSEngine(TTSInterface):
             self.engine.runAndWait()
         logger.info(f"Finished Generating {file_name}")
         return file_name
-
-
-if __name__ == "__main__":
-    TTSEngine = TTSEngine()
-    TTSEngine.generate_audio(
-        "Hello, this is a test. But this is not a test. You are screwed bro. You only live once. YOLO."
-    )
-
-    def worker(engine, text, index):
-        file_name = f"audio_{index}"
-        engine.generate_audio(text, file_name)
-
-    texts = [
-        "Hello, this is a test.",
-        "This is another test.",
-        "Yet another test sentence.",
-        "Testing multithreading.",
-        "Final test sentence.",
-    ]
-
-    threads = []
-    for i, text in enumerate(texts):
-        t = threading.Thread(target=worker, args=(TTSEngine, text, i))
-        threads.append(t)
-        t.start()
-
-    for t in threads:
-        t.join()

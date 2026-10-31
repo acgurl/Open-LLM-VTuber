@@ -4,7 +4,8 @@ import subprocess
 import sys
 import time
 from upgrade_codes.upgrade_core.constants import TEXTS, TEXTS_COMPARE
-from typing import Callable, Any
+from typing import Any
+from collections.abc import Callable
 
 
 class UpgradeUtility:
@@ -33,7 +34,7 @@ class UpgradeUtility:
                 f"Command failed with error code {e.returncode}\nError: {e.stderr}",
             )
         except Exception as e:
-            return False, f"Unexpected error: {str(e)}"
+            return False, f"Unexpected error: {e!s}"
 
     def check_git_installed(self):
         """Check if Git is installed"""
@@ -125,20 +126,19 @@ class UpgradeUtility:
                 )
                 self.logger.debug(msg.format(name=name))
                 return True
-            else:
-                msg = self.texts_compare.get(
-                    "compare_failed",
-                    "[WARNING] {name} comparison failed: configs differ.",
-                )
-                self.logger.warning(msg.format(name=name))
-                if differences:
-                    for item in differences:
-                        self.logger.warning(
-                            self.texts_compare.get(
-                                "compare_diff_item", "- {item}"
-                            ).format(item=item)
+            msg = self.texts_compare.get(
+                "compare_failed",
+                "[WARNING] {name} comparison failed: configs differ.",
+            )
+            self.logger.warning(msg.format(name=name))
+            if differences:
+                for item in differences:
+                    self.logger.warning(
+                        self.texts_compare.get("compare_diff_item", "- {item}").format(
+                            item=item
                         )
-                return False
+                    )
+            return False
         except Exception as e:
             msg = self.texts_compare.get(
                 "compare_error", "[ERROR] {name} comparison error: {error}"

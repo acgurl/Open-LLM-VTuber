@@ -1,5 +1,5 @@
 # config_manager/i18n.py
-from typing import Dict, ClassVar
+from typing import ClassVar
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -83,7 +83,7 @@ class I18nMixin(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    DESCRIPTIONS: ClassVar[Dict[str, Description]] = {}
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {}
 
     @classmethod
     def get_field_description(

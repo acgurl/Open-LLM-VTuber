@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 from loguru import logger
 
 from ..output_types import BaseOutput
@@ -52,4 +52,4 @@ class AgentInterface(ABC):
         Storage is intentionally not accessed here; the session owns the
         user-scoped history and injects the already-authorized messages.
         """
-        return None
+        return

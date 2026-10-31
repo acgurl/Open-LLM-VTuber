@@ -2,7 +2,8 @@
 
 import re
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
+from collections.abc import Iterable
 
 
 _SENSITIVE_KEY_MARKERS = (

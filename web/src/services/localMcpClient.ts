@@ -23,14 +23,15 @@ export interface LocalMcpClientLike {
   close(): Promise<void>;
 }
 
-interface JsonRpcMessage {
+export interface JsonRpcMessage {
   jsonrpc?: string;
   id?: number | string;
   result?: unknown;
   error?: { code?: number; message?: string };
 }
 
-const PROTOCOL_VERSION = '2025-03-26';
+export const PROTOCOL_VERSION = '2025-03-26';
+export const CLIENT_INFO = { name: 'ollmvt-web', version: '1.0.0' };
 const MAX_TOOLS = 200;
 const MAX_PAGES = 10;
 const RESERVED_HEADERS = new Set([
@@ -117,6 +118,85 @@ export function errorFromHttp(status: number, body: string): Error {
   return new Error(`本地 MCP 返回 HTTP ${status}${detail ? `：${detail}` : ''}`);
 }
 
+type RpcRequest = (
+  method: string,
+  params: Record<string, unknown>,
+  timeoutMs: number,
+) => Promise<JsonRpcMessage>;
+
+/** Page through `tools/list`, skipping duplicate names and capping the total. */
+export async function listToolsPaged(
+  request: RpcRequest,
+  label: string,
+): Promise<LocalMcpTool[]> {
+  const tools: LocalMcpTool[] = [];
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+  for (let page = 0; page < MAX_PAGES; page += 1) {
+    const params = cursor ? { cursor } : {};
+    const response = await request('tools/list', params, 15_000);
+    const result = response.result;
+    const pageTools =
+      result && typeof result === 'object'
+        ? (result as Record<string, unknown>).tools
+        : undefined;
+    if (!Array.isArray(pageTools)) {
+      throw new Error(`${label} 返回了无效的工具列表`);
+    }
+    for (const tool of pageTools) {
+      if (!tool || typeof tool !== 'object') continue;
+      const record = tool as Record<string, unknown>;
+      if (typeof record.name !== 'string' || seen.has(record.name)) continue;
+      seen.add(record.name);
+      tools.push({
+        name: record.name,
+        description: typeof record.description === 'string' ? record.description : '',
+        inputSchema:
+          record.inputSchema && typeof record.inputSchema === 'object'
+            ? (record.inputSchema as Record<string, unknown>)
+            : { type: 'object', properties: {} },
+      });
+      if (tools.length >= MAX_TOOLS) return tools;
+    }
+    const next =
+      result && typeof result === 'object'
+        ? (result as Record<string, unknown>).nextCursor
+        : undefined;
+    cursor = typeof next === 'string' && next ? next : undefined;
+    if (!cursor) break;
+  }
+  return tools;
+}
+
+/** Issue `tools/call` and normalize the returned content items. */
+export async function callToolVia(
+  request: RpcRequest,
+  label: string,
+  name: string,
+  args: Record<string, unknown>,
+): Promise<LocalMcpCallResult> {
+  const response = await request(
+    'tools/call',
+    { name, arguments: args ?? {} },
+    35_000,
+  );
+  if (response.error) {
+    throw new Error(response.error.message || `${label} 工具调用失败`);
+  }
+  const result = response.result;
+  if (!result || typeof result !== 'object') {
+    throw new Error(`${label} 未返回结果`);
+  }
+  const record = result as Record<string, unknown>;
+  const items = Array.isArray(record.content) ? record.content : [];
+  const normalized = normalizeContent(items);
+  return {
+    contentItems:
+      normalized.length > 0 ? normalized : [{ type: 'text', text: '' }],
+    isError: Boolean(record.isError),
+  };
+}
+
 export class LocalMcpClient implements LocalMcpClientLike {
   private readonly url: string;
   private readonly customHeaders: Record<string, string>;
@@ -136,7 +216,7 @@ export class LocalMcpClient implements LocalMcpClientLike {
       {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: {},
-        clientInfo: { name: 'ollmvt-web', version: '1.0.0' },
+        clientInfo: CLIENT_INFO,
       },
       10_000,
     );
@@ -150,69 +230,14 @@ export class LocalMcpClient implements LocalMcpClientLike {
   }
 
   async listTools(): Promise<LocalMcpTool[]> {
-    const tools: LocalMcpTool[] = [];
-    const seen = new Set<string>();
-    let cursor: string | undefined;
-    for (let page = 0; page < MAX_PAGES; page += 1) {
-      const params = cursor ? { cursor } : {};
-      const response = await this.request('tools/list', params, 15_000);
-      const result = response.result;
-      const pageTools =
-        result && typeof result === 'object'
-          ? (result as Record<string, unknown>).tools
-          : undefined;
-      if (!Array.isArray(pageTools)) {
-        throw new Error('本地 MCP 返回了无效的工具列表');
-      }
-      for (const tool of pageTools) {
-        if (!tool || typeof tool !== 'object') continue;
-        const record = tool as Record<string, unknown>;
-        if (typeof record.name !== 'string' || seen.has(record.name)) continue;
-        seen.add(record.name);
-        tools.push({
-          name: record.name,
-          description: typeof record.description === 'string' ? record.description : '',
-          inputSchema:
-            record.inputSchema && typeof record.inputSchema === 'object'
-              ? (record.inputSchema as Record<string, unknown>)
-              : { type: 'object', properties: {} },
-        });
-        if (tools.length >= MAX_TOOLS) return tools;
-      }
-      const next =
-        result && typeof result === 'object'
-          ? (result as Record<string, unknown>).nextCursor
-          : undefined;
-      cursor = typeof next === 'string' && next ? next : undefined;
-      if (!cursor) break;
-    }
-    return tools;
+    return listToolsPaged(this.request.bind(this), '本地 MCP');
   }
 
   async callTool(
     name: string,
     args: Record<string, unknown>,
   ): Promise<LocalMcpCallResult> {
-    const response = await this.request(
-      'tools/call',
-      { name, arguments: args ?? {} },
-      35_000,
-    );
-    if (response.error) {
-      throw new Error(response.error.message || '本地 MCP 工具调用失败');
-    }
-    const result = response.result;
-    if (!result || typeof result !== 'object') {
-      throw new Error('本地 MCP 未返回结果');
-    }
-    const record = result as Record<string, unknown>;
-    const items = Array.isArray(record.content) ? record.content : [];
-    const normalized = normalizeContent(items);
-    return {
-      contentItems:
-        normalized.length > 0 ? normalized : [{ type: 'text', text: '' }],
-      isError: Boolean(record.isError),
-    };
+    return callToolVia(this.request.bind(this), '本地 MCP', name, args);
   }
 
   async close(): Promise<void> {

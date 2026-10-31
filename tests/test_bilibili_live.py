@@ -1,17 +1,10 @@
 import asyncio
-import sys
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.live import bilibili_live
-    from open_llm_vtuber.live.bilibili_live import BiliBiliLivePlatform
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.live import bilibili_live
+from open_llm_vtuber.live.bilibili_live import BiliBiliLivePlatform
 
 
 class _FakeLiveClient:

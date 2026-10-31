@@ -7,7 +7,7 @@ code flow against an OpenID Connect provider (for example Casdoor).
 
 import os
 import re
-from typing import ClassVar, Dict, List, Literal
+from typing import ClassVar, Literal
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -27,9 +27,9 @@ class OIDCConfig(BaseModel):
     # Extra registered callbacks for the same client. Login picks the entry
     # whose host matches the request Host, so one deployment can answer on
     # several front-door domains (each keeps its own host-only session cookie).
-    redirect_uris: List[str] = Field(default_factory=list, alias="redirect_uris")
+    redirect_uris: list[str] = Field(default_factory=list, alias="redirect_uris")
     post_logout_redirect_uri: str = Field("", alias="post_logout_redirect_uri")
-    scopes: List[str] = Field(
+    scopes: list[str] = Field(
         default_factory=lambda: ["openid", "profile", "email"],
         alias="scopes",
     )
@@ -63,7 +63,7 @@ class OIDCConfig(BaseModel):
 
     @field_validator("redirect_uris")
     @classmethod
-    def check_redirect_uris(cls, value: List[str]) -> List[str]:
+    def check_redirect_uris(cls, value: list[str]) -> list[str]:
         uris = [
             cls._require_http_url(uri.strip(), "OIDC redirect URI")
             for uri in value
@@ -79,7 +79,7 @@ class OIDCConfig(BaseModel):
 
     @field_validator("scopes")
     @classmethod
-    def check_scopes(cls, value: List[str]) -> List[str]:
+    def check_scopes(cls, value: list[str]) -> list[str]:
         scopes = [scope.strip() for scope in value if scope and scope.strip()]
         if not scopes:
             raise ValueError("OIDC scopes must not be empty")
@@ -106,7 +106,7 @@ class AuthConfig(I18nMixin):
     archive_dir: str = Field("data/storage/archive", alias="archive_dir")
     oidc: OIDCConfig = Field(default_factory=OIDCConfig, alias="oidc")
 
-    DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "mode": Description(
             en="Authentication mode: single user or OIDC",
             zh="认证模式：单用户或 OIDC",

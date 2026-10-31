@@ -3,7 +3,6 @@ import builtins
 import gc
 import math
 import struct
-import sys
 import tempfile
 import unittest
 import warnings
@@ -13,9 +12,7 @@ from unittest.mock import patch
 
 from pydub.utils import which as which_binary
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-from open_llm_vtuber.utils.stream_audio import prepare_audio_payload  # noqa: E402
+from open_llm_vtuber.utils.stream_audio import prepare_audio_payload
 
 
 class _OpenTracker:

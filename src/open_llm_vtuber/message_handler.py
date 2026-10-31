@@ -1,4 +1,4 @@
-from typing import Awaitable, Dict, Optional, Tuple, AsyncIterator, Callable
+from collections.abc import Awaitable, AsyncIterator, Callable
 import asyncio
 from contextlib import asynccontextmanager
 from loguru import logger
@@ -7,10 +7,10 @@ from collections import defaultdict
 
 class MessageHandler:
     def __init__(self):
-        self._response_events: Dict[
-            str, Dict[Tuple[str, Optional[str]], asyncio.Event]
+        self._response_events: dict[
+            str, dict[tuple[str, str | None], asyncio.Event]
         ] = defaultdict(dict)
-        self._response_data: Dict[str, Dict[Tuple[str, Optional[str]], dict]] = (
+        self._response_data: dict[str, dict[tuple[str, str | None], dict]] = (
             defaultdict(dict)
         )
 
@@ -20,7 +20,7 @@ class MessageHandler:
         client_uid: str,
         response_type: str,
         request_id: str | None = None,
-    ) -> AsyncIterator[Callable[[float | None], Awaitable[Optional[dict]]]]:
+    ) -> AsyncIterator[Callable[[float | None], Awaitable[dict | None]]]:
         """Register a response slot before the request is sent.
 
         Registering first closes the race where the client answers in the same
@@ -30,7 +30,7 @@ class MessageHandler:
         response_key = (response_type, request_id)
         self._response_events[client_uid][response_key] = event
 
-        async def wait(timeout: float | None = None) -> Optional[dict]:
+        async def wait(timeout: float | None = None) -> dict | None:
             try:
                 if timeout is not None:
                     await asyncio.wait_for(event.wait(), timeout)
@@ -56,7 +56,7 @@ class MessageHandler:
         response_type: str,
         request_id: str | None = None,
         timeout: float | None = None,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """
         Wait for a response of specific type and optional request_id from a client.
 

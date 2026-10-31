@@ -1,35 +1,28 @@
-import sys
 import unittest
-from pathlib import Path
-from typing import get_args, Literal
+from typing import Literal, get_args
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.agent import agent_factory, stateless_llm_factory
-    from open_llm_vtuber.agent.agent_factory import (
-        _AGENT_BUILDERS,
-        AgentFactory,
-    )
-    from open_llm_vtuber.agent.stateless_llm_factory import (
-        _LLM_BUILDERS,
-        LLMFactory,
-    )
-    from open_llm_vtuber.config_manager.agent import AgentConfig
-    from open_llm_vtuber.asr.asr_factory import _ASR_BUILDERS, ASRFactory
-    from open_llm_vtuber.config_manager.asr import ASRConfig
-    from open_llm_vtuber.config_manager.tts import TTSConfig
-    from open_llm_vtuber.config_manager.tts_preprocessor import TranslatorConfig
-    from open_llm_vtuber.config_manager.vad import VADConfig
-    from open_llm_vtuber.translate.translate_factory import (
-        _TRANSLATOR_BUILDERS,
-        TranslateFactory,
-    )
-    from open_llm_vtuber.tts.tts_factory import _TTS_ENGINE_BUILDERS, TTSFactory
-    from open_llm_vtuber.vad.vad_factory import _VAD_BUILDERS, VADFactory
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.agent import agent_factory, stateless_llm_factory
+from open_llm_vtuber.agent.agent_factory import (
+    _AGENT_BUILDERS,
+    AgentFactory,
+)
+from open_llm_vtuber.agent.stateless_llm_factory import (
+    _LLM_BUILDERS,
+    LLMFactory,
+)
+from open_llm_vtuber.asr.asr_factory import _ASR_BUILDERS, ASRFactory
+from open_llm_vtuber.config_manager.agent import AgentConfig
+from open_llm_vtuber.config_manager.asr import ASRConfig
+from open_llm_vtuber.config_manager.tts import TTSConfig
+from open_llm_vtuber.config_manager.tts_preprocessor import TranslatorConfig
+from open_llm_vtuber.config_manager.vad import VADConfig
+from open_llm_vtuber.translate.translate_factory import (
+    _TRANSLATOR_BUILDERS,
+    TranslateFactory,
+)
+from open_llm_vtuber.tts.tts_factory import _TTS_ENGINE_BUILDERS, TTSFactory
+from open_llm_vtuber.vad.vad_factory import _VAD_BUILDERS, VADFactory
 
 
 def _literal_values(annotation) -> set:

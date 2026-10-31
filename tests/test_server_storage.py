@@ -1,20 +1,14 @@
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.config_manager.auth import AuthConfig, OIDCConfig
-    from open_llm_vtuber.config_manager.storage import StorageConfig
-    from open_llm_vtuber.server import WebSocketServer
-    from open_llm_vtuber.service_context import ServiceContext
-    from open_llm_vtuber.storage import SQLiteHistoryRepository, UserHistoryStore
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.config_manager.auth import AuthConfig, OIDCConfig
+from open_llm_vtuber.config_manager.storage import StorageConfig
+from open_llm_vtuber.server import WebSocketServer
+from open_llm_vtuber.service_context import ServiceContext
+from open_llm_vtuber.storage import SQLiteHistoryRepository, UserHistoryStore
 
 
 class ServerStorageLifecycleTests(unittest.IsolatedAsyncioTestCase):

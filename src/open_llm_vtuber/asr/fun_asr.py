@@ -1,12 +1,11 @@
-import io
 import os
 import re
 import torch
 import numpy as np
-import soundfile as sf
 from funasr import AutoModel
 from .asr_interface import ASRInterface
-from typing import Optional
+
+from loguru import logger
 
 # Try to import modelscope for local cache detection
 try:
@@ -14,7 +13,7 @@ try:
 
     MODEL_SCOPE_DOWNLOAD_AVAILABLE = True
 except ImportError:
-    print("Warning: Unable to import modelscope.hub.snapshot_download.")
+    logger.warning("Unable to import modelscope.hub.snapshot_download.")
     MODEL_SCOPE_DOWNLOAD_AVAILABLE = False
 
 # Model alias to actual ModelScope ID mapping table
@@ -43,8 +42,8 @@ class VoiceRecognition(ASRInterface):
         language: str = "auto",
         vad_model: str = "fsmn-vad",
         punc_model: str = "ct-punc",
-        ncpu: int = None,
-        hub: str = None,
+        ncpu: int | None = None,
+        hub: str | None = None,
         device: str = "cpu",
         disable_update: bool = True,
         sample_rate: int = 16000,
@@ -71,7 +70,7 @@ class VoiceRecognition(ASRInterface):
         self.use_itn = use_itn
         self.language = language
 
-    def _get_final_model_input(self, alias_or_id: Optional[str]) -> Optional[str]:
+    def _get_final_model_input(self, alias_or_id: str | None) -> str | None:
         """
         Process model input function:
         1. Check mapping table to get canonical ModelScope ID.
@@ -91,12 +90,11 @@ class VoiceRecognition(ASRInterface):
                 local_path = snapshot_download(resolved_id, local_files_only=True)
                 if os.path.exists(local_path):  # Double check path exists
                     final_input_for_automodel = local_path  # Use local path if found
-                    # print(f"Successfully resolved '{resolved_id}' to local path: {local_path}")
             except ValueError:
                 # Not found in local cache, use original ID
                 pass
             except Exception as e:
-                print(f"Error occurred while checking '{resolved_id}': {e}")
+                logger.warning(f"Error occurred while checking '{resolved_id}': {e}")
 
         return final_input_for_automodel
 
@@ -122,10 +120,3 @@ class VoiceRecognition(ASRInterface):
         full_text = re.sub(r"< \|.*?\| >", "", full_text)
 
         return full_text.strip()
-
-    def _numpy_to_wav_in_memory(self, numpy_array: np.ndarray, sample_rate):
-        memory_file = io.BytesIO()
-        sf.write(memory_file, numpy_array, sample_rate, format="WAV")
-        memory_file.seek(0)
-
-        return memory_file

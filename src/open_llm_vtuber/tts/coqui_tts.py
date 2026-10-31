@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 from TTS.api import TTS
 from loguru import logger
 import torch
@@ -13,10 +12,10 @@ class TTSEngine(TTSInterface):
 
     def __init__(
         self,
-        model_name: Optional[str] = None,
-        speaker_wav: Optional[str] = None,
-        language: Optional[str] = "en",
-        device: Optional[str] = None,
+        model_name: str | None = None,
+        speaker_wav: str | None = None,
+        language: str | None = "en",
+        device: str | None = None,
     ):
         """
         Initialize CoquiTTS engine.
@@ -53,9 +52,9 @@ class TTSEngine(TTSInterface):
             )
 
         except Exception as e:
-            raise RuntimeError(f"Failed to initialize CoquiTTS model: {str(e)}")
+            raise RuntimeError(f"Failed to initialize CoquiTTS model: {e!s}") from e
 
-    def generate_audio(self, text: str, file_name_no_ext: Optional[str] = None) -> str:
+    def generate_audio(self, text: str, file_name_no_ext: str | None = None) -> str:
         """
         Generate speech audio file using CoquiTTS.
 
@@ -91,38 +90,4 @@ class TTSEngine(TTSInterface):
             return output_path
 
         except Exception as e:
-            raise RuntimeError(f"Failed to generate audio: {str(e)}")
-
-    @staticmethod
-    def list_available_models() -> list:
-        """
-        List all available CoquiTTS models.
-
-        Returns:
-            List of available model names
-        """
-        try:
-            return TTS().list_models()
-        except Exception as e:
-            raise RuntimeError(f"Failed to list available models: {str(e)}")
-
-    def get_speaker_info(self) -> dict:
-        """
-        Get information about available speakers for multi-speaker models.
-
-        Returns:
-            Dictionary containing speaker information
-        """
-        if not self.is_multi_speaker:
-            return {"multi_speaker": False}
-
-        try:
-            return {
-                "multi_speaker": True,
-                "speakers": self.tts.speakers,
-                "languages": self.tts.languages
-                if hasattr(self.tts, "languages")
-                else None,
-            }
-        except Exception as e:
-            raise RuntimeError(f"Failed to get speaker information: {str(e)}")
+            raise RuntimeError(f"Failed to generate audio: {e!s}") from e

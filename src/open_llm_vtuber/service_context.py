@@ -554,7 +554,7 @@ class ServiceContext:
         mcp_server_registry: ServerRegistry | None = None,
         tool_adapter: ToolAdapter | None = None,
         channels: OutboundChannels | None = None,
-        client_uid: str = None,
+        client_uid: str | None = None,
         history_repository: HistoryRepository | None = None,
         user_id: str | None = DEFAULT_USER_ID,
         user_display_name: str | None = None,

@@ -1,6 +1,6 @@
 # config_manager/vad.py
 from pydantic import Field, model_validator
-from typing import Literal, Optional, Dict, ClassVar
+from typing import Literal, ClassVar
 from .i18n import I18nMixin, Description
 
 
@@ -15,7 +15,7 @@ class SileroVADConfig(I18nMixin):
     required_misses: int = Field(..., alias="required_misses")  # 24 * (0.032) = 0.8s
     smoothing_window: int = Field(..., alias="smoothing_window")  # 5
 
-    DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "orig_sr": Description(en="Original Audio Sample Rate", zh="原始音频采样率"),
         "target_sr": Description(en="Target Audio Sample Rate", zh="目标音频采样率"),
         "prob_threshold": Description(
@@ -41,10 +41,10 @@ class SileroVADConfig(I18nMixin):
 class VADConfig(I18nMixin):
     """Configuration for Automatic Speech Recognition."""
 
-    vad_model: Optional[Literal["silero_vad"]] = Field(None, alias="vad_model")
-    silero_vad: Optional[SileroVADConfig] = Field(None, alias="silero_vad")
+    vad_model: Literal["silero_vad"] | None = Field(None, alias="vad_model")
+    silero_vad: SileroVADConfig | None = Field(None, alias="silero_vad")
 
-    DESCRIPTIONS: ClassVar[Dict[str, Description]] = {
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "vad_model": Description(
             en="Voice Activity Detection model to use", zh="要使用的语音活动检测模型"
         ),

@@ -1,4 +1,5 @@
-from typing import AsyncIterator, List, Dict, Any
+from typing import Any
+from collections.abc import AsyncIterator
 from .agent_interface import AgentInterface
 from ..output_types import SentenceOutput
 from ..transformers import (
@@ -66,19 +67,12 @@ class LettaAgent(AgentInterface):
 
         complete_response = ""
         async for token in stream:
-            if token.message_type == "reasoning_message":
-                # This part is reasoning information and should not be displayed
+            # Reasoning and other non-assistant events are not shown to the user.
+            if token.message_type != "assistant_message":
                 continue
-            elif token.message_type == "assistant_message":
-                # This part is the result that needs to be displayed, it is the final result
-                # logger.info('Test message')
-                # logger.info(token)
-                token = token.content
-            else:
-                continue
-
-            yield token
-            complete_response += token
+            text = token.content
+            yield text
+            complete_response += text
 
     def _to_text_prompt(self, input_data: BatchInput) -> str:
         """
@@ -101,7 +95,7 @@ class LettaAgent(AgentInterface):
 
         return "\n".join(message_parts)
 
-    def _to_messages(self, input_data: BatchInput) -> List[Dict[str, Any]]:
+    def _to_messages(self, input_data: BatchInput) -> list[dict[str, Any]]:
         """
         Prepare messages list without image support.
         """

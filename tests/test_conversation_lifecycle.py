@@ -1,22 +1,15 @@
 import asyncio
 import contextlib
 import json
-import sys
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber import websocket_handler as websocket_handler_module
-    from open_llm_vtuber.conversations import conversation_handler
-    from open_llm_vtuber.websocket_handler import WebSocketHandler
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber import websocket_handler as websocket_handler_module
+from open_llm_vtuber.conversations import conversation_handler
+from open_llm_vtuber.websocket_handler import WebSocketHandler
 
 
 class FakeWebSocket:

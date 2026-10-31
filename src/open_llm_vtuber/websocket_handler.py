@@ -1,4 +1,5 @@
-from typing import Dict, List, Optional, Callable, TypedDict
+from typing import TypedDict
+from collections.abc import Callable
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
 import json
@@ -40,13 +41,13 @@ class WSMessage(TypedDict, total=False):
     """Type definition for WebSocket messages"""
 
     type: str
-    action: Optional[str]
-    text: Optional[str]
-    audio: Optional[List[float]]
-    images: Optional[List[str]]
-    history_uid: Optional[str]
-    file: Optional[str]
-    display_text: Optional[dict]
+    action: str | None
+    text: str | None
+    audio: list[float] | None
+    images: list[str] | None
+    history_uid: str | None
+    file: str | None
+    display_text: dict | None
 
 
 class WebSocketHandler:
@@ -62,23 +63,23 @@ class WebSocketHandler:
         self.default_context_cache = default_context_cache
         self.auth_manager = auth_manager
         self.max_connections_per_user = max_connections_per_user
-        self.client_connections: Dict[str, WebSocket] = {}
+        self.client_connections: dict[str, WebSocket] = {}
         # Audio gets its own socket so large TTS payloads cannot block text deltas.
-        self.client_audio_connections: Dict[str, WebSocket] = {}
-        self.client_contexts: Dict[str, ServiceContext] = {}
-        self.client_users: Dict[str, str] = {}
+        self.client_audio_connections: dict[str, WebSocket] = {}
+        self.client_contexts: dict[str, ServiceContext] = {}
+        self.client_users: dict[str, str] = {}
         # Slots are reserved before the expensive per-session initialization so a
         # burst of connections cannot spawn unbounded MCP processes.
         self._pending_connections: set[str] = set()
-        self._pending_user_ids: Dict[str, str] = {}
+        self._pending_user_ids: dict[str, str] = {}
         self.chat_group_manager = ChatGroupManager()
-        self.current_conversation_tasks: Dict[str, Optional[asyncio.Task]] = {}
-        self.received_data_buffers: Dict[str, np.ndarray] = {}
+        self.current_conversation_tasks: dict[str, asyncio.Task | None] = {}
+        self.received_data_buffers: dict[str, np.ndarray] = {}
 
         # Message handlers mapping
         self._message_handlers = self._init_message_handlers()
 
-    def _init_message_handlers(self) -> Dict[str, Callable]:
+    def _init_message_handlers(self) -> dict[str, Callable]:
         """Initialize message type to handler mapping"""
         return {
             "add-client-to-group": self._handle_group_operation,
@@ -225,10 +226,7 @@ class WebSocketHandler:
         previous = self.client_audio_connections.get(client_uid)
         self.client_audio_connections[client_uid] = websocket
         if previous is not None and previous is not websocket:
-            try:
-                await previous.close(code=1000)
-            except Exception:
-                pass
+            await self._close_quietly(previous, client_uid)
 
         logger.info(f"Audio channel connected for client {client_uid}")
         try:
@@ -245,12 +243,16 @@ class WebSocketHandler:
 
     async def _close_audio_connection(self, client_uid: str) -> None:
         websocket = self.client_audio_connections.pop(client_uid, None)
-        if websocket is None:
-            return
+        if websocket is not None:
+            await self._close_quietly(websocket, client_uid)
+
+    @staticmethod
+    async def _close_quietly(websocket: WebSocket, client_uid: str) -> None:
+        """Close an audio socket that may already be gone."""
         try:
             await websocket.close(code=1000)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Audio socket for {client_uid} was already closed: {e}")
 
     async def _store_client_data(
         self,
@@ -494,7 +496,7 @@ class WebSocketHandler:
         message_handler.cleanup_client(client_uid)
 
     async def broadcast_to_group(
-        self, group_members: list[str], message: dict, exclude_uid: str = None
+        self, group_members: list[str], message: dict, exclude_uid: str | None = None
     ) -> None:
         """Broadcasts a message to group members"""
         await broadcast_to_group(
@@ -763,7 +765,7 @@ class WebSocketHandler:
 
     def _validate_conversation_input(
         self, msg_type: str, data: WSMessage
-    ) -> Optional[str]:
+    ) -> str | None:
         if msg_type == "text-input":
             text = data.get("text")
             if not isinstance(text, str) or not text.strip():

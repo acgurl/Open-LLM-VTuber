@@ -10,11 +10,11 @@ class VoiceRecognition(ASRInterface):
     def __init__(
         self,
         model_path: str = "distil-medium.en",
-        download_root: str = None,
+        download_root: str | None = None,
         language: str = "en",
         device: str = "auto",
         compute_type: str = "int8",
-        prompt: str = None,
+        prompt: str | None = None,
     ) -> None:
         self.MODEL_PATH = model_path
         self.LANG = language
@@ -46,5 +46,4 @@ class VoiceRecognition(ASRInterface):
 
         if not text:
             return ""
-        else:
-            return "".join(text)
+        return "".join(text)

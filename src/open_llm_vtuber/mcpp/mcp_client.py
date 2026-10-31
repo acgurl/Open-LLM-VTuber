@@ -1,7 +1,8 @@
 """MCP Client for Open-LLM-Vtuber."""
 
 from contextlib import AsyncExitStack, asynccontextmanager
-from typing import AsyncIterator, Dict, Any, List, Callable
+from typing import Any
+from collections.abc import AsyncIterator, Callable
 from loguru import logger
 from datetime import timedelta
 
@@ -30,13 +31,13 @@ class MCPClient:
     def __init__(
         self,
         server_registry: ServerRegistry,
-        send_text: Callable = None,
-        client_uid: str = None,
+        send_text: Callable | None = None,
+        client_uid: str | None = None,
     ) -> None:
         """Initialize the MCP Client."""
         self.exit_stack: AsyncExitStack = AsyncExitStack()
-        self.active_sessions: Dict[str, ClientSession] = {}
-        self._list_tools_cache: Dict[str, List[Tool]] = {}  # Cache for list_tools
+        self.active_sessions: dict[str, ClientSession] = {}
+        self._list_tools_cache: dict[str, list[Tool]] = {}  # Cache for list_tools
         self._send_text: Callable = send_text
         self._client_uid: str = client_uid
 
@@ -201,7 +202,7 @@ class MCPClient:
         else:
             yield await self._ensure_stdio_session(server_name)
 
-    async def list_tools(self, server_name: str) -> List[Tool]:
+    async def list_tools(self, server_name: str) -> list[Tool]:
         """List all available tools on the specified server."""
         # Check cache first
         if server_name in self._list_tools_cache:
@@ -220,8 +221,8 @@ class MCPClient:
         return response.tools
 
     async def call_tool(
-        self, server_name: str, tool_name: str, tool_args: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        self, server_name: str, tool_name: str, tool_args: dict[str, Any]
+    ) -> dict[str, Any]:
         """Call a tool on the specified server.
 
         Returns:
@@ -295,24 +296,3 @@ class MCPClient:
         await self.aclose()
         if exc_type:
             logger.error(f"MCPC: Exception in async context: {exc_value}")
-
-
-# if __name__ == "__main__":
-#     # Test the MCPClient.
-#     async def main():
-#         server_registry = ServerRegistry()
-#         async with MCPClient(server_registry) as client:
-#             # Assuming 'example' server and 'example_tool' exist
-#             # The old call used: await client.call_tool("example_tool", {"arg1": "value1"})
-#             # The new call needs server name:
-#             try:
-#                 result = await client.call_tool("example", "example_tool", {"arg1": "value1"})
-#                 print(f"Tool result: {result}")
-#                 # Test error handling by calling a non-existent tool
-#                 await client.call_tool("example", "non_existent_tool", {})
-#             except ValueError as e:
-#                 print(f"Caught expected error: {e}")
-#             except Exception as e:
-#                 print(f"Caught unexpected error: {e}")
-
-#     asyncio.run(main())

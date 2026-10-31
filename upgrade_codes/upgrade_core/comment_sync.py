@@ -1,5 +1,4 @@
 # upgrade/comment_sync.py
-from typing import Dict
 from logging import Logger
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap
@@ -12,7 +11,7 @@ class CommentSynchronizer:
         user_path: str,
         logger: Logger,
         yaml: YAML,
-        texts_compare: Dict[str, str],
+        texts_compare: dict[str, str],
     ):
         self.default_path = default_path
         self.user_path = user_path
@@ -22,9 +21,9 @@ class CommentSynchronizer:
 
     def sync(self) -> None:
         try:
-            with open(self.default_path, "r", encoding="utf-8") as f:
+            with open(self.default_path, encoding="utf-8") as f:
                 default_tree: CommentedMap = self.yaml.load(f)
-            with open(self.user_path, "r", encoding="utf-8") as f:
+            with open(self.user_path, encoding="utf-8") as f:
                 user_tree: CommentedMap = self.yaml.load(f)
 
             def sync_comments(

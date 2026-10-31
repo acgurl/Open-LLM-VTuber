@@ -16,7 +16,7 @@ name, because the name is what an operator usually has at hand when editing
 YAML while the id is the stable key.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 # Returned by parse_allowed_users when the YAML value is neither a string nor a
 # list of strings; callers deny access instead of guessing.
@@ -52,8 +52,8 @@ def parse_allowed_users(value: Any) -> tuple[str, ...] | object:
 
 def is_user_allowed(
     allowed_users: Any,
-    user_id: Optional[str],
-    display_name: Optional[str],
+    user_id: str | None,
+    display_name: str | None,
 ) -> bool:
     """Return True when a character with this allowlist is available to the user."""
     scope = parse_allowed_users(allowed_users)

@@ -1,15 +1,10 @@
-import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(REPO_ROOT / "src"))
+from open_llm_vtuber.server import WebSocketServer
 
-try:
-    from open_llm_vtuber.server import WebSocketServer
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class ServerRouteTests(unittest.TestCase):

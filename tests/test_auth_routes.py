@@ -1,27 +1,21 @@
-import sys
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from fastapi import FastAPI
+from starlette.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
-try:
-    from fastapi import FastAPI
-    from starlette.testclient import TestClient
-
-    from open_llm_vtuber.auth import (
-        AuthManager,
-        AuthRedirectMiddleware,
-        init_auth_routes,
-    )
-    from open_llm_vtuber.config_manager.auth import AuthConfig, OIDCConfig
-    from open_llm_vtuber.routes import init_client_ws_route, init_webtool_routes
-    from open_llm_vtuber.storage import SQLiteHistoryRepository
-    from starlette.websockets import WebSocketDisconnect
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.auth import (
+    AuthManager,
+    AuthRedirectMiddleware,
+    init_auth_routes,
+)
+from open_llm_vtuber.config_manager.auth import AuthConfig, OIDCConfig
+from open_llm_vtuber.routes import init_client_ws_route, init_webtool_routes
+from open_llm_vtuber.storage import SQLiteHistoryRepository
 
 
 class FakeOIDC:

@@ -1,14 +1,7 @@
 import asyncio
-import sys
 import unittest
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-
-try:
-    from open_llm_vtuber.proxy_message_queue import ProxyMessageQueue
-except ImportError as exc:
-    raise unittest.SkipTest(f"Full runtime dependencies are unavailable: {exc}")
+from open_llm_vtuber.proxy_message_queue import ProxyMessageQueue
 
 
 class ProxyMessageQueueTests(unittest.IsolatedAsyncioTestCase):
