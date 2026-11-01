@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (pre-commit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ hashFiles('.pre-commit-config.yaml') }}
+      # Hook versions (ruff included) are pinned in .pre-commit-config.yaml,
+      # so CI and local `pre-commit run --all-files` agree.
+      - run: uvx pre-commit run --all-files --show-diff-on-failure --color always
+
+  test:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.10"
+          enable-cache: true
+      - run: uv sync --frozen --no-dev
+      # tests import both `prompts` (repo root) and `open_llm_vtuber` (src/);
+      # without PYTHONPATH=src several modules are skipped silently.
+      - name: Run unit tests
+        env:
+          PYTHONPATH: src
+        run: uv run --frozen python -m unittest discover -s tests -v
+
+  web:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      # tsc --noEmit + vite build
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 7
+
+  docker:
+    name: Docker image (linux/arm64)
+    needs: [lint, test, web]
+    # Production runs on an ARM64 host, so build for that platform.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: dockerfile
+          platforms: linux/arm64
+          push: false
+          load: true
+          tags: open-llm-vtuber:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test image
+        run: |
+          docker run --rm --entrypoint /app/.venv/bin/python open-llm-vtuber:ci -c "
+          import pathlib
+          import open_llm_vtuber.server
+          assert pathlib.Path('/app/web/dist/index.html').is_file(), 'web/dist missing'
+          print('image ok')
+          "

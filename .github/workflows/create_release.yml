@@ -22,6 +22,7 @@ on:
 
 jobs:
   build-release-packages:
+    if: github.repository == 'Open-LLM-VTuber/Open-LLM-VTuber'
     runs-on: ubuntu-latest
     steps:
       - name: Clone repository

@@ -8,6 +8,7 @@ on:
 
 jobs:
   fossa-scan:
+    if: github.repository == 'Open-LLM-VTuber/Open-LLM-VTuber'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3

@@ -28,6 +28,7 @@ env:
 
 jobs:
   meta:
+    if: github.repository == 'Open-LLM-VTuber/Open-LLM-VTuber'
     runs-on: blacksmith-8vcpu-ubuntu-2204
     outputs:
       tags: ${{ steps.meta.outputs.tags }}
@@ -149,7 +150,7 @@ jobs:
   manifest:
     needs: [meta, build]
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    if: github.repository == 'Open-LLM-VTuber/Open-LLM-VTuber' && github.event_name != 'pull_request'
     steps:
       - name: Login to Docker Hub (retry)
         shell: bash
