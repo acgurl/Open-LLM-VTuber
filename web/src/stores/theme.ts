@@ -45,16 +45,47 @@ const SHIFT_MS = 720;
 const DAWN_EASE = 'cubic-bezier(0.32, 0.72, 0.24, 1)';
 const DUSK_EASE = 'cubic-bezier(0.3, 0.55, 0.25, 1)';
 
-// 同一时刻只跑一个切换。中途再开 View Transition 会跳过前一个：画面先跳到它的终态，
-// 它迟到的 cleanup 还会删掉新切换的 data-theme-shift，亮面在动画挂上前整屏露出——快速连点就闪。
-// 所以切换中的请求只记住最后一个，等当前这次播完再接着播。
-let shifting = false;
-let queued: { mode: ThemeMode; origin?: Element | null } | null = null;
+// 切换中途再点不能另开 View Transition：新的会跳过旧的，画面先跳到旧的终态再拍快照，必闪。
+// 打断就地倒放：所有动画从当前进度原路退回；退到头时画面只剩旧快照，
+// 这时再把 DOM 换回原主题，最后才放过渡结束。全程只有一个过渡，没有跳变。
+interface Shift {
+  from: ResolvedTheme;
+  target: ResolvedTheme;
+  reversed: boolean;
+  animations: Animation[];
+}
+
+let shift: Shift | null = null;
+let shiftSeq = 0;
+
+function heading(s: Shift): ResolvedTheme {
+  return s.reversed ? s.from : s.target;
+}
+
+function reverseShift(s: Shift): void {
+  s.reversed = !s.reversed;
+  s.animations.forEach((animation) => animation.reverse());
+}
+
+// 关着过渡改主题并强制算一次样式，让终态直接落地，不在实时快照里渐变
+function applyInstantly(apply: () => void): void {
+  const root = document.documentElement;
+  root.classList.add('theme-switching');
+  flushSync(apply);
+  void root.offsetWidth;
+  root.classList.remove('theme-switching');
+}
 
 // 明暗切换不做逐属性过渡：带 backdrop-filter 的玻璃层一帧帧重绘反而更卡。
 // 交给 View Transitions 把新旧界面各拍一张快照，只动快照的裁切、缩放和亮度：
 // 切到白天时亮面从按钮处漫开，切到黑夜时亮面收回按钮，边缘各带一圈光晕。
-function commitTheme(next: ResolvedTheme, apply: () => void, origin?: Element | null): void {
+function commitTheme(
+  from: ResolvedTheme,
+  next: ResolvedTheme,
+  apply: () => void,
+  revert: () => void,
+  origin?: Element | null,
+): void {
   const start = document.startViewTransition?.bind(document);
   if (!start || reducedMotion.matches) {
     apply();
@@ -66,7 +97,9 @@ function commitTheme(next: ResolvedTheme, apply: () => void, origin?: Element | 
   const r = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
   const dawn = next === 'light';
   const root = document.documentElement;
-  shifting = true;
+  const seq = ++shiftSeq;
+  const state: Shift = { from, target: next, reversed: false, animations: [] };
+  shift = state;
   root.dataset.themeShift = dawn ? 'dawn' : 'dusk';
 
   // 光晕环放在新界面里：新快照是实时画面，环的动画会跟着画进去。
@@ -91,9 +124,17 @@ function commitTheme(next: ResolvedTheme, apply: () => void, origin?: Element | 
     void root.offsetWidth;
   });
 
-  // 挂在 html 伪元素上的动画在过渡结束后不会自己消失，fill 会留到下一次同名伪元素上，结束时必须取消
-  const snapshots: Animation[] = [];
-  const shift = () => {
+  // 守门动画挂在 ::view-transition 上：只要它在跑，过渡就不会结束。
+  // 倒放退到头时要先换回原主题、等实时快照画好，再放行，否则会露出一帧新主题。
+  let gate: Animation | undefined;
+  const land = () => {
+    if (shift !== state) return;
+    shift = null;
+    if (state.reversed) applyInstantly(revert);
+    requestAnimationFrame(() => requestAnimationFrame(() => gate?.cancel()));
+  };
+
+  const begin = () => {
     root.classList.remove('theme-switching');
     const timing: KeyframeAnimationOptions = {
       duration: SHIFT_MS,
@@ -106,8 +147,13 @@ function commitTheme(next: ResolvedTheme, apply: () => void, origin?: Element | 
     // 亮面始终在上层动裁切；暗面在下层只做景深：日出时被推远压暗，日落时从近处落定
     const light = dawn ? '::view-transition-new(root)' : '::view-transition-old(root)';
     const dark = dawn ? '::view-transition-old(root)' : '::view-transition-new(root)';
-    snapshots.push(
-      root.animate({ clipPath: dawn ? [closed, open] : [open, closed] }, { ...timing, pseudoElement: light }),
+    gate = root.animate({ opacity: [1, 1] }, { duration: SHIFT_MS * 20, pseudoElement: '::view-transition' });
+    const clip = root.animate(
+      { clipPath: dawn ? [closed, open] : [open, closed] },
+      { ...timing, pseudoElement: light },
+    );
+    state.animations.push(
+      clip,
       root.animate(
         dawn
           ? {
@@ -120,18 +166,18 @@ function commitTheme(next: ResolvedTheme, apply: () => void, origin?: Element | 
             },
         { ...timing, pseudoElement: dark },
       ),
-    );
-    ring.animate(
-      [
-        { transform: `scale(${dawn ? 0 : 1})`, opacity: 0 },
-        { opacity: 1, offset: 0.12 },
-        { opacity: 1, offset: 0.7 },
-        { transform: `scale(${dawn ? 1 : 0})`, opacity: 0 },
-      ],
-      timing,
+      ring.animate(
+        [
+          { transform: `scale(${dawn ? 0 : 1})`, opacity: 0 },
+          { opacity: 1, offset: 0.12 },
+          { opacity: 1, offset: 0.7 },
+          { transform: `scale(${dawn ? 1 : 0})`, opacity: 0 },
+        ],
+        timing,
+      ),
     );
     // 图标在圆心处最先被看到：新图标转着长出来
-    origin?.querySelector('svg')?.animate(
+    const icon = origin?.querySelector('svg')?.animate(
       [
         { transform: `rotate(${dawn ? -90 : 90}deg) scale(0.4)`, opacity: 0 },
         { transform: 'rotate(0deg) scale(1)', opacity: 1 },
@@ -143,22 +189,30 @@ function commitTheme(next: ResolvedTheme, apply: () => void, origin?: Element | 
         fill: 'backwards',
       },
     );
+    if (icon) state.animations.push(icon);
+    // 裁切走到任一端（正放到头或倒放退回起点）就是落地
+    clip.onfinish = land;
+    // 快照就绪前就被打断：动画一建好就从起点倒放，立刻落回原主题
+    if (state.reversed) state.animations.forEach((animation) => animation.reverse());
   };
+
+  // 挂在 html 伪元素上的动画在过渡结束后不会自己消失，fill 会留到下一次同名伪元素上，结束时必须取消
   const cleanup = () => {
-    root.classList.remove('theme-switching');
-    delete root.dataset.themeShift;
+    if (shift === state) {
+      shift = null;
+      if (state.reversed) applyInstantly(revert);
+    }
+    // 晚到的收尾不能动新切换的标记，否则新切换在动画挂上前会整屏露出亮面
+    if (seq === shiftSeq) {
+      root.classList.remove('theme-switching');
+      delete root.dataset.themeShift;
+    }
     ring.remove();
-    snapshots.forEach((animation) => animation.cancel());
+    gate?.cancel();
+    state.animations.forEach((animation) => animation.cancel());
   };
-  const settle = () => {
-    cleanup();
-    shifting = false;
-    const pending = queued;
-    queued = null;
-    if (pending) useTheme.getState().setMode(pending.mode, pending.origin);
-  };
-  void transition.ready.then(shift, cleanup);
-  void transition.finished.then(settle, settle);
+  void transition.ready.then(begin, cleanup);
+  void transition.finished.then(cleanup, cleanup);
 }
 
 function initialMode(): ThemeMode {
@@ -188,20 +242,28 @@ export const useTheme = create<ThemeState>((set, get) => ({
   hue: bootHue,
   setMode: (mode, origin) => {
     writeSetting('theme', mode);
-    if (shifting) {
-      queued = { mode, origin };
+    const theme = resolveTheme(mode);
+    if (shift) {
+      // 切换途中：要去的方向和当前走向相反就就地倒放，相同则什么都不用做
+      if (theme !== heading(shift)) reverseShift(shift);
+      set({ mode });
       return;
     }
-    const theme = resolveTheme(mode);
     if (theme === get().theme) {
       set({ mode });
       return;
     }
+    const from = get().theme;
     commitTheme(
+      from,
       theme,
       () => {
         applyTheme(theme);
         set({ mode, theme });
+      },
+      () => {
+        applyTheme(from);
+        set({ theme: from });
       },
       origin,
     );
@@ -213,20 +275,20 @@ export const useTheme = create<ThemeState>((set, get) => ({
     set({ hue: next });
   },
   // 顶栏按钮只在昼夜之间切换；回到“跟随系统”走设置里的主题选择。
-  // 切换中以排队的目标为准，连点才是来回切而不是重复同一个方向
+  // 切换途中以动画当前的走向为准，连点才是来回打断而不是重复同一个方向
   toggle: (origin) => {
-    const current = queued ? resolveTheme(queued.mode) : get().theme;
+    const current = shift ? heading(shift) : get().theme;
     get().setMode(current === 'light' ? 'dark' : 'light', origin);
   },
 }));
 
 systemLight.addEventListener('change', () => {
   if (useTheme.getState().mode !== 'auto') return;
-  if (shifting) {
-    queued ??= { mode: 'auto' };
+  const theme = resolveTheme('auto');
+  if (shift) {
+    if (theme !== heading(shift)) reverseShift(shift);
     return;
   }
-  const theme = resolveTheme('auto');
   applyTheme(theme);
   useTheme.setState({ theme });
 });
