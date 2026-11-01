@@ -462,14 +462,15 @@ Cookie（`auth/manager.py`）：
   "histories": [
     {
       "uid": "2e6f...-uuid",
-      "latest_message": { "role": "ai", "timestamp": "2026-10-23 10:15:00", "content": "...", "name": "纳西妲", "avatar": "relu.png" },
-      "timestamp": "2026-10-23 10:15:00"
+      "latest_message": { "role": "ai", "timestamp": "2026-10-23T10:15:00+00:00", "content": "...", "name": "纳西妲", "avatar": "relu.png" },
+      "timestamp": "2026-10-23T10:15:00+00:00"
     }
   ]
 }
 ```
 
 - 只含**非空**历史，按最新消息时间**倒序**（新→旧）
+- **时间戳带时区偏移**（ISO-8601，精确到秒，如 `2026-10-23T10:15:00+00:00`）：库里存的是不带时区的服务器本地时间，发送前由 `utils/timestamps.py` 按服务器时区补上偏移（生产容器是 UTC，偏移即 `+00:00`）。客户端直接 `Date.parse` 后按浏览器本地时区显示，不要把它当本地时间原样展示。`history-data` 的 `messages[].timestamp` 与 `tool_calls[].timestamp` 同此规则；无法解析的旧值原样透传
 - 作用域是 **(当前用户, 当前角色的 `conf_uid`)**，换角色后列表会变
 - `latest_message.name` / `avatar` 可能不存在（`storage/sqlite.py:93-103`）
 - 存储异常时降级为 `histories: []`，不报错
@@ -747,7 +748,7 @@ LLM 被提示在句子里插入方括号关键字（提示词 `prompts/utils/liv
 ```ts
 type HistoryMessage = {
   role: "human" | "ai" | "system";
-  timestamp: string;      // "YYYY-MM-DD HH:MM:SS"
+  timestamp: string;      // 存储为 "YYYY-MM-DDTHH:MM:SS"（服务器本地时间）；经 WS 下发时带偏移，见 6.6
   content: string;
   name?: string;          // 可能缺失
   avatar?: string;        // 可能缺失，是 avatars/ 下的文件名

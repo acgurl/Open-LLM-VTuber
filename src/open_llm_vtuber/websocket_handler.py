@@ -18,6 +18,7 @@ from .message_handler import message_handler
 from .utils.async_utils import cancel_and_wait
 from .utils.stream_audio import prepare_audio_payload
 from .utils.audio import MAX_AUDIO_SAMPLES
+from .utils.timestamps import with_wire_timestamp
 from .config_manager.utils import scan_config_alts_directory, scan_bg_directory
 from .storage import HistoryNotFoundError, HistoryRepository
 from .mcpp.user_servers import split_user_mcp_servers, validate_server_id
@@ -48,6 +49,14 @@ class WSMessage(TypedDict, total=False):
     history_uid: str | None
     file: str | None
     display_text: dict | None
+
+
+def _history_summary_for_wire(item):
+    """Normalize the timestamps of one history-list entry for clients."""
+    item = with_wire_timestamp(item)
+    if isinstance(item, dict) and isinstance(item.get("latest_message"), dict):
+        item = {**item, "latest_message": with_wire_timestamp(item["latest_message"])}
+    return item
 
 
 class WebSocketHandler:
@@ -570,6 +579,7 @@ class WebSocketHandler:
         except Exception:
             logger.exception("Failed to list chat histories")
             histories = []
+        histories = [_history_summary_for_wire(item) for item in histories]
         await websocket.send_text(
             json.dumps({"type": "history-list", "histories": histories})
         )
@@ -620,8 +630,12 @@ class WebSocketHandler:
             json.dumps(
                 {
                     "type": "history-data",
-                    "messages": [msg for msg in messages if msg["role"] != "system"],
-                    "tool_calls": tool_calls,
+                    "messages": [
+                        with_wire_timestamp(msg)
+                        for msg in messages
+                        if msg["role"] != "system"
+                    ],
+                    "tool_calls": [with_wire_timestamp(call) for call in tool_calls],
                 }
             )
         )
