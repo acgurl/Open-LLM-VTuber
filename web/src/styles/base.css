@@ -10,25 +10,52 @@ html {
 }
 
 /* ---------- 明暗切换 ----------
-   新旧界面各拍一张快照：旧的留在底层，新的按圆形从触发按钮处铺开。
-   整屏只有一层裁切在动，不用逐属性过渡去重绘带 backdrop-filter 的玻璃层。 */
+   新旧界面各拍一张快照，动画由 stores/theme.ts 在 ready 时统一挂上，保证裁切与光晕同一时间线：
+   日出（→白天）亮面在上层从按钮处漫开；日落（→黑夜）亮面在上层收回按钮。
+   不用逐属性过渡去重绘带 backdrop-filter 的玻璃层。 */
 ::view-transition-old(root),
 ::view-transition-new(root) {
   animation: none;
   mix-blend-mode: normal;
 }
 
-::view-transition-new(root) {
-  animation: theme-reveal 520ms var(--ease-spring) both;
+/* 动画挂上之前的那一帧：日出的亮面先藏起来，免得整屏亮一下 */
+html[data-theme-shift='dawn']::view-transition-new(root) {
+  clip-path: inset(50%);
 }
 
-@keyframes theme-reveal {
-  from {
-    clip-path: circle(0px at var(--theme-x, 50%) var(--theme-y, 50%));
-  }
-  to {
-    clip-path: circle(var(--theme-r, 150vmax) at var(--theme-x, 50%) var(--theme-y, 50%));
-  }
+html[data-theme-shift='dusk']::view-transition-old(root) {
+  z-index: 1;
+}
+
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition: none !important;
+}
+
+/* 跟着裁切边缘走的光圈：日出是亮面内缘的暖光，日落是暗面上围着收缩亮面的冷光 */
+.theme-ring {
+  position: fixed;
+  z-index: 2147483647;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: scale(0);
+  opacity: 0;
+}
+
+.theme-ring--dawn {
+  box-shadow:
+    inset 0 0 0 1.5px rgba(255, 244, 222, 0.9),
+    inset 0 0 28px 4px rgba(255, 214, 150, 0.55),
+    inset 0 0 120px 24px rgba(255, 190, 120, 0.22);
+}
+
+.theme-ring--dusk {
+  box-shadow:
+    0 0 0 1.5px color-mix(in oklab, var(--accent) 70%, white),
+    0 0 32px 6px color-mix(in oklab, var(--accent) 55%, transparent),
+    0 0 140px 30px color-mix(in oklab, var(--accent) 22%, transparent);
 }
 
 ::selection {
