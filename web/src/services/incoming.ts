@@ -109,6 +109,11 @@ export function handleServerMessage(msg: ServerMessage) {
 
     case 'backend-synth-complete':
       audioPlayer.notifySynthComplete();
+      // 文字与合成都已送达，剩下只是本地播放；输入框不必等朗读结束才恢复“发送”
+      // （此时再发新消息会由 sendText 打断旧播放），chain-end 到来时再兜底一次
+      chat.finalizeStream();
+      conn.setBusy(false);
+      conn.setStatusText('');
       break;
 
     case 'force-new-message':

@@ -844,7 +844,7 @@ html[data-theme='light'] .app::after {
 }
 
 .bubble-row.human .bubble-stack {
-  align-items: stretch;
+  align-items: flex-end;
 }
 
 /* 一块“消息面板”：气泡与工具卡共用同一层玻璃、同一圈圆角，只靠位置和状态色区分角色 */
@@ -874,6 +874,8 @@ html[data-theme='light'] .app::after {
 }
 
 .bubble-row.human .bubble {
+  width: fit-content;
+  max-width: 100%;
   background:
     linear-gradient(180deg, var(--sheen), transparent 62%),
     var(--bubble-human);
