@@ -39,9 +39,11 @@ function applyHue(hue: number): void {
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 const SHIFT_MS = 720;
-// 日出先快后缓，像光一下子漫出来；日落先缓后快，像白昼被收回按钮里
+// 日出先快后缓，像光一下子漫出来。日落也必须一起步就动：收缩的圆起点半径够到最远的角，
+// 边缘起初几乎都在屏外，若再先缓后快，前三百来毫秒画面纹丝不动，看着就是顿了一下。
+// 所以日落起步利落、末段缓缓吸进按钮。
 const DAWN_EASE = 'cubic-bezier(0.32, 0.72, 0.24, 1)';
-const DUSK_EASE = 'cubic-bezier(0.62, 0, 0.7, 0.32)';
+const DUSK_EASE = 'cubic-bezier(0.3, 0.55, 0.25, 1)';
 
 // 明暗切换不做逐属性过渡：带 backdrop-filter 的玻璃层一帧帧重绘反而更卡。
 // 交给 View Transitions 把新旧界面各拍一张快照，只动快照的裁切、缩放和亮度：
