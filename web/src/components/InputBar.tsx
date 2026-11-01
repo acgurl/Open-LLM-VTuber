@@ -13,9 +13,12 @@ import { LIMITS, type ImagePayload, type ImageSource } from '../protocol/types';
 import { usePresence } from '../hooks/usePresence';
 
 interface PendingImage {
+  id: number;
   payload: ImagePayload;
   preview: string;
 }
+
+let imageSeq = 0;
 
 export function InputBar() {
   const { t } = useTranslation();
@@ -30,6 +33,9 @@ export function InputBar() {
   const fileRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLDivElement>(null);
+  // 已占用的附图名额：多张图并发编码时 images 状态还没更新，靠它同步计数才能守住上限
+  const imageSlots = useRef(0);
 
   // 窄屏聊天区贴输入框上沿，输入条自身会长高（换行、附图条），高度得上报给 CSS
   useEffect(() => {
@@ -66,27 +72,55 @@ export function InputBar() {
   };
 
   const addImage = async (file: File | Blob, source: ImageSource, mime: string) => {
-    if (images.length >= LIMITS.maxImages) {
+    if (imageSlots.current >= LIMITS.maxImages) {
       toast(t('input.imageTooMany'), 'error');
       return;
     }
-    const data = await fileToBase64(file);
-    if (data.length > LIMITS.maxImageDataChars) {
-      toast(t('input.imageTooLarge'), 'error');
+    imageSlots.current += 1;
+    const data = await fileToBase64(file).catch(() => null);
+    if (data === null || data.length > LIMITS.maxImageDataChars) {
+      imageSlots.current -= 1;
+      toast(t(data === null ? 'error.generic' : 'input.imageTooLarge'), 'error');
       return;
     }
     setImages((prev) => [
       ...prev,
-      { payload: { source, mime_type: mime, data }, preview: URL.createObjectURL(file) },
+      {
+        id: ++imageSeq,
+        payload: { source, mime_type: mime, data },
+        preview: URL.createObjectURL(file),
+      },
     ]);
   };
 
-  const removeImage = (idx: number) => {
+  const removeImage = (id: number) => {
+    imageSlots.current = Math.max(0, imageSlots.current - 1);
     setImages((prev) => {
-      URL.revokeObjectURL(prev[idx].preview);
-      return prev.filter((_, i) => i !== idx);
+      const target = prev.find((img) => img.id === id);
+      if (target) URL.revokeObjectURL(target.preview);
+      return prev.filter((img) => img.id !== id);
     });
   };
+
+  // 来源菜单：点菜单外或按 Esc 收起
+  useEffect(() => {
+    if (!mediaMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (!anchorRef.current?.contains(e.target as Node)) setMediaMenuOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setMediaMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [mediaMenuOpen]);
 
   const submit = async () => {
     const value = text.trim();
@@ -103,6 +137,7 @@ export function InputBar() {
     }
     sendText(value, payload);
     images.forEach((i) => URL.revokeObjectURL(i.preview));
+    imageSlots.current = 0;
     setImages([]);
     setText('');
   };
@@ -145,15 +180,15 @@ export function InputBar() {
     <div className="input-bar" ref={barRef}>
       {images.length > 0 && (
         <div className="image-strip">
-          {images.map((img, i) => (
-            <div key={i} className="image-thumb">
+          {images.map((img) => (
+            <div key={img.id} className="image-thumb">
               <img src={img.preview} alt="" width={60} height={60} />
               <button
                 type="button"
                 className="image-remove"
                 aria-label={t('input.removeImage')}
                 title={t('input.removeImage')}
-                onClick={() => removeImage(i)}
+                onClick={() => removeImage(img.id)}
               >
                 ×
               </button>
@@ -162,7 +197,7 @@ export function InputBar() {
         </div>
       )}
       <div className={`input-row${hasContent ? ' filled' : ''}`}>
-        <div className="media-anchor">
+        <div className="media-anchor" ref={anchorRef}>
           <button
             className="icon-btn"
             title={t('input.uploadImage')}
@@ -196,7 +231,10 @@ export function InputBar() {
           aria-label={t('input.uploadImage')}
           onChange={(e) => {
             const files = Array.from(e.target.files ?? []);
-            for (const f of files) void addImage(f, 'upload', f.type || 'image/png');
+            // 超出的部分整批丢弃并只提示一次，不要每张多余的图各弹一条
+            const room = Math.max(0, LIMITS.maxImages - imageSlots.current);
+            if (files.length > room) toast(t('input.imageTooMany'), 'error');
+            for (const f of files.slice(0, room)) void addImage(f, 'upload', f.type || 'image/png');
             e.target.value = '';
           }}
         />

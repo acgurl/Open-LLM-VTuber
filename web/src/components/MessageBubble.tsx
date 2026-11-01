@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useState } from 'react';
+import { lazy, memo, Suspense, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConnection } from '../stores/connection';
 import { buildTagSet, splitByTags, splitThink, stripTags } from '../utils/text';
@@ -13,7 +13,7 @@ export const MessageBubble = memo(function MessageBubble({ entry }: { entry: Cha
   const { t, i18n } = useTranslation();
   const modelInfo = useConnection((s) => s.modelInfo);
   const [copied, setCopied] = useState(false);
-  const tagSet = buildTagSet(modelInfo);
+  const tagSet = useMemo(() => buildTagSet(modelInfo), [modelInfo]);
   const isAi = entry.role === 'ai';
 
   const copyText = () => {

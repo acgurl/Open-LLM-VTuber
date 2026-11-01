@@ -350,3 +350,8 @@
     var(--chip);
   box-shadow: var(--shadow-inset);
 }
+
+/* 面板本身只作为焦点兜底（没有可聚焦子项时），不画焦点框 */
+.drawer:focus {
+  outline: none;
+}

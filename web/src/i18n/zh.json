@@ -54,6 +54,10 @@
     "unavailable": "历史不可用",
     "delete": "删除",
     "confirmDelete": "确认删除这条历史？",
+    "confirmShort": "确认删除",
+    "today": "今天",
+    "yesterday": "昨天",
+    "earlier": "更早",
     "open": "打开"
   },
   "settings": {

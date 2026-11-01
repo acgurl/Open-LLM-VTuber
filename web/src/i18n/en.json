@@ -54,6 +54,10 @@
     "unavailable": "History unavailable",
     "delete": "Delete",
     "confirmDelete": "Delete this conversation?",
+    "confirmShort": "Confirm",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "earlier": "Earlier",
     "open": "Open"
   },
   "settings": {

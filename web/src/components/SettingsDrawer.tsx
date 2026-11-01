@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSettings } from '../stores/settings';
 import { useConnection } from '../stores/connection';
@@ -18,6 +18,7 @@ import {
 import { backgroundUrl } from '../utils/text';
 import i18n from '../i18n';
 import { usePresence } from '../hooks/usePresence';
+import { useDialog } from '../hooks/useDialog';
 import { McpPanel } from './McpPanel';
 
 // 预设色相：默认蓝紫，其余覆盖常见角色主题色
@@ -53,6 +54,10 @@ export function SettingsDrawer() {
     }
   }, [open]);
 
+  const panelRef = useRef<HTMLElement>(null);
+  // 等面板真正挂载后再启用，否则首帧 ref 为空、焦点移不进去
+  useDialog(open && presence.mounted, () => setOpen(false), panelRef);
+
   if (!presence.mounted) return null;
 
   return (
@@ -64,7 +69,14 @@ export function SettingsDrawer() {
         tabIndex={-1}
         onClick={() => setOpen(false)}
       />
-      <aside className={`drawer right${presence.closing ? ' closing' : ''}`}>
+      <aside
+        ref={panelRef}
+        className={`drawer right${presence.closing ? ' closing' : ''}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('settings.title')}
+        tabIndex={-1}
+      >
         <div className="drawer-head">
           <span>{t('settings.title')}</span>
           <button className="icon-btn" aria-label={t('drawer.close')} onClick={() => setOpen(false)}>

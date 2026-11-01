@@ -127,3 +127,42 @@
     transform: none;
   }
 }
+
+/* 按“今天 / 昨天 / 更早”分组的小标题：贴着列表，不抢条目的视觉重量 */
+.history-group {
+  margin: 6px 4px -2px;
+  color: var(--faint);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  animation: content-in 240ms var(--ease-snap) backwards;
+}
+
+.history-group:first-child {
+  margin-top: 0;
+}
+
+/* 删除“上膛”：图标旁展开一个红色确认词，再点一次才真的删 */
+.history-delete.armed {
+  width: auto;
+  gap: 4px;
+  padding: 0 8px 0 6px;
+  border-radius: 999px;
+  color: var(--danger);
+  background: var(--danger-soft);
+  box-shadow: inset 0 0 0 1px var(--danger-line);
+  opacity: 1;
+  transform: none;
+  animation: btn-pop 260ms var(--ease-spring);
+}
+
+.history-delete-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.history-item.confirming {
+  border-color: var(--danger-line);
+}
