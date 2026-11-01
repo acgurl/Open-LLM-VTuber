@@ -45,6 +45,12 @@ const SHIFT_MS = 720;
 const DAWN_EASE = 'cubic-bezier(0.32, 0.72, 0.24, 1)';
 const DUSK_EASE = 'cubic-bezier(0.3, 0.55, 0.25, 1)';
 
+// 同一时刻只跑一个切换。中途再开 View Transition 会跳过前一个：画面先跳到它的终态，
+// 它迟到的 cleanup 还会删掉新切换的 data-theme-shift，亮面在动画挂上前整屏露出——快速连点就闪。
+// 所以切换中的请求只记住最后一个，等当前这次播完再接着播。
+let shifting = false;
+let queued: { mode: ThemeMode; origin?: Element | null } | null = null;
+
 // 明暗切换不做逐属性过渡：带 backdrop-filter 的玻璃层一帧帧重绘反而更卡。
 // 交给 View Transitions 把新旧界面各拍一张快照，只动快照的裁切、缩放和亮度：
 // 切到白天时亮面从按钮处漫开，切到黑夜时亮面收回按钮，边缘各带一圈光晕。
@@ -60,6 +66,7 @@ function commitTheme(next: ResolvedTheme, apply: () => void, origin?: Element | 
   const r = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
   const dawn = next === 'light';
   const root = document.documentElement;
+  shifting = true;
   root.dataset.themeShift = dawn ? 'dawn' : 'dusk';
 
   // 光晕环放在新界面里：新快照是实时画面，环的动画会跟着画进去。
@@ -143,8 +150,15 @@ function commitTheme(next: ResolvedTheme, apply: () => void, origin?: Element | 
     ring.remove();
     snapshots.forEach((animation) => animation.cancel());
   };
+  const settle = () => {
+    cleanup();
+    shifting = false;
+    const pending = queued;
+    queued = null;
+    if (pending) useTheme.getState().setMode(pending.mode, pending.origin);
+  };
   void transition.ready.then(shift, cleanup);
-  void transition.finished.then(cleanup, cleanup);
+  void transition.finished.then(settle, settle);
 }
 
 function initialMode(): ThemeMode {
@@ -174,6 +188,10 @@ export const useTheme = create<ThemeState>((set, get) => ({
   hue: bootHue,
   setMode: (mode, origin) => {
     writeSetting('theme', mode);
+    if (shifting) {
+      queued = { mode, origin };
+      return;
+    }
     const theme = resolveTheme(mode);
     if (theme === get().theme) {
       set({ mode });
@@ -195,13 +213,19 @@ export const useTheme = create<ThemeState>((set, get) => ({
     set({ hue: next });
   },
   // 顶栏按钮只在昼夜之间切换；回到“跟随系统”走设置里的主题选择。
+  // 切换中以排队的目标为准，连点才是来回切而不是重复同一个方向
   toggle: (origin) => {
-    get().setMode(get().theme === 'light' ? 'dark' : 'light', origin);
+    const current = queued ? resolveTheme(queued.mode) : get().theme;
+    get().setMode(current === 'light' ? 'dark' : 'light', origin);
   },
 }));
 
 systemLight.addEventListener('change', () => {
   if (useTheme.getState().mode !== 'auto') return;
+  if (shifting) {
+    queued ??= { mode: 'auto' };
+    return;
+  }
   const theme = resolveTheme('auto');
   applyTheme(theme);
   useTheme.setState({ theme });
