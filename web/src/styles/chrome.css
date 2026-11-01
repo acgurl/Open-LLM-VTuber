@@ -1,0 +1,278 @@
+/* ---------- 受光玻璃边 ---------- */
+.topbar-center,
+.input-row {
+  position: relative;
+}
+
+.topbar-center::before,
+.input-row::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    var(--edge-hi),
+    transparent 34%,
+    transparent 64%,
+    var(--accent-line)
+  );
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ---------- 顶栏 ---------- */
+.topbar {
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  left: calc(16px + env(safe-area-inset-left, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  z-index: 30;
+  pointer-events: none;
+  --island-h: 44px;
+  animation: chrome-drop 620ms var(--ease-spring) backwards;
+}
+
+@keyframes chrome-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.topbar > * {
+  pointer-events: auto;
+}
+
+.topbar-middle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  pointer-events: none;
+}
+
+.topbar-middle > * {
+  pointer-events: auto;
+}
+
+.topbar-center {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: var(--island-h);
+  padding: 0 17px;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, var(--sheen), transparent 72%),
+    var(--glass-strong);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(var(--blur)) saturate(1.2);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.2);
+  box-shadow: var(--shadow-float);
+  max-width: 60vw;
+  overflow: hidden;
+  transition:
+    border-color 240ms var(--ease-snap),
+    box-shadow 240ms var(--ease-snap);
+}
+
+.topbar-center.busy {
+  border-color: var(--accent-line);
+  box-shadow: var(--shadow-float), 0 0 30px -14px var(--accent-glow);
+}
+
+/* 忙碌时标题和状态一起被主色轻轻“点亮”，与状态点、扫光形成同一组信号 */
+.topbar-center.busy .topbar-name {
+  color: color-mix(in oklab, var(--ink) 82%, var(--accent));
+}
+
+.topbar-center.busy .topbar-status {
+  color: color-mix(in oklab, var(--muted) 42%, var(--accent));
+}
+
+.topbar-center.busy::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 26%,
+    color-mix(in oklab, var(--accent) 20%, transparent) 46%,
+    transparent 68%
+  );
+  transform: translateX(-100%);
+  animation: sheen 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  pointer-events: none;
+}
+
+@keyframes sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.topbar-name {
+  font-family: var(--font-round);
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  transition: color 280ms var(--ease-snap);
+}
+
+.topbar-status {
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  transition: color 280ms var(--ease-snap);
+}
+
+.topbar-status:empty {
+  display: none;
+}
+
+.topbar-status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  animation: status-swap 220ms var(--ease-spring);
+}
+
+/* 状态切换时 keyed 节点重建，进入动画自然重放；清空时直接消失不留残影 */
+@keyframes status-swap {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.topbar .tts-toggle,
+.topbar .theme-toggle {
+  width: var(--island-h);
+  height: var(--island-h);
+  border-radius: 999px;
+}
+
+.tts-toggle.off {
+  color: var(--faint);
+}
+
+/* 状态点：在线呼吸，异常常亮 */
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--faint);
+  flex: none;
+}
+
+.dot.online {
+  background: var(--ok);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ok) 16%, transparent), 0 0 10px var(--ok);
+  animation: dot-breathe 2.8s ease-in-out infinite;
+}
+
+.dot.pending {
+  background: var(--pending);
+  box-shadow: 0 0 8px color-mix(in oklab, var(--pending) 55%, transparent);
+  animation: pulse 1.3s ease-in-out infinite;
+}
+
+.dot.error {
+  background: var(--danger);
+  box-shadow: 0 0 9px color-mix(in oklab, var(--danger) 60%, transparent);
+}
+
+@keyframes dot-breathe {
+  50% {
+    box-shadow:
+      0 0 0 5px color-mix(in oklab, var(--ok) 6%, transparent),
+      0 0 14px color-mix(in oklab, var(--ok) 55%, transparent);
+  }
+}
+
+/* ---------- 图标按钮 ---------- */
+.icon-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, var(--sheen), transparent 72%),
+    var(--glass-strong);
+  color: var(--ink);
+  cursor: pointer;
+  backdrop-filter: blur(var(--blur)) saturate(1.15);
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.15);
+  box-shadow: var(--shadow-btn);
+  transition:
+    background 200ms var(--ease-snap),
+    color 160ms var(--ease-snap),
+    border-color 200ms var(--ease-snap),
+    box-shadow 200ms var(--ease-snap),
+    transform 220ms var(--ease-spring);
+  flex: none;
+}
+
+@media (hover: hover) {
+  .icon-btn:hover:not(:disabled) {
+    border-color: var(--line-strong);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-float), var(--shadow-inset);
+  }
+}
+
+.icon-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.94);
+  transition-duration: 90ms;
+}
+
+.icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* 图标按下时缩一下，按钮外壳的位移与图标的形变错开，手感更实 */
+.icon-btn > svg {
+  transition: transform 240ms var(--ease-spring);
+}
+
+.icon-btn:active:not(:disabled) > svg {
+  transform: scale(0.84);
+}
+
+/* 图标随新快照一起换掉，不要再给它挂挂载动画：
+   圆形展开结束时动画会补播一次，看起来像图标又动了一下。 */

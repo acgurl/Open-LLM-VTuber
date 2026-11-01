@@ -1,0 +1,557 @@
+/* ---------- 消息 ---------- */
+/* 入场带方向：AI 从左下浮起并轻微虚化，用户消息从右侧贴入，读起来分得清谁说的 */
+.bubble-row {
+  display: flex;
+  animation: bubble-in-ai 380ms var(--ease-spring) backwards;
+}
+
+.bubble-row.human {
+  animation-name: bubble-in-human;
+  animation-duration: 320ms;
+}
+
+@keyframes bubble-in-ai {
+  from {
+    opacity: 0;
+    transform: translateY(11px) scale(0.988);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes bubble-in-human {
+  from {
+    opacity: 0;
+    transform: translate(13px, 4px) scale(0.988);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.bubble-row.human {
+  justify-content: flex-end;
+}
+
+.bubble-stack {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.bubble-row.human .bubble-stack {
+  align-items: flex-end;
+}
+
+/* 一块“消息面板”：气泡与工具卡共用同一层玻璃、同一圈圆角，只靠位置和状态色区分角色 */
+.bubble,
+.tool-card {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--surface-r);
+  background:
+    radial-gradient(240px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
+    linear-gradient(180deg, var(--sheen), transparent 62%),
+    var(--bubble-ai);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: var(--shadow-soft), var(--shadow-inset);
+  transition:
+    border-color 240ms var(--ease-snap),
+    box-shadow 240ms var(--ease-snap),
+    --sheen-spot 360ms ease;
+}
+
+/* 指针处的受光点：pointerSheen 只给命中的那一块写 --mx/--my 并挂 .sheen-on */
+.sheen-on {
+  --sheen-spot: color-mix(in oklab, var(--accent) 9%, rgba(255, 255, 255, 0.06));
+}
+
+html[data-theme='light'] .sheen-on {
+  --sheen-spot: color-mix(in oklab, var(--accent) 8%, rgba(255, 255, 255, 0.7));
+}
+
+/* 所有消息卡统一占满消息列，宽度不再随内容长短变化；说话人靠色相区分 */
+.bubble {
+  width: 100%;
+  padding: var(--surface-pad-y) var(--surface-pad-x);
+  font-size: 0.95rem;
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+.bubble-row.human .bubble {
+  width: fit-content;
+  max-width: 100%;
+  background:
+    radial-gradient(240px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
+    linear-gradient(180deg, var(--sheen), transparent 62%),
+    var(--bubble-human);
+  border-color: var(--bubble-human-line);
+}
+
+.bubble.streaming {
+  border-color: var(--accent-line);
+}
+
+/* 呼吸光放在伪元素上，只动 opacity，不反复重绘 box-shadow */
+.bubble.streaming::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 28px var(--accent-glow);
+  opacity: 0.4;
+  animation: stream-glow 2.6s ease-in-out infinite;
+}
+
+@keyframes stream-glow {
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* 等待首字：一个安静的“对方正在输入”气泡，高度与普通气泡对齐，不与正式回答抢注意力 */
+.typing-bubble {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 17px;
+  border-color: var(--line-strong);
+}
+
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 8px;
+}
+
+.typing-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  opacity: 0.4;
+  animation: typing-bounce 1.25s ease-in-out infinite;
+}
+
+.typing-dots i:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.typing-dots i:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes typing-bounce {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: translateY(0) scale(0.9);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px) scale(1);
+    background: var(--accent);
+  }
+}
+
+/* 时间和复制跟着气泡挂在卡片间隙里：不占布局高度，所以每张卡片之间永远只隔一个 gap。
+   行高与 gap 一致，文字正好落在两张卡片中间。 */
+.bubble-meta {
+  position: absolute;
+  top: 100%;
+  left: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 3px;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint);
+  opacity: 0;
+  transform: translateY(-2px);
+  transition:
+    opacity 180ms var(--ease-snap),
+    transform 180ms var(--ease-snap);
+}
+
+.bubble-row.human .bubble-meta {
+  left: auto;
+  right: 2px;
+}
+
+.bubble-row:hover .bubble-meta,
+.bubble-row:focus-within .bubble-meta {
+  opacity: 1;
+  transform: none;
+}
+
+.bubble-meta time {
+  letter-spacing: 0.02em;
+}
+
+.bubble-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.75;
+  transition:
+    color 140ms,
+    opacity 140ms,
+    background 140ms;
+}
+
+@media (hover: hover) {
+  .bubble-copy:hover {
+    opacity: 1;
+    color: var(--ink);
+    background: var(--chip);
+  }
+}
+
+.bubble-copy.copied {
+  color: var(--ok);
+  opacity: 1;
+}
+
+.bubble-copy svg {
+  transition: transform 220ms var(--ease-spring);
+}
+
+.bubble-copy.copied svg {
+  animation: check-pop 380ms var(--ease-spring);
+}
+
+@keyframes check-pop {
+  from {
+    transform: scale(0.5) rotate(-14deg);
+  }
+  62% {
+    transform: scale(1.16) rotate(3deg);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@media (hover: none) {
+  .bubble-meta {
+    opacity: 0.6;
+    transform: none;
+  }
+}
+
+.bubble-text {
+  text-wrap: pretty;
+}
+
+/* markdown 渲染器懒加载期间的占位：保留换行，避免解析器到位时整块跳动。 */
+.md-pending {
+  white-space: pre-wrap;
+}
+
+.bubble-text p {
+  margin: 0.32em 0;
+}
+
+.bubble-text > :first-child,
+.bubble-text > span:first-child {
+  margin-top: 0;
+}
+
+.bubble-text > :last-child,
+.bubble-text > span:last-child {
+  margin-bottom: 0;
+}
+
+.bubble-text ul,
+.bubble-text ol {
+  margin: 0.4em 0;
+  padding-left: 1.3em;
+}
+
+.bubble-text li {
+  margin: 0.18em 0;
+}
+
+.bubble-text li::marker {
+  color: var(--accent);
+}
+
+.bubble-text blockquote {
+  margin: 0.55em 0;
+  padding: 0.1em 0.85em;
+  border-left: 2px solid var(--accent-line);
+  color: var(--muted);
+}
+
+.bubble-text h1,
+.bubble-text h2,
+.bubble-text h3,
+.bubble-text h4 {
+  margin: 0.7em 0 0.3em;
+  line-height: 1.35;
+  font-size: 1.05em;
+  font-weight: 650;
+}
+
+.bubble-text h1 {
+  font-size: 1.18em;
+}
+
+.bubble-text hr {
+  margin: 0.85em 0;
+  border: none;
+  border-top: 1px solid var(--line);
+}
+
+/* 代码块：一条细标题栏（语言 + 复制）压在代码上方，左侧一道主色细线标出“这是代码” */
+.code-block {
+  position: relative;
+  margin: 8px 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--inset);
+  overflow: hidden;
+  animation: content-in 260ms var(--ease-snap);
+}
+
+.code-block::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(180deg, var(--accent), var(--secondary));
+  opacity: 0.7;
+}
+
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(90deg, var(--accent-soft), transparent 70%);
+}
+
+.code-lang {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
+.code-copy {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 1px 9px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  cursor: pointer;
+  transition:
+    color 160ms,
+    background 160ms,
+    border-color 160ms;
+}
+
+@media (hover: hover) {
+  .code-copy:hover {
+    color: var(--ink);
+    background: var(--chip-hover);
+    border-color: var(--line);
+  }
+}
+
+.code-copy.copied {
+  color: var(--ok);
+  border-color: color-mix(in oklab, var(--ok) 35%, transparent);
+  animation: check-pop 360ms var(--ease-spring);
+}
+
+.bubble-text pre {
+  margin: 0;
+  padding: 10px 12px 10px 14px;
+  overflow-x: auto;
+  font-size: 0.88em;
+  scrollbar-width: thin;
+}
+
+.bubble-text code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.bubble-text :not(pre) > code {
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: var(--chip);
+  border: 1px solid var(--line);
+}
+
+.bubble-text table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+
+.bubble-text th,
+.bubble-text td {
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+}
+
+.bubble-text th {
+  background: var(--chip);
+  font-weight: 600;
+}
+
+.bubble-text img {
+  max-width: 100%;
+  border-radius: 12px;
+}
+
+.bubble-text a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: var(--accent-line);
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+  transition:
+    color 140ms,
+    text-decoration-color 140ms;
+}
+
+.bubble-text a:visited {
+  color: var(--accent);
+}
+
+.bubble-text a[target='_blank']::after {
+  content: '↗';
+  display: inline-block;
+  margin-left: 2px;
+  font-size: 0.8em;
+  opacity: 0.6;
+  transition: transform 200ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .bubble-text a:hover {
+    color: var(--accent-strong);
+    text-decoration-color: currentColor;
+  }
+
+  .bubble-text a[target='_blank']:hover::after {
+    transform: translate(1.5px, -1.5px);
+    opacity: 1;
+  }
+}
+
+.bubble-text a:focus-visible {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.bubble-text.plain {
+  white-space: pre-wrap;
+}
+
+.caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.06em;
+  margin-left: 4px;
+  vertical-align: text-bottom;
+  border-radius: 2px;
+  background: linear-gradient(
+    180deg,
+    transparent,
+    var(--accent) 20%,
+    var(--accent) 80%,
+    transparent
+  );
+  box-shadow: 0 0 10px var(--accent-glow);
+  animation: caret-breathe 1.15s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: opacity, transform;
+}
+
+@keyframes caret-breathe {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+  50% {
+    opacity: 0.22;
+    transform: scaleY(0.82);
+  }
+}
+
+.action-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 3px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  letter-spacing: 0.015em;
+  color: var(--tertiary);
+  border: 1px solid var(--tertiary-line);
+  background: var(--tertiary-soft);
+  box-shadow: var(--shadow-inset);
+  vertical-align: baseline;
+  animation: tag-in 240ms var(--ease-spring);
+}
+
+.action-tag::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.7;
+  flex: none;
+}
+
+@keyframes tag-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

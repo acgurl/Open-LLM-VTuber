@@ -1,0 +1,157 @@
+/* ---------- MCP ---------- */
+.mcp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.mcp-item {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: var(--chip);
+  transition:
+    border-color 180ms,
+    background 180ms;
+}
+
+@media (hover: hover) {
+  .mcp-item:hover {
+    border-color: var(--line-strong);
+    background: var(--chip-hover);
+  }
+}
+
+.mcp-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.mcp-item-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 0.9rem;
+}
+
+.mcp-item-title > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mcp-badge {
+  font-size: 0.7rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--chip);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.mcp-badge.remote {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.mcp-badge.local {
+  background: var(--tertiary-soft);
+  border-color: var(--tertiary-line);
+  color: var(--tertiary);
+}
+
+.mcp-badge.sse {
+  background: var(--secondary-soft);
+  border-color: var(--secondary-line);
+  color: var(--secondary);
+}
+
+.mcp-editor {
+  width: 100%;
+  min-height: 220px;
+  box-sizing: border-box;
+  background: var(--inset);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  color: var(--ink);
+  caret-color: var(--accent);
+  padding: 11px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  resize: vertical;
+  transition:
+    border-color 160ms,
+    box-shadow 160ms;
+}
+
+.mcp-editor:focus {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.mcp-error {
+  color: var(--danger);
+  font-size: 0.8rem;
+  padding: 4px 0;
+}
+
+.mcp-url {
+  margin-top: 5px;
+  color: var(--faint);
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+}
+
+.mcp-tools {
+  margin-top: 5px;
+  color: var(--accent);
+  font-size: 0.76rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.mcp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.mcp-empty,
+.mcp-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  padding: 4px 0;
+}
+
+.mcp-status {
+  font-size: 0.8rem;
+  color: var(--muted);
+  word-break: break-word;
+  margin-top: 4px;
+  transition: color 220ms var(--ease-snap);
+}
+
+.mcp-status.connected {
+  color: var(--accent);
+}
+
+.mcp-status.connecting {
+  color: var(--tertiary);
+}
+
+.mcp-status.error {
+  color: var(--danger);
+}

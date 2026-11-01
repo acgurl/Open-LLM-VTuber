@@ -1,0 +1,383 @@
+/* ---------- 输入栏 ---------- */
+.input-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  width: min(780px, 92vw);
+  z-index: 25;
+}
+
+.input-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 30px;
+  background:
+    radial-gradient(240px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
+    linear-gradient(180deg, var(--sheen), transparent 72%),
+    var(--glass-strong);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  box-shadow: var(--shadow-float);
+  animation: chrome-rise 620ms 80ms var(--ease-spring) backwards;
+  transition:
+    border-color 220ms var(--ease-snap),
+    box-shadow 220ms var(--ease-snap),
+    --sheen-spot 360ms ease;
+}
+
+@keyframes chrome-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.input-row:focus-within {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-float);
+}
+
+/* 输入条平时只有半亮的受光边；有内容（待发送）时整圈提亮，作为“可以发了”的状态提示 */
+.input-row::before {
+  opacity: 0.55;
+  transition: opacity 240ms var(--ease-snap);
+}
+
+.input-row:focus-within::before,
+.input-row.filled::before {
+  opacity: 1;
+}
+
+/* 发送/打断按钮换了角色时弹进来，避免按钮位突然换一个图标 */
+.input-row .send-btn,
+.input-row .stop-btn {
+  animation: btn-pop 300ms var(--ease-spring);
+}
+
+@keyframes btn-pop {
+  from {
+    transform: scale(0.72);
+  }
+  60% {
+    transform: scale(1.05);
+  }
+  to {
+    transform: none;
+  }
+}
+
+/* 输入条内的按钮退成无边框圆形，只保留发送/麦克风的状态高亮 */
+.input-row .icon-btn {
+  width: 40px;
+  height: 40px;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (hover: hover) {
+  .input-row .icon-btn:hover:not(:disabled) {
+    background: var(--chip);
+    color: var(--ink);
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+.input-text {
+  flex: 1;
+  resize: none;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  caret-color: var(--accent);
+  font: inherit;
+  font-size: 0.96rem;
+  line-height: 1.55;
+  max-height: 132px;
+  min-height: 38px;
+  padding: 8px 6px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+
+.input-text::placeholder {
+  color: var(--faint);
+  transition: opacity 200ms var(--ease-snap);
+}
+
+.input-text:focus::placeholder {
+  opacity: 0.55;
+}
+
+.mic-btn {
+  position: relative;
+}
+
+.input-row .mic-btn.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.mic-btn.active::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 1px solid var(--accent-line);
+  animation: mic-ring 1.8s ease-out infinite;
+  pointer-events: none;
+}
+
+@keyframes mic-ring {
+  from {
+    opacity: 0.7;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.24);
+  }
+}
+
+.input-row .stop-btn {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.input-row .stop-btn:not(:disabled) {
+  /* 先弹进来，再接力呼吸光，避免两条 animation 互相覆盖 */
+  animation:
+    btn-pop 300ms var(--ease-spring),
+    stop-glow 1.9s 300ms ease-in-out infinite;
+}
+
+@keyframes stop-glow {
+  50% {
+    box-shadow: 0 0 20px -8px var(--danger);
+  }
+}
+
+/* 发送是唯一的高亮主行动 */
+.input-row .send-btn:not(:disabled) {
+  color: var(--accent-ink);
+  border-color: transparent;
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  box-shadow: 0 8px 22px -10px var(--accent-glow), var(--shadow-inset);
+}
+
+@media (hover: hover) {
+  .input-row .send-btn:not(:disabled):hover {
+    transform: translateY(-1px) scale(1.04);
+    box-shadow: 0 12px 28px -10px var(--accent-glow), var(--shadow-inset);
+  }
+
+  /* 纸飞机在悬停时朝发送方向轻推 */
+  .input-row .send-btn:not(:disabled):hover > svg {
+    transform: translate(1.5px, -1.5px) rotate(4deg);
+  }
+}
+
+.input-row .send-btn:not(:disabled):active {
+  transform: scale(0.95);
+}
+
+.media-anchor {
+  position: relative;
+}
+
+.media-menu {
+  position: absolute;
+  bottom: 52px;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 148px;
+  padding: 6px;
+  border-radius: 18px;
+  background: var(--glass-solid);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-float), var(--shadow-inset);
+  backdrop-filter: blur(22px);
+  -webkit-backdrop-filter: blur(22px);
+  overflow: hidden;
+  z-index: 40;
+  transform-origin: bottom left;
+  animation: menu-in 180ms var(--ease-spring);
+}
+
+.media-menu.closing {
+  pointer-events: none;
+  animation: menu-out 130ms ease-in forwards;
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes menu-out {
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+  }
+}
+
+.media-menu button {
+  background: none;
+  border: none;
+  border-radius: 12px;
+  color: var(--ink);
+  text-align: left;
+  padding: 9px 11px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  transition:
+    background 150ms,
+    transform 180ms var(--ease-spring);
+  animation: menu-item-in 220ms var(--ease-spring) backwards;
+}
+
+.media-menu button:nth-child(2) {
+  animation-delay: 28ms;
+}
+
+.media-menu button:nth-child(3) {
+  animation-delay: 56ms;
+}
+
+@keyframes menu-item-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (hover: hover) {
+  .media-menu button:hover {
+    background: var(--chip);
+    transform: translateX(2px);
+  }
+}
+
+.image-strip {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 0 6px;
+}
+
+.image-thumb {
+  position: relative;
+  width: 62px;
+  height: 62px;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-soft);
+  animation: thumb-in 300ms var(--ease-spring) backwards;
+}
+
+@keyframes thumb-in {
+  from {
+    opacity: 0;
+    transform: scale(0.86) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.image-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 420ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .image-thumb:hover img {
+    transform: scale(1.07);
+  }
+}
+
+.image-remove {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.68);
+  color: #fff;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 12px;
+  transition:
+    background 150ms,
+    transform 180ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .image-remove:hover {
+    background: var(--danger);
+    transform: scale(1.1);
+  }
+}
+
+.spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes content-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.image-thumb,
+.cam-video,
+.cam-idle {
+  animation: content-in 200ms ease-out;
+}

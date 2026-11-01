@@ -1,0 +1,178 @@
+/* =========================================================
+   设计系统：AIRI 风格的色相舞台
+   中性 #121212 打底，一个 OKLCH 色相同时生成主色、补色与第三色；
+   圆润字体、胶囊控件、大圆角玻璃，人物始终是画面主角。
+   ========================================================= */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 300 800;
+  font-display: swap;
+  src: url('/assets/fonts/dm-sans-latin-v1.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Comfortaa';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/assets/fonts/comfortaa-latin-v1.woff2') format('woff2');
+}
+
+/* 注册后可插值的变量：换色相、聊天区雾化边缘都能平滑过渡而不是硬切。
+   不支持的浏览器会退化为瞬时切换，不影响布局与可读性。 */
+@property --hue {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 220.44;
+}
+
+@property --sheen-spot {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
+@property --fade-top {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-bottom {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+:root {
+  color-scheme: dark;
+  --hue: 220.44;
+
+  --bg: #121212;
+  --bg-lift: #171718;
+
+  --ink: #f4f4f7;
+  --muted: #a7a8b1;
+  --faint: #85868f;
+
+  --line: rgba(255, 255, 255, 0.11);
+  --line-strong: rgba(255, 255, 255, 0.2);
+
+  --glass-strong: rgba(30, 30, 34, 0.76);
+  --glass-solid: rgba(24, 24, 27, 0.96);
+  --chip: rgba(255, 255, 255, 0.055);
+  --chip-hover: rgba(255, 255, 255, 0.09);
+  --inset: rgba(0, 0, 0, 0.28);
+  --sheen: rgba(255, 255, 255, 0.065);
+  --mask: rgba(4, 4, 6, 0.5);
+
+  --accent: oklch(78% 0.125 var(--hue));
+  --accent-strong: oklch(70% 0.155 var(--hue));
+  --accent-ink: oklch(20% 0.04 var(--hue));
+  --accent-soft: oklch(78% 0.125 var(--hue) / 0.15);
+  --accent-line: oklch(78% 0.125 var(--hue) / 0.4);
+  --accent-glow: oklch(68% 0.17 var(--hue) / 0.55);
+
+  --secondary: oklch(83% 0.1 calc(var(--hue) + 180));
+  --secondary-soft: oklch(83% 0.1 calc(var(--hue) + 180) / 0.14);
+  --secondary-line: oklch(83% 0.1 calc(var(--hue) + 180) / 0.32);
+  --tertiary: oklch(83% 0.095 calc(var(--hue) + 60));
+  --tertiary-soft: oklch(83% 0.095 calc(var(--hue) + 60) / 0.13);
+  --tertiary-line: oklch(83% 0.095 calc(var(--hue) + 60) / 0.28);
+
+  --danger: #ff8f97;
+  --danger-soft: rgba(255, 143, 151, 0.12);
+  --danger-line: rgba(255, 143, 151, 0.3);
+  --ok: #7fe3b1;
+  --pending: #f4c76b;
+
+  --bubble-ai: rgba(30, 30, 34, 0.7);
+  /* 用户气泡取主色相的淡玻璃：同一个色相舞台里靠位置和色阶区分说话人，不再引入补色 */
+  --bubble-human: color-mix(in oklab, var(--accent) 18%, rgba(30, 30, 34, 0.7));
+  --bubble-human-line: color-mix(in oklab, var(--accent) 32%, transparent);
+  /* 消息面板共用几何：气泡与工具卡落在同一套圆角与内边距上 */
+  --surface-r: 20px;
+  --surface-pad-y: 11px;
+  --surface-pad-x: 15px;
+
+  --stage-glow: color-mix(in oklab, var(--accent) 13%, transparent);
+  --stage-glow-2: color-mix(in oklab, var(--secondary) 10%, transparent);
+
+  --shadow-float: 0 30px 70px -34px rgba(0, 0, 0, 0.92), 0 2px 12px -8px rgba(0, 0, 0, 0.7);
+  --shadow-soft: 0 14px 34px -26px rgba(0, 0, 0, 0.9);
+  --shadow-btn: 0 8px 22px -14px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --edge-hi: rgba(255, 255, 255, 0.26);
+  --scroll-thumb: rgba(255, 255, 255, 0.16);
+  --text-shadow: 0 1px 14px rgba(0, 0, 0, 0.55);
+
+  --blur: 20px;
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-snap: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* 收起/合拢专用：起步柔和、中段加速、末尾轻落，避免反向用展开的缓出曲线时“唰”地一下夹死 */
+  --ease-fold: cubic-bezier(0.4, 0, 0.2, 1);
+  --font-body: 'DM Sans', 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans', 'Microsoft YaHei',
+    system-ui, sans-serif;
+  --font-round: 'Comfortaa', 'DM Sans', 'PingFang SC', 'HarmonyOS Sans SC', 'MiSans',
+    'Microsoft YaHei', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+
+  font-size: 15px;
+}
+
+html[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f7f8fb;
+  --bg-lift: #ffffff;
+
+  --ink: #17181d;
+  --muted: #5b5d68;
+  --faint: #70727c;
+
+  --line: rgba(20, 22, 30, 0.09);
+  --line-strong: rgba(20, 22, 30, 0.17);
+
+  --glass-strong: rgba(255, 255, 255, 0.84);
+  --glass-solid: rgba(255, 255, 255, 0.97);
+  --chip: rgba(20, 22, 30, 0.04);
+  --chip-hover: rgba(20, 22, 30, 0.07);
+  --inset: rgba(20, 22, 30, 0.045);
+  --sheen: rgba(255, 255, 255, 0.62);
+  --mask: rgba(222, 226, 236, 0.55);
+
+  --accent: oklch(54% 0.16 var(--hue));
+  --accent-strong: oklch(48% 0.17 var(--hue));
+  --accent-ink: #ffffff;
+  --accent-soft: oklch(54% 0.16 var(--hue) / 0.1);
+  --accent-line: oklch(54% 0.16 var(--hue) / 0.34);
+  --accent-glow: oklch(54% 0.16 var(--hue) / 0.3);
+
+  --secondary: oklch(51% 0.14 calc(var(--hue) + 180));
+  --secondary-soft: oklch(51% 0.14 calc(var(--hue) + 180) / 0.1);
+  --secondary-line: oklch(51% 0.14 calc(var(--hue) + 180) / 0.28);
+  --tertiary: oklch(51% 0.13 calc(var(--hue) + 60));
+  --tertiary-soft: oklch(51% 0.13 calc(var(--hue) + 60) / 0.09);
+  --tertiary-line: oklch(51% 0.13 calc(var(--hue) + 60) / 0.24);
+
+  --danger: #c23a46;
+  --danger-soft: rgba(194, 58, 70, 0.09);
+  --danger-line: rgba(194, 58, 70, 0.26);
+  --ok: #1b7f57;
+  --pending: #9b6b11;
+
+  --bubble-ai: rgba(255, 255, 255, 0.8);
+  --bubble-human: color-mix(in oklab, var(--accent) 12%, rgba(255, 255, 255, 0.82));
+  --bubble-human-line: color-mix(in oklab, var(--accent) 28%, transparent);
+
+  --stage-glow: color-mix(in oklab, var(--accent) 11%, transparent);
+  --stage-glow-2: color-mix(in oklab, var(--secondary) 9%, transparent);
+
+  --shadow-float: 0 30px 60px -36px rgba(25, 30, 48, 0.4), 0 1px 0 #fff inset;
+  --shadow-soft: 0 14px 30px -26px rgba(25, 30, 48, 0.32);
+  --shadow-btn: 0 8px 20px -12px rgba(25, 30, 48, 0.35), inset 0 1px 0 #fff;
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --edge-hi: rgba(255, 255, 255, 0.95);
+  --scroll-thumb: rgba(20, 22, 30, 0.18);
+  --text-shadow: 0 1px 10px rgba(255, 255, 255, 0.8);
+}

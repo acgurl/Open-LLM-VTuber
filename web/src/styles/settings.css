@@ -1,0 +1,295 @@
+.config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.config-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 13px;
+  border: 1px solid var(--line);
+  background: var(--chip);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+  transition:
+    background 180ms,
+    border-color 180ms,
+    transform 220ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .config-item:hover:not(:disabled) {
+    background: var(--chip-hover);
+    border-color: var(--line-strong);
+    transform: translateX(2px);
+  }
+}
+
+.config-item:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.config-item:disabled {
+  opacity: 0.5;
+}
+
+/* 当前角色：主色描边 + 名字前一颗呼应状态点的小灯，切换后一眼看出在用哪套 */
+.config-item.current {
+  border-color: var(--accent-line);
+  background:
+    linear-gradient(90deg, var(--accent-soft), transparent 80%),
+    var(--chip);
+}
+
+.config-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.config-item.current .config-name::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+  animation: dot-pop 420ms var(--ease-spring);
+}
+
+.config-file {
+  color: var(--faint);
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.switching-hint {
+  margin-top: 9px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  animation: content-in 220ms var(--ease-snap);
+}
+
+.bg-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.bg-cell {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+  cursor: pointer;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 0.76rem;
+  padding: 0;
+  transition:
+    border-color 180ms,
+    box-shadow 200ms,
+    transform 240ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .bg-cell:hover {
+    border-color: var(--line-strong);
+    transform: translateY(-1px);
+  }
+}
+
+.bg-cell img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 480ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .bg-cell:hover img {
+    transform: scale(1.05);
+  }
+}
+
+.bg-cell.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.bg-cell.active::after {
+  content: '';
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+  animation: dot-pop 360ms var(--ease-spring);
+}
+
+/* 自定义开关 */
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 0;
+  font-size: 0.9rem;
+}
+
+.setting-row + .setting-row {
+  border-top: 1px solid var(--line);
+}
+
+.setting-row input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--chip-hover);
+  cursor: pointer;
+  transition:
+    background 220ms,
+    border-color 220ms,
+    box-shadow 220ms;
+}
+
+.setting-row input[type='checkbox']::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #d6d8e2;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  transition:
+    transform 280ms var(--ease-spring),
+    background 220ms;
+}
+
+.setting-row input[type='checkbox']:checked {
+  border-color: var(--accent-line);
+  background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+  box-shadow: 0 0 16px -6px var(--accent-glow), var(--shadow-inset);
+}
+
+.setting-row input[type='checkbox']:checked::after {
+  transform: translateX(18px);
+  background: #ffffff;
+}
+
+html[data-theme='light'] .setting-row input[type='checkbox']::after {
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(25, 30, 48, 0.3);
+}
+
+.setting-row select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: var(--chip);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238d8f99' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 32px 6px 11px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition:
+    border-color 160ms,
+    background-color 160ms;
+}
+
+@media (hover: hover) {
+  .setting-row select:hover {
+    border-color: var(--line-strong);
+    background-color: var(--chip-hover);
+  }
+}
+
+/* 色相选择：AIRI 式的主色盘 */
+.hue-setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0 2px;
+  font-size: 0.9rem;
+}
+
+.hue-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.hue-dot {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: radial-gradient(
+    120% 120% at 32% 26%,
+    oklch(88% 0.09 var(--dot-hue)),
+    oklch(68% 0.16 var(--dot-hue))
+  );
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+  transition:
+    transform 220ms var(--ease-spring),
+    box-shadow 220ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .hue-dot:hover {
+    transform: scale(1.1);
+  }
+}
+
+.hue-dot.active {
+  transform: scale(1.06);
+  box-shadow:
+    0 0 0 2px var(--bg-lift),
+    0 0 0 4px oklch(70% 0.15 var(--dot-hue)),
+    0 6px 16px -6px oklch(62% 0.18 var(--dot-hue) / 0.7);
+}
+
+.hue-dot:active {
+  transform: scale(0.94);
+}
+
+.account-name {
+  color: var(--muted);
+  margin-bottom: 4px;
+  font-size: 0.9rem;
+}

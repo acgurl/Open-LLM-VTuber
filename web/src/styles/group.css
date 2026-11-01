@@ -1,0 +1,120 @@
+/* ---------- 群聊 ---------- */
+.group-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.group-members,
+.group-peers {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+.group-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.group-uid {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.group-input {
+  flex: 1;
+  min-width: 0;
+  background: var(--inset);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  caret-color: var(--accent);
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 0.84rem;
+  transition:
+    border-color 160ms,
+    background 160ms,
+    box-shadow 160ms;
+}
+
+.group-input:focus {
+  outline: none;
+  border-color: var(--accent-line);
+  background: var(--chip);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.group-hint {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.55;
+  padding: 4px 0;
+}
+
+.group-badge {
+  font-size: 0.7rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  white-space: nowrap;
+}
+
+.group-badge.owner {
+  background: var(--tertiary-soft);
+  color: var(--tertiary);
+  border-color: var(--tertiary-line);
+}
+
+.mini-btn {
+  padding: 5px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--chip);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  transition:
+    background 160ms,
+    border-color 160ms,
+    transform 200ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .mini-btn:hover:not(:disabled) {
+    background: var(--chip-hover);
+    border-color: var(--line-strong);
+    transform: translateY(-1px);
+  }
+}
+
+.mini-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.mini-btn.danger {
+  background: var(--danger-soft);
+  border-color: var(--danger-line);
+  color: var(--danger);
+}
+
+@media (hover: hover) {
+  .mini-btn.danger:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--danger) 18%, transparent);
+    border-color: var(--danger);
+  }
+}
+
+.mini-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}

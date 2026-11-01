@@ -1,0 +1,138 @@
+* {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  background: var(--bg);
+  /* 换强调色时整屏派生色一起转过去，而不是闪一下 */
+  transition: --hue 520ms var(--ease-spring);
+}
+
+/* ---------- 明暗切换 ----------
+   新旧界面各拍一张快照：旧的留在底层，新的按圆形从触发按钮处铺开。
+   整屏只有一层裁切在动，不用逐属性过渡去重绘带 backdrop-filter 的玻璃层。 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-new(root) {
+  animation: theme-reveal 520ms var(--ease-spring) both;
+}
+
+@keyframes theme-reveal {
+  from {
+    clip-path: circle(0px at var(--theme-x, 50%) var(--theme-y, 50%));
+  }
+  to {
+    clip-path: circle(var(--theme-r, 150vmax) at var(--theme-x, 50%) var(--theme-y, 50%));
+  }
+}
+
+::selection {
+  background: color-mix(in oklab, var(--accent) 34%, transparent);
+  color: var(--ink);
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-synthesis-weight: none;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
+  overflow: hidden;
+}
+
+body {
+  background:
+    radial-gradient(72% 52% at 50% -12%, var(--stage-glow), transparent 70%),
+    radial-gradient(58% 46% at 94% 106%, var(--stage-glow-2), transparent 72%),
+    var(--bg);
+  transition:
+    color 240ms ease,
+    background-color 240ms ease;
+}
+
+#root {
+  background: transparent;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  touch-action: manipulation;
+}
+
+:where(button, a, input, textarea, select):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.app {
+  position: fixed;
+  inset: 0;
+  isolation: isolate;
+}
+
+.bg-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  /* 换背景时淡入，避免舞台背后直接跳到另一张图 */
+  animation: bg-in 640ms ease-out;
+}
+
+@keyframes bg-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 壁纸压一层中性薄雾，任意背景都能托住人物和玻璃 UI */
+.bg-layer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(10, 10, 12, 0.52),
+    rgba(10, 10, 12, 0.1) 38%,
+    rgba(10, 10, 12, 0.56)
+  );
+}
+
+html[data-theme='light'] .bg-layer::after {
+  background: linear-gradient(
+    180deg,
+    rgba(247, 248, 251, 0.58),
+    rgba(247, 248, 251, 0.08) 40%,
+    rgba(247, 248, 251, 0.62)
+  );
+}
+
+.live2d-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}

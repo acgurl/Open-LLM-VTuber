@@ -1,0 +1,20 @@
+/* 样式入口：按层叠顺序依次导入，顺序即优先级，调整前先确认没有依赖后者覆盖前者。
+   tokens 必须最先（@font-face / @property / 主题变量）；responsive 必须最后
+   （窄屏、粗指针与 reduced-motion 规则要压过前面所有组件样式）。
+   .spinner 与 @keyframes content-in 是多处共用的工具类，暂放在 input.css。 */
+@import './tokens.css';
+@import './base.css';
+@import './stage.css';
+@import './chrome.css';
+@import './chat.css';
+@import './messages.css';
+@import './tool-think.css';
+@import './input.css';
+@import './camera.css';
+@import './drawer.css';
+@import './history.css';
+@import './settings.css';
+@import './group.css';
+@import './mcp.css';
+@import './toast.css';
+@import './responsive.css';

@@ -1,0 +1,169 @@
+/* ---------- toast ---------- */
+.toasts {
+  position: fixed;
+  top: calc(76px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 100;
+  align-items: center;
+  pointer-events: none;
+}
+
+.toast {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  appearance: none;
+  padding: 10px 19px 10px 16px;
+  text-align: left;
+  font: inherit;
+  font-size: 0.88rem;
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, var(--sheen), transparent 72%),
+    var(--glass-strong);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(18px) saturate(1.15);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  box-shadow: var(--shadow-float);
+  cursor: pointer;
+  max-width: 80vw;
+  overflow: hidden;
+  pointer-events: auto;
+  animation: toast-in 300ms var(--ease-spring);
+  transition:
+    transform 200ms var(--ease-spring),
+    border-color 200ms var(--ease-snap),
+    box-shadow 200ms var(--ease-snap);
+}
+
+@media (hover: hover) {
+  .toast:hover {
+    transform: translateY(-1px);
+    border-color: var(--line-strong);
+  }
+}
+
+.toast:active {
+  transform: scale(0.985);
+}
+
+/* 悬停时进度条和计时器一起停住，读完再走 */
+.toast:hover::after {
+  animation-play-state: paused;
+}
+
+.toast::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, var(--accent), var(--tertiary));
+  transform-origin: left;
+  animation: toast-timer 4200ms linear forwards;
+  opacity: 0.6;
+}
+
+@keyframes toast-timer {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+.toast.leaving {
+  pointer-events: none;
+  animation: toast-out 160ms ease-in forwards;
+}
+
+.toast-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+
+.toast.error {
+  border-color: var(--danger-line);
+  color: var(--danger);
+}
+
+.toast.error .toast-dot {
+  background: var(--danger);
+  box-shadow: 0 0 8px var(--danger);
+}
+
+.toast.error::after {
+  background: var(--danger);
+}
+
+.toast.success {
+  border-color: color-mix(in oklab, var(--ok) 40%, transparent);
+  color: var(--ok);
+}
+
+.toast.success .toast-dot {
+  background: var(--ok);
+  box-shadow: 0 0 8px var(--ok);
+}
+
+.toast.success::after {
+  background: var(--ok);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+}
+
+.boot-failure {
+  position: fixed;
+  left: 50%;
+  bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  background: var(--glass-strong);
+  border: 1px solid var(--danger-line);
+  color: var(--muted);
+  font-size: 0.88rem;
+  box-shadow: var(--shadow-float);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 40;
+}
+
+.boot-failure::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--danger);
+  box-shadow: 0 0 9px var(--danger);
+  animation: pulse 1.6s ease-in-out infinite;
+}

@@ -1,0 +1,165 @@
+/* ---------- 人物背光 ----------
+   垫在画布下面：一圈背光把人物从背景里托出来，一道地面光让她“站”在舞台上。
+   --voice 由 stageFx 按口型音量写入，说话时光跟着声音轻轻涨落；
+   只过渡 opacity/scale，不做常驻关键帧。 */
+.stage-halo {
+  --voice: 0;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+  animation: halo-in 1600ms var(--ease-spring) 200ms backwards;
+}
+
+.stage-halo::before,
+.stage-halo::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  border-radius: 50%;
+  translate: -50% 0;
+}
+
+.stage-halo::before {
+  top: 4%;
+  width: min(84vh, 92vw);
+  aspect-ratio: 1;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--accent) 30%, transparent),
+    color-mix(in oklab, var(--accent) 11%, transparent) 56%,
+    transparent
+  );
+  opacity: calc(0.62 + var(--voice) * 0.38);
+  scale: calc(1 + var(--voice) * 0.08);
+  transition:
+    opacity 160ms ease-out,
+    scale 260ms var(--ease-spring);
+}
+
+.stage-halo::after {
+  bottom: -6vh;
+  width: min(90vh, 96vw);
+  height: 26vh;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--accent) 32%, transparent),
+    color-mix(in oklab, var(--secondary) 6%, transparent) 62%,
+    transparent
+  );
+  opacity: calc(0.55 + var(--voice) * 0.45);
+  transition: opacity 200ms ease-out;
+}
+
+html[data-theme='light'] .stage-halo::before,
+html[data-theme='light'] .stage-halo::after {
+  filter: saturate(0.8);
+  opacity: calc(0.45 + var(--voice) * 0.4);
+}
+
+@keyframes halo-in {
+  from {
+    opacity: 0;
+    transform: translateY(3%) scale(0.94);
+  }
+}
+
+/* ---------- 舞台氛围 ---------- */
+.atmosphere {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.atmosphere::before {
+  content: '';
+  position: absolute;
+  inset: -14%;
+  background:
+    radial-gradient(44% 36% at 15% -4%, color-mix(in oklab, var(--accent) 20%, transparent), transparent 70%),
+    radial-gradient(40% 32% at 89% 105%, color-mix(in oklab, var(--secondary) 14%, transparent), transparent 72%);
+  animation: lights-on 1500ms ease-out both;
+}
+
+/* 入场把灯推亮一次，不持续循环 */
+@keyframes lights-on {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.atmosphere::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  opacity: 0.14;
+  mix-blend-mode: soft-light;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+
+/* 光尘：小、慢、只动 transform/opacity；光晕是静态的，不逐帧重绘阴影 */
+.mote {
+  position: absolute;
+  left: var(--x);
+  bottom: -3%;
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 calc(var(--s) * 3) var(--c);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: mote-rise var(--d) linear var(--t) infinite;
+}
+
+@keyframes mote-rise {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.6);
+    opacity: 0;
+  }
+  14% {
+    opacity: var(--mote-a, 0.42);
+  }
+  50% {
+    transform: translate3d(22px, -54vh, 0) scale(1);
+  }
+  82% {
+    opacity: calc(var(--mote-a, 0.42) * 0.6);
+  }
+  100% {
+    transform: translate3d(-12px, -106vh, 0) scale(0.8);
+    opacity: 0;
+  }
+}
+
+html[data-theme='light'] .mote {
+  --mote-a: 0.3;
+  box-shadow: none;
+}
+
+/* 画面收边，只压舞台不压 UI */
+.app::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  background: radial-gradient(120% 95% at 50% 42%, transparent 55%, rgba(6, 6, 8, 0.46));
+}
+
+html[data-theme='light'] .atmosphere::after {
+  opacity: 0.06;
+  mix-blend-mode: multiply;
+}
+
+html[data-theme='light'] .app::after {
+  background: radial-gradient(120% 95% at 50% 42%, transparent 58%, rgba(203, 210, 224, 0.42));
+}

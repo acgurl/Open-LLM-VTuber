@@ -1,0 +1,352 @@
+/* ---------- 抽屉 ---------- */
+.drawer-mask {
+  position: fixed;
+  inset: 0;
+  padding: 0;
+  border: none;
+  appearance: none;
+  cursor: default;
+  background: var(--mask);
+  backdrop-filter: blur(10px) saturate(0.95);
+  -webkit-backdrop-filter: blur(10px) saturate(0.95);
+  z-index: 50;
+  animation: mask-in 220ms ease-out;
+}
+
+.drawer-mask.closing {
+  pointer-events: none;
+  animation: mask-out 170ms ease-in forwards;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: min(384px, 90vw);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--accent) 6%, transparent), transparent 32%),
+    var(--glass-solid);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(26px) saturate(1.15);
+  -webkit-backdrop-filter: blur(26px) saturate(1.15);
+  box-shadow: 0 0 90px -26px rgba(0, 0, 0, 0.95);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+}
+
+.drawer.left {
+  left: 0;
+  border-radius: 0 28px 28px 0;
+  border-left: none;
+  animation: drawer-left-in 360ms var(--ease-spring);
+}
+
+.drawer.right {
+  right: 0;
+  border-radius: 28px 0 0 28px;
+  border-right: none;
+  animation: drawer-right-in 360ms var(--ease-spring);
+}
+
+.drawer.closing {
+  pointer-events: none;
+}
+
+.drawer.left.closing {
+  animation: drawer-left-out 220ms ease-in forwards;
+}
+
+.drawer.right.closing {
+  animation: drawer-right-out 220ms ease-in forwards;
+}
+
+@keyframes mask-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes mask-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes drawer-left-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes drawer-left-out {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes drawer-right-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes drawer-right-out {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.drawer-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 16px 14px 20px;
+  font-family: var(--font-round);
+  font-size: 1.06rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  border-bottom: 1px solid var(--line);
+}
+
+.drawer-head .icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  font-size: 17px;
+  color: var(--muted);
+  background: var(--chip);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (hover: hover) {
+  .drawer-head .icon-btn:hover:not(:disabled) {
+    color: var(--ink);
+    background: var(--chip-hover);
+    box-shadow: none;
+  }
+}
+
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 14px calc(28px + env(safe-area-inset-bottom, 0px));
+  scroll-padding-top: 64px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+
+.drawer-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.drawer-body::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 999px;
+}
+
+.drawer-body::-webkit-scrollbar-thumb:hover {
+  background: var(--line-strong);
+}
+
+/* 每个设置分区是一张低对比卡片，避免一长条表单 */
+.drawer-body section {
+  padding: 14px 14px 15px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background:
+    radial-gradient(240px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
+    var(--chip);
+  transition:
+    border-color 240ms var(--ease-snap),
+    --sheen-spot 360ms ease;
+}
+
+.drawer-body section.sheen-on {
+  border-color: var(--line-strong);
+}
+
+/* 抽屉内容错峰落位：一次编排完成，而不是整块同时跳出来 */
+.drawer-body > section,
+.history-item,
+.drawer-empty {
+  animation: drawer-item-in 320ms var(--ease-spring) backwards;
+}
+
+.drawer-body > section:nth-child(2),
+.history-item:nth-child(2) {
+  animation-delay: 22ms;
+}
+
+.drawer-body > section:nth-child(3),
+.history-item:nth-child(3) {
+  animation-delay: 44ms;
+}
+
+.drawer-body > section:nth-child(4),
+.history-item:nth-child(4) {
+  animation-delay: 66ms;
+}
+
+.drawer-body > section:nth-child(5),
+.history-item:nth-child(5) {
+  animation-delay: 88ms;
+}
+
+.drawer-body > section:nth-child(6),
+.history-item:nth-child(6) {
+  animation-delay: 110ms;
+}
+
+.drawer-body > section:nth-child(7),
+.history-item:nth-child(7) {
+  animation-delay: 132ms;
+}
+
+.drawer-body > section:nth-child(8),
+.history-item:nth-child(8) {
+  animation-delay: 154ms;
+}
+
+/* 长历史列表只编排首屏，后面的条目不再延迟出现 */
+.history-item:nth-child(n + 9) {
+  animation: none;
+}
+
+@keyframes drawer-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.drawer-body section h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-family: var(--font-round);
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.drawer-body section h3::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+  flex: none;
+}
+
+.drawer-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition:
+    background 180ms,
+    border-color 180ms,
+    transform 220ms var(--ease-spring);
+}
+
+.drawer > .drawer-action {
+  margin: 12px 14px 0;
+}
+
+.drawer-body .drawer-action {
+  width: 100%;
+  margin: 12px 0 0;
+}
+
+@media (hover: hover) {
+  .drawer-action:hover {
+    background: color-mix(in oklab, var(--accent) 22%, transparent);
+    border-color: var(--accent-line);
+    transform: translateY(-1px);
+  }
+}
+
+.drawer-action:active {
+  transform: scale(0.985);
+}
+
+.drawer-action.danger {
+  color: var(--danger);
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+}
+
+@media (hover: hover) {
+  .drawer-action.danger:hover {
+    border-color: var(--danger);
+    background: color-mix(in oklab, var(--danger) 18%, transparent);
+  }
+}
+
+.drawer-empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 30px 0;
+  font-size: 0.88rem;
+}
+
+/* 空态给一个柔和的对话占位图，避免大片空白 */
+.drawer-empty::before {
+  content: '';
+  display: block;
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(circle at 34% 46%, var(--accent) 0 2.5px, transparent 3px),
+    radial-gradient(circle at 50% 46%, var(--accent) 0 2.5px, transparent 3px),
+    radial-gradient(circle at 66% 46%, var(--accent) 0 2.5px, transparent 3px),
+    var(--chip);
+  box-shadow: var(--shadow-inset);
+}

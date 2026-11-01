@@ -1,0 +1,129 @@
+.history-item {
+  position: relative;
+  border-radius: 14px;
+  border: 1px solid transparent;
+  margin-bottom: 6px;
+  background: var(--chip);
+  transition:
+    background 180ms,
+    border-color 180ms,
+    transform 220ms var(--ease-spring);
+}
+
+.history-open {
+  display: block;
+  width: 100%;
+  padding: 11px 36px 11px 13px;
+  border: none;
+  border-radius: inherit;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.history-open:focus-visible {
+  outline-offset: -2px;
+}
+
+@media (hover: hover) {
+  .history-item:hover {
+    background: var(--chip-hover);
+    transform: translateX(2px);
+  }
+}
+
+.history-item.current {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+/* 当前会话在左侧立一条发光短杠，比只换底色更容易一眼定位 */
+.history-item.current::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 11px;
+  bottom: 11px;
+  width: 3px;
+  border-radius: 0 999px 999px 0;
+  background: linear-gradient(180deg, var(--accent), var(--secondary));
+  box-shadow: 0 0 12px -2px var(--accent-glow);
+  animation: bar-grow 360ms var(--ease-spring);
+}
+
+@keyframes bar-grow {
+  from {
+    opacity: 0;
+    transform: scaleY(0.35);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.history-snippet {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin-bottom: 5px;
+  color: var(--ink);
+}
+
+.history-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--faint);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.history-delete {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: none;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  padding: 0;
+  opacity: 0;
+  transform: translateX(3px);
+  transition:
+    opacity 160ms,
+    transform 180ms var(--ease-spring),
+    color 160ms,
+    background 160ms;
+}
+
+.history-item:hover .history-delete,
+.history-delete:focus-visible {
+  opacity: 1;
+  transform: none;
+}
+
+@media (hover: hover) {
+  .history-delete:hover {
+    color: var(--danger);
+    background: var(--danger-soft);
+  }
+}
+
+@media (hover: none) {
+  .history-delete {
+    opacity: 0.6;
+    transform: none;
+  }
+}

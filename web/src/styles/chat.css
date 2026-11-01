@@ -1,0 +1,144 @@
+/* ---------- 聊天区 ---------- */
+.chat-shell {
+  position: fixed;
+  left: calc(20px + env(safe-area-inset-left, 0px));
+  top: calc(88px + env(safe-area-inset-top, 0px));
+  bottom: calc(172px + env(safe-area-inset-bottom, 0px));
+  width: min(480px, 42vw);
+  z-index: 10;
+}
+
+.chat-overlay {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px 8px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  /* 雾化高度本身可以插值，滚动越过阈值时边缘是渐显而不是跳变 */
+  transition:
+    --fade-top 260ms var(--ease-snap),
+    --fade-bottom 260ms var(--ease-snap);
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--fade-top),
+    #000 calc(100% - var(--fade-bottom)),
+    transparent
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    #000 var(--fade-top),
+    #000 calc(100% - var(--fade-bottom)),
+    transparent
+  );
+}
+
+/* 视区外还有内容时才淡出对应边缘，避免硬切把气泡拦腰截断 */
+.chat-shell.fade-top .chat-overlay {
+  --fade-top: 26px;
+}
+
+.chat-shell.fade-bottom .chat-overlay {
+  --fade-bottom: 26px;
+}
+
+.chat-overlay::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chat-overlay::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 999px;
+}
+
+.chat-overlay::-webkit-scrollbar-thumb:hover {
+  background: var(--line-strong);
+}
+
+/* 内容单独一层，用来观察高度变化（折叠/长高时才能一直吸底）。
+   gap 是所有卡片之间唯一的间距来源，气泡不再用额外的元信息行撑高。 */
+.chat-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 内容溢出时 flex 子项会被压缩；工具卡 overflow:hidden 会因此被压没 */
+.chat-stack > * {
+  flex: none;
+}
+
+/* 回到最新 */
+.scroll-jump {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px 6px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, var(--sheen), transparent 72%),
+    var(--glass-strong);
+  color: var(--muted);
+  font-size: 0.76rem;
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: var(--shadow-float);
+  transform: translateX(-50%);
+  animation: jump-in 300ms var(--ease-spring);
+  transition:
+    color 160ms,
+    border-color 160ms,
+    transform 200ms var(--ease-spring);
+}
+
+@keyframes jump-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.scroll-jump.unread {
+  color: var(--accent);
+  border-color: var(--accent-line);
+}
+
+.scroll-jump-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.scroll-jump svg {
+  transition: transform 220ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .scroll-jump:hover {
+    color: var(--ink);
+    border-color: var(--line-strong);
+    transform: translate(-50%, -1px);
+  }
+
+  .scroll-jump:hover svg {
+    transform: translateY(2px);
+  }
+}
