@@ -42,6 +42,7 @@ export function SettingsDrawer() {
   const setHue = useTheme((s) => s.setHue);
   const displayName = useConnection((s) => s.displayName);
   const userId = useConnection((s) => s.userId);
+  const confName = useConnection((s) => s.confName);
   const presence = usePresence(open, 220);
 
   useEffect(() => {
@@ -77,11 +78,12 @@ export function SettingsDrawer() {
               {configs.map((c) => (
                 <button
                   key={c.filename}
-                  className="config-item"
+                  className={`config-item${c.name === confName ? ' current' : ''}`}
+                  aria-current={c.name === confName ? 'true' : undefined}
                   disabled={switching}
                   onClick={() => switchConfig(c.filename)}
                 >
-                  <span>{c.name}</span>
+                  <span className="config-name">{c.name}</span>
                   <span className="config-file">{c.filename}</span>
                 </button>
               ))}

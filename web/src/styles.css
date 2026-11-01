@@ -27,6 +27,12 @@
   initial-value: 220.44;
 }
 
+@property --sheen-spot {
+  syntax: '<color>';
+  inherits: false;
+  initial-value: transparent;
+}
+
 @property --fade-top {
   syntax: '<length>';
   inherits: false;
@@ -310,6 +316,73 @@ html[data-theme='light'] .bg-layer::after {
   touch-action: none;
 }
 
+/* ---------- 人物背光 ----------
+   垫在画布下面：一圈背光把人物从背景里托出来，一道地面光让她“站”在舞台上。
+   --voice 由 stageFx 按口型音量写入，说话时光跟着声音轻轻涨落；
+   只过渡 opacity/scale，不做常驻关键帧。 */
+.stage-halo {
+  --voice: 0;
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+  animation: halo-in 1600ms var(--ease-spring) 200ms backwards;
+}
+
+.stage-halo::before,
+.stage-halo::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  border-radius: 50%;
+  translate: -50% 0;
+}
+
+.stage-halo::before {
+  top: 4%;
+  width: min(84vh, 92vw);
+  aspect-ratio: 1;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--accent) 30%, transparent),
+    color-mix(in oklab, var(--accent) 11%, transparent) 56%,
+    transparent
+  );
+  opacity: calc(0.62 + var(--voice) * 0.38);
+  scale: calc(1 + var(--voice) * 0.08);
+  transition:
+    opacity 160ms ease-out,
+    scale 260ms var(--ease-spring);
+}
+
+.stage-halo::after {
+  bottom: -6vh;
+  width: min(90vh, 96vw);
+  height: 26vh;
+  background: radial-gradient(
+    closest-side,
+    color-mix(in oklab, var(--accent) 32%, transparent),
+    color-mix(in oklab, var(--secondary) 6%, transparent) 62%,
+    transparent
+  );
+  opacity: calc(0.55 + var(--voice) * 0.45);
+  transition: opacity 200ms ease-out;
+}
+
+html[data-theme='light'] .stage-halo::before,
+html[data-theme='light'] .stage-halo::after {
+  filter: saturate(0.8);
+  opacity: calc(0.45 + var(--voice) * 0.4);
+}
+
+@keyframes halo-in {
+  from {
+    opacity: 0;
+    transform: translateY(3%) scale(0.94);
+  }
+}
+
 /* ---------- 舞台氛围 ---------- */
 .atmosphere {
   position: absolute;
@@ -348,6 +421,46 @@ html[data-theme='light'] .bg-layer::after {
   opacity: 0.14;
   mix-blend-mode: soft-light;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+
+/* 光尘：小、慢、只动 transform/opacity；光晕是静态的，不逐帧重绘阴影 */
+.mote {
+  position: absolute;
+  left: var(--x);
+  bottom: -3%;
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 calc(var(--s) * 3) var(--c);
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: mote-rise var(--d) linear var(--t) infinite;
+}
+
+@keyframes mote-rise {
+  0% {
+    transform: translate3d(0, 0, 0) scale(0.6);
+    opacity: 0;
+  }
+  14% {
+    opacity: var(--mote-a, 0.42);
+  }
+  50% {
+    transform: translate3d(22px, -54vh, 0) scale(1);
+  }
+  82% {
+    opacity: calc(var(--mote-a, 0.42) * 0.6);
+  }
+  100% {
+    transform: translate3d(-12px, -106vh, 0) scale(0.8);
+    opacity: 0;
+  }
+}
+
+html[data-theme='light'] .mote {
+  --mote-a: 0.3;
+  box-shadow: none;
 }
 
 /* 画面收边，只压舞台不压 UI */
@@ -854,6 +967,7 @@ html[data-theme='light'] .app::after {
   border: 1px solid var(--line);
   border-radius: var(--surface-r);
   background:
+    radial-gradient(240px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
     linear-gradient(180deg, var(--sheen), transparent 62%),
     var(--bubble-ai);
   backdrop-filter: blur(14px) saturate(1.15);
@@ -861,7 +975,17 @@ html[data-theme='light'] .app::after {
   box-shadow: var(--shadow-soft), var(--shadow-inset);
   transition:
     border-color 240ms var(--ease-snap),
-    box-shadow 240ms var(--ease-snap);
+    box-shadow 240ms var(--ease-snap),
+    --sheen-spot 360ms ease;
+}
+
+/* 指针处的受光点：pointerSheen 只给命中的那一块写 --mx/--my 并挂 .sheen-on */
+.sheen-on {
+  --sheen-spot: color-mix(in oklab, var(--accent) 9%, rgba(255, 255, 255, 0.06));
+}
+
+html[data-theme='light'] .sheen-on {
+  --sheen-spot: color-mix(in oklab, var(--accent) 8%, rgba(255, 255, 255, 0.7));
 }
 
 /* 所有消息卡统一占满消息列，宽度不再随内容长短变化；说话人靠色相区分 */
@@ -877,6 +1001,7 @@ html[data-theme='light'] .app::after {
   width: fit-content;
   max-width: 100%;
   background:
+    radial-gradient(240px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
     linear-gradient(180deg, var(--sheen), transparent 62%),
     var(--bubble-human);
   border-color: var(--bubble-human-line);
@@ -1110,11 +1235,79 @@ html[data-theme='light'] .app::after {
   border-top: 1px solid var(--line);
 }
 
-.bubble-text pre {
-  background: var(--inset);
+/* 代码块：一条细标题栏（语言 + 复制）压在代码上方，左侧一道主色细线标出“这是代码” */
+.code-block {
+  position: relative;
+  margin: 8px 0;
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 10px 12px;
+  background: var(--inset);
+  overflow: hidden;
+  animation: content-in 260ms var(--ease-snap);
+}
+
+.code-block::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(180deg, var(--accent), var(--secondary));
+  opacity: 0.7;
+}
+
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(90deg, var(--accent-soft), transparent 70%);
+}
+
+.code-lang {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
+.code-copy {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 1px 9px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 0.72rem;
+  line-height: 1.6;
+  cursor: pointer;
+  transition:
+    color 160ms,
+    background 160ms,
+    border-color 160ms;
+}
+
+@media (hover: hover) {
+  .code-copy:hover {
+    color: var(--ink);
+    background: var(--chip-hover);
+    border-color: var(--line);
+  }
+}
+
+.code-copy.copied {
+  color: var(--ok);
+  border-color: color-mix(in oklab, var(--ok) 35%, transparent);
+  animation: check-pop 360ms var(--ease-spring);
+}
+
+.bubble-text pre {
+  margin: 0;
+  padding: 10px 12px 10px 14px;
   overflow-x: auto;
   font-size: 0.88em;
   scrollbar-width: thin;
@@ -1618,6 +1811,7 @@ html[data-theme='light'] .app::after {
   padding: 8px;
   border-radius: 30px;
   background:
+    radial-gradient(240px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
     linear-gradient(180deg, var(--sheen), transparent 72%),
     var(--glass-strong);
   border: 1px solid var(--line);
@@ -1627,7 +1821,8 @@ html[data-theme='light'] .app::after {
   animation: chrome-rise 620ms 80ms var(--ease-spring) backwards;
   transition:
     border-color 220ms var(--ease-snap),
-    box-shadow 220ms var(--ease-snap);
+    box-shadow 220ms var(--ease-snap),
+    --sheen-spot 360ms ease;
 }
 
 @keyframes chrome-rise {
@@ -2380,7 +2575,16 @@ html[data-theme='light'] .app::after {
   padding: 14px 14px 15px;
   border: 1px solid var(--line);
   border-radius: 18px;
-  background: var(--chip);
+  background:
+    radial-gradient(240px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
+    var(--chip);
+  transition:
+    border-color 240ms var(--ease-snap),
+    --sheen-spot 360ms ease;
+}
+
+.drawer-body section.sheen-on {
+  border-color: var(--line-strong);
 }
 
 /* 抽屉内容错峰落位：一次编排完成，而不是整块同时跳出来 */
@@ -2711,6 +2915,32 @@ html[data-theme='light'] .app::after {
 
 .config-item:disabled {
   opacity: 0.5;
+}
+
+/* 当前角色：主色描边 + 名字前一颗呼应状态点的小灯，切换后一眼看出在用哪套 */
+.config-item.current {
+  border-color: var(--accent-line);
+  background:
+    linear-gradient(90deg, var(--accent-soft), transparent 80%),
+    var(--chip);
+}
+
+.config-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.config-item.current .config-name::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-glow);
+  animation: dot-pop 420ms var(--ease-spring);
 }
 
 .config-file {

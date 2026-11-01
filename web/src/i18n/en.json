@@ -8,6 +8,7 @@
   "chat": {
     "latest": "Jump to latest",
     "copy": "Copy message",
+    "copyCode": "Copy",
     "copied": "Copied"
   },
   "status": {

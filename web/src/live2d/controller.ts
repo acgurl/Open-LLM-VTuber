@@ -4,6 +4,7 @@ import type { Actions, ModelInfo } from '../protocol/types';
 import { cacheModelAssets } from '../services/modelCache';
 import { useSettings } from '../stores/settings';
 import { readSetting, writeSetting } from '../utils/storage';
+import { setVoiceLevel } from './stageFx';
 
 (window as unknown as { PIXI: typeof PIXI }).PIXI = PIXI;
 
@@ -204,10 +205,14 @@ class Live2DController {
 
   setLipSync(v: number) {
     this.lipValue = Math.max(0, Math.min(1, v));
+    setVoiceLevel(this.lipValue);
   }
 
   setSpeaking(speaking: boolean) {
-    if (!speaking) this.lipValue = 0;
+    if (!speaking) {
+      this.lipValue = 0;
+      setVoiceLevel(0);
+    }
   }
 
   applyActions(actions: Actions | null | undefined) {

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConnection } from './stores/connection';
 import { useSettings } from './stores/settings';
@@ -13,6 +13,27 @@ import { HistoryDrawer } from './components/HistoryDrawer';
 import { SettingsDrawer } from './components/SettingsDrawer';
 import { Toasts } from './components/Toasts';
 import { BootScreen } from './components/BootScreen';
+
+// 舞台里缓慢上浮的光尘：位置、大小、周期错开，避免看出循环节拍
+const MOTES = [
+  { x: 8, s: 5, d: 26, t: -3, c: 'var(--accent)' },
+  { x: 19, s: 3, d: 21, t: -14, c: 'var(--secondary)' },
+  { x: 31, s: 4, d: 30, t: -8, c: 'var(--accent)' },
+  { x: 44, s: 2, d: 19, t: -2, c: 'var(--tertiary)' },
+  { x: 57, s: 6, d: 34, t: -20, c: 'var(--accent)' },
+  { x: 68, s: 3, d: 24, t: -11, c: 'var(--secondary)' },
+  { x: 79, s: 4, d: 28, t: -17, c: 'var(--tertiary)' },
+  { x: 91, s: 3, d: 22, t: -6, c: 'var(--accent)' },
+].map(
+  (m) =>
+    ({
+      '--x': `${m.x}%`,
+      '--s': `${m.s}px`,
+      '--d': `${m.d}s`,
+      '--t': `${m.t}s`,
+      '--c': m.c,
+    }) as CSSProperties,
+);
 
 export default function App() {
   const { t } = useTranslation();
@@ -55,7 +76,11 @@ export default function App() {
         />
       )}
       <Live2DStage />
-      <div className="atmosphere" aria-hidden="true" />
+      <div className="atmosphere" aria-hidden="true">
+        {MOTES.map((m, i) => (
+          <i key={i} className="mote" style={m} />
+        ))}
+      </div>
       <TopBar />
       <CameraWindow />
       <ChatOverlay />
