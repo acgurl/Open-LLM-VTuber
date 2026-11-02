@@ -81,6 +81,8 @@ character_config:
         # 'Plus' means that it has the ability to call tools by using OpenAI API.
         use_mcpp: True
         mcp_enabled_servers: ["time", "ddg-search"] # Enabled MCP servers
+        # Max LLM requests per user turn while the model keeps calling tools
+        max_tool_rounds: 10
 
       letta_agent:
         host: 'localhost' # Host address

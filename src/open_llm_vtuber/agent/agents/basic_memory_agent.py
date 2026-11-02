@@ -24,9 +24,10 @@ from ...mcpp.json_detector import StreamJSONDetector
 from ...mcpp.types import ToolCallObject
 from ...mcpp.tool_executor import ToolExecutor
 
-# LLM requests per user turn in a tool loop. A model that keeps asking for tools
-# (or a server that keeps failing) must not loop, and bill, without bound.
-MAX_TOOL_ROUNDS = 10
+# Default for ``basic_memory_agent.max_tool_rounds``: LLM requests per user turn
+# in a tool loop. A model that keeps asking for tools (or a server that keeps
+# failing) must not loop, and bill, without bound.
+DEFAULT_MAX_TOOL_ROUNDS = 10
 TOOL_ROUND_LIMIT_NOTICE = "[Stopped: too many consecutive tool calls]"
 
 
@@ -34,6 +35,7 @@ class BasicMemoryAgent(AgentInterface):
     """Agent with basic chat memory and tool calling support."""
 
     _system: str = "You are a helpful assistant."
+    _max_tool_rounds: int = DEFAULT_MAX_TOOL_ROUNDS
 
     def __init__(
         self,
@@ -49,6 +51,7 @@ class BasicMemoryAgent(AgentInterface):
         tool_manager: ToolManager | None = None,
         tool_executor: ToolExecutor | None = None,
         mcp_prompt_string: str = "",
+        max_tool_rounds: int = DEFAULT_MAX_TOOL_ROUNDS,
     ):
         """Initialize agent with LLM and configuration."""
         super().__init__()
@@ -58,6 +61,7 @@ class BasicMemoryAgent(AgentInterface):
         self._faster_first_response = faster_first_response
         self._segment_method = segment_method
         self._use_mcpp = use_mcpp
+        self._max_tool_rounds = max_tool_rounds
         self.interrupt_method = interrupt_method
         self._tool_prompts = tool_prompts or {}
         self._interrupt_handled = False
@@ -146,6 +150,7 @@ class BasicMemoryAgent(AgentInterface):
             tool_manager=tool_manager,
             tool_executor=tool_executor,
             mcp_prompt_string=mcp_prompt_string,
+            max_tool_rounds=self._max_tool_rounds,
         )
 
     def set_tooling(
@@ -388,7 +393,7 @@ class BasicMemoryAgent(AgentInterface):
         pending_tool_calls = []
         current_assistant_message_content = []
 
-        for _round in range(MAX_TOOL_ROUNDS):
+        for _round in range(self._max_tool_rounds):
             stream = self._llm.chat_completion(messages, self._system, tools=tools)
             pending_tool_calls.clear()
             current_assistant_message_content.clear()
@@ -477,7 +482,7 @@ class BasicMemoryAgent(AgentInterface):
                 self._add_message(current_turn_text, "assistant")
             return
 
-        logger.warning(f"Claude tool loop stopped after {MAX_TOOL_ROUNDS} rounds")
+        logger.warning(f"Claude tool loop stopped after {self._max_tool_rounds} rounds")
         yield TOOL_ROUND_LIMIT_NOTICE
 
     async def _openai_tool_interaction_loop(
@@ -491,7 +496,7 @@ class BasicMemoryAgent(AgentInterface):
         pending_tool_calls: list[ToolCallObject] | list[dict[str, Any]] = []
         current_system_prompt = self._system
 
-        for _round in range(MAX_TOOL_ROUNDS):
+        for _round in range(self._max_tool_rounds):
             if self.prompt_mode_flag:
                 if self._mcp_prompt_string:
                     current_system_prompt = (
@@ -628,7 +633,7 @@ class BasicMemoryAgent(AgentInterface):
                 self._add_message(current_turn_text, "assistant")
             return
 
-        logger.warning(f"OpenAI tool loop stopped after {MAX_TOOL_ROUNDS} rounds")
+        logger.warning(f"OpenAI tool loop stopped after {self._max_tool_rounds} rounds")
         yield TOOL_ROUND_LIMIT_NOTICE
 
     def _chat_function_factory(

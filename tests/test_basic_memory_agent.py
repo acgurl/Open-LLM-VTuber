@@ -1,10 +1,13 @@
 import unittest
 
+from pydantic import ValidationError
+
 from open_llm_vtuber.agent.agents.basic_memory_agent import (
-    MAX_TOOL_ROUNDS,
+    DEFAULT_MAX_TOOL_ROUNDS,
     TOOL_ROUND_LIMIT_NOTICE,
     BasicMemoryAgent,
 )
+from open_llm_vtuber.config_manager.agent import BasicMemoryAgentConfig
 from open_llm_vtuber.mcpp.json_detector import StreamJSONDetector
 from open_llm_vtuber.mcpp.types import ToolCallFunctionObject, ToolCallObject
 
@@ -266,8 +269,35 @@ class ToolLoopTerminationTests(unittest.IsolatedAsyncioTestCase):
 
         items = [item async for item in agent._openai_tool_interaction_loop([], [])]
 
-        self.assertEqual(llm.calls, MAX_TOOL_ROUNDS)
+        self.assertEqual(llm.calls, DEFAULT_MAX_TOOL_ROUNDS)
         self.assertEqual(items[-1], TOOL_ROUND_LIMIT_NOTICE)
+
+    async def test_configured_round_limit_is_used(self):
+        llm = _AlwaysToolLLM()
+        agent = self._agent(llm, _ToolExecutor())
+        agent._max_tool_rounds = 3
+
+        items = [item async for item in agent._openai_tool_interaction_loop([], [])]
+
+        self.assertEqual(llm.calls, 3)
+        self.assertEqual(items[-1], TOOL_ROUND_LIMIT_NOTICE)
+
+
+class MaxToolRoundsConfigTests(unittest.TestCase):
+    def test_default_and_validation(self):
+        config = BasicMemoryAgentConfig(llm_provider="openai_llm")
+        self.assertEqual(config.max_tool_rounds, DEFAULT_MAX_TOOL_ROUNDS)
+        with self.assertRaises(ValidationError):
+            BasicMemoryAgentConfig(llm_provider="openai_llm", max_tool_rounds=0)
+
+    def test_clone_for_session_keeps_limit(self):
+        agent = BasicMemoryAgent(
+            llm=object(), system="s", live2d_model=None, max_tool_rounds=4
+        )
+
+        clone = agent.clone_for_session(system="s")
+
+        self.assertEqual(clone._max_tool_rounds, 4)
 
 
 if __name__ == "__main__":

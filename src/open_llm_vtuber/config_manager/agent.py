@@ -33,6 +33,7 @@ class BasicMemoryAgentConfig(I18nMixin, BaseModel):
     segment_method: Literal["regex", "pysbd"] = Field("pysbd", alias="segment_method")
     use_mcpp: bool | None = Field(False, alias="use_mcpp")
     mcp_enabled_servers: list[str] | None = Field([], alias="mcp_enabled_servers")
+    max_tool_rounds: int = Field(10, ge=1, alias="max_tool_rounds")
 
     DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "llm_provider": Description(
@@ -54,6 +55,10 @@ class BasicMemoryAgentConfig(I18nMixin, BaseModel):
         "mcp_enabled_servers": Description(
             en="List of MCP servers to enable for the agent",
             zh="为智能体启用 MCP 服务器列表",
+        ),
+        "max_tool_rounds": Description(
+            en="Maximum LLM requests per user turn while the model keeps calling tools; the turn stops after that (default: 10)",
+            zh="单轮对话中模型连续调用工具时最多请求 LLM 的次数，超过后停止本轮（默认：10）",
         ),
     }
 
