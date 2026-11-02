@@ -52,7 +52,7 @@ class SiliconFlowTTS(TTSInterface):
                 )
                 return None
             response = requests.request(
-                "POST", self.api_url, json=payload, headers=headers
+                "POST", self.api_url, json=payload, headers=headers, timeout=120
             )
             response.raise_for_status()  # Check the response status code
             with open(cache_file, "wb") as f:
