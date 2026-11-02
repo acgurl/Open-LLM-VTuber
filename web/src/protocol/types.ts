@@ -127,6 +127,7 @@ export type ServerMessage =
       conf_name: string;
       conf_uid: string;
       welcome_message?: string;
+      starter_prompts?: string[];
       client_uid?: string;
     }
   | { type: 'config-switched'; message: string }

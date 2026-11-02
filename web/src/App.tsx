@@ -77,6 +77,7 @@ export default function App() {
       )}
       <Live2DStage />
       <div className="atmosphere" aria-hidden="true">
+        <div className="stage-fog" />
         {MOTES.map((m, i) => (
           <i key={i} className="mote" style={m} />
         ))}

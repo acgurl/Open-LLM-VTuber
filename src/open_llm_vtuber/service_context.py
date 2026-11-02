@@ -831,6 +831,7 @@ class ServiceContext:
             "conf_name": self.character_config.conf_name,
             "conf_uid": self.character_config.conf_uid,
             "welcome_message": self.character_config.welcome_message,
+            "starter_prompts": list(self.character_config.starter_prompts),
         }
         if client_uid is not None:
             payload["client_uid"] = client_uid

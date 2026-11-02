@@ -9,7 +9,8 @@
     "latest": "Jump to latest",
     "copy": "Copy message",
     "copyCode": "Copy",
-    "copied": "Copied"
+    "copied": "Copied",
+    "starters": "Suggested questions"
   },
   "status": {
     "connecting": "Connecting…",

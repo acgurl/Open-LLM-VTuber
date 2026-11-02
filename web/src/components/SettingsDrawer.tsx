@@ -33,6 +33,7 @@ export function SettingsDrawer() {
   const backgroundFiles = useSettings((s) => s.backgroundFiles);
   const configs = useSettings((s) => s.configs);
   const switching = useSettings((s) => s.switching);
+  const configFile = useSettings((s) => s.configFile);
   const pointerInteractive = useSettings((s) => s.pointerInteractive);
   const setPointerInteractive = useSettings((s) => s.setPointerInteractive);
   const scrollToResize = useSettings((s) => s.scrollToResize);
@@ -45,6 +46,10 @@ export function SettingsDrawer() {
   const userId = useConnection((s) => s.userId);
   const confName = useConnection((s) => s.confName);
   const presence = usePresence(open, 220);
+  // 服务端只回角色名；同名预设只标记一个：优先最近切换到的文件，否则取第一个同名项
+  const currentFile =
+    configs.find((c) => c.filename === configFile && c.name === confName)?.filename ??
+    configs.find((c) => c.name === confName)?.filename;
 
   useEffect(() => {
     if (open) {
@@ -90,8 +95,8 @@ export function SettingsDrawer() {
               {configs.map((c) => (
                 <button
                   key={c.filename}
-                  className={`config-item${c.name === confName ? ' current' : ''}`}
-                  aria-current={c.name === confName ? 'true' : undefined}
+                  className={`config-item${c.filename === currentFile ? ' current' : ''}`}
+                  aria-current={c.filename === currentFile ? 'true' : undefined}
                   disabled={switching}
                   onClick={() => switchConfig(c.filename)}
                 >

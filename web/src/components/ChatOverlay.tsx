@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChat, type ChatEntry } from '../stores/chat';
 import { useConnection } from '../stores/connection';
+import { live2d } from '../live2d/controller';
+import { sendText } from '../services/actions';
 import { MessageBubble } from './MessageBubble';
 import { ToolCallCard } from './ToolCallCard';
 
@@ -11,6 +13,9 @@ export function ChatOverlay() {
   const { t } = useTranslation();
   const entries = useChat((s) => s.entries);
   const busy = useConnection((s) => s.busy);
+  const online = useConnection((s) => s.status === 'online');
+  const starterPrompts = useConnection((s) => s.starterPrompts);
+  const shellRef = useRef<HTMLDivElement>(null);
   const ref = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
   const frame = useRef(0);
@@ -24,6 +29,12 @@ export function ChatOverlay() {
   // 刚发出去、还没有任何回答片段时显示输入气泡；一旦有文本或工具卡就收起
   const last = entries[entries.length - 1];
   const awaiting = busy && last?.kind === 'text' && last.role === 'human';
+  // 推荐问题只陪伴空会话：用户一开口（打字、语音或点胶囊）就收起
+  const showStarters =
+    online &&
+    !busy &&
+    starterPrompts.length > 0 &&
+    !entries.some((e) => e.kind === 'text' && e.role === 'human');
 
   // 只有真的还有内容在视区外时才淡出边缘，否则短会话的首尾会被雾化
   const syncFade = (el: HTMLDivElement) => {
@@ -82,6 +93,25 @@ export function ChatOverlay() {
     return () => ro.disconnect();
   }, []);
 
+  // 桌面端聊天列在左侧占一整列，把它的右缘告诉舞台；窄屏聊天面板横跨底部，不让位
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell || typeof ResizeObserver === 'undefined') return;
+    const sync = () => {
+      const rect = shell.getBoundingClientRect();
+      live2d.setReservedLeft(rect.width < window.innerWidth * 0.6 ? rect.right : 0);
+    };
+    const ro = new ResizeObserver(sync);
+    ro.observe(shell);
+    window.addEventListener('resize', sync);
+    sync();
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', sync);
+      live2d.setReservedLeft(0);
+    };
+  }, []);
+
   // 输入气泡出现/消失不经过 entries，需要单独补一次吸底
   useEffect(() => {
     queueSync();
@@ -113,6 +143,7 @@ export function ChatOverlay() {
 
   return (
     <div
+      ref={shellRef}
       className={`chat-shell${fade.top ? ' fade-top' : ''}${fade.bottom ? ' fade-bottom' : ''}`}
     >
       <div className="chat-overlay" ref={ref} onScroll={onScroll}>
@@ -123,6 +154,22 @@ export function ChatOverlay() {
             ) : (
               <ToolCallCard key={e.id} entry={e} />
             ),
+          )}
+          {showStarters && (
+            <div className="starter-row" role="group" aria-label={t('chat.starters')}>
+              {starterPrompts.map((p, i) => (
+                <button
+                  key={p}
+                  type="button"
+                  className="starter-chip"
+                  style={{ animationDelay: `${120 + i * 70}ms` }}
+                  onClick={() => sendText(p)}
+                >
+                  <span className="starter-spark" aria-hidden="true" />
+                  {p}
+                </button>
+              ))}
+            </div>
           )}
           {awaiting && (
             <div className="bubble-row ai typing-row" aria-hidden="true">

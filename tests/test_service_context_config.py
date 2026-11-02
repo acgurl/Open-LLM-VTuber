@@ -47,6 +47,7 @@ class HandleConfigSwitchTests(unittest.IsolatedAsyncioTestCase):
             conf_uid="base",
             character_name="Alt",
             welcome_message="Welcome!",
+            starter_prompts=["How do I apply?"],
         )
         self.websocket = FakeWebSocket()
         self.validated = object()
@@ -97,6 +98,7 @@ class HandleConfigSwitchTests(unittest.IsolatedAsyncioTestCase):
                     "conf_name": "Alt",
                     "conf_uid": "base",
                     "welcome_message": "Welcome!",
+                    "starter_prompts": ["How do I apply?"],
                 },
                 {
                     "type": "config-switched",
@@ -183,7 +185,10 @@ class ModelConfPayloadTests(unittest.TestCase):
         self.context = ServiceContext()
         self.context.live2d_model = SimpleNamespace(model_info={"name": "model"})
         self.context.character_config = SimpleNamespace(
-            conf_name="Conf", conf_uid="conf-uid", welcome_message="Hello"
+            conf_name="Conf",
+            conf_uid="conf-uid",
+            welcome_message="Hello",
+            starter_prompts=[],
         )
 
     def test_payload_includes_client_uid_when_given(self):
@@ -195,6 +200,7 @@ class ModelConfPayloadTests(unittest.TestCase):
                 "conf_name": "Conf",
                 "conf_uid": "conf-uid",
                 "welcome_message": "Hello",
+                "starter_prompts": [],
                 "client_uid": "client",
             },
         )

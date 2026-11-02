@@ -45,6 +45,9 @@ character_config:
   live2d_model_name: 'mao_pro' # The name of Live2D model. Must be the same as the corresponding name in model_dict.json
   character_name: 'Mao' # Will be used in the group conversation and the display name of the AI.
   avatar: 'mao.png' # Suggest using a square image for the avatar. Save it in the avatars folder. Leave blank to use the first letter of the character name as the avatar.
+  # Optional: suggested first questions shown as one-tap chips in an empty new session
+  # starter_prompts:
+  #   - 'What can you do?'
   human_name: 'Human' # Will be used in the group conversation and the display name of the human.
 
   # ============== Prompts ==============

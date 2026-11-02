@@ -4,7 +4,7 @@ import type { Actions, ModelInfo } from '../protocol/types';
 import { cacheModelAssets } from '../services/modelCache';
 import { useSettings } from '../stores/settings';
 import { readSetting, writeSetting } from '../utils/storage';
-import { setVoiceLevel } from './stageFx';
+import { setStageCenter, setVoiceLevel } from './stageFx';
 
 (window as unknown as { PIXI: typeof PIXI }).PIXI = PIXI;
 
@@ -50,7 +50,13 @@ class Live2DController {
   private lipValue = 0;
   private lipSyncIds: string[] = ['ParamMouthOpenY'];
   private mouthKind: 'cubism4' | 'cubism2' | null = null;
-  private resizeHandler = () => this.layout();
+  // pixi 的 resizeTo 把画布尺寸推迟到下一帧才更新；先同步 resize，否则构图会拿到旧的 screen 尺寸
+  private resizeHandler = () => {
+    this.app?.resize();
+    this.layout();
+  };
+  // 左侧聊天列占掉的宽度：人物在剩余空间里取景，避免站在文字后面
+  private reservedLeft = 0;
   private canvas: HTMLCanvasElement | null = null;
   private baseScale = 1;
   private frameCenter = { x: 0, y: 0 };
@@ -525,10 +531,27 @@ class Live2DController {
       y: content.y + content.height / 2,
     };
     this.frameCenter = {
-      x: w / 2,
+      x: this.frameCenterX(w, content.width * this.baseScale),
       y: h * topRatio + (content.height * this.baseScale) / 2,
     };
     this.applyTransform();
+  }
+
+  // 只在聊天列真的挡到人物时右移，而且最多移到剩余空间的正中；宽屏仍然居中
+  private frameCenterX(w: number, contentW: number) {
+    const center = w / 2;
+    const reserved = this.reservedLeft;
+    if (reserved <= 0) return center;
+    const clear = reserved + contentW * 0.4;
+    const roomCenter = reserved + (w - reserved) / 2;
+    return Math.max(center, Math.min(clear, roomCenter));
+  }
+
+  setReservedLeft(px: number) {
+    const next = Math.max(0, Math.round(px));
+    if (next === this.reservedLeft) return;
+    this.reservedLeft = next;
+    this.layout();
   }
 
   private applyTransform() {
@@ -539,6 +562,7 @@ class Live2DController {
     model.scale.set(scale);
     model.x = this.frameCenter.x + this.offset.x - this.contentCenter.x * scale;
     model.y = this.frameCenter.y + this.offset.y - this.contentCenter.y * scale;
+    setStageCenter(this.frameCenter.x + this.offset.x);
   }
 
   private stepZoom() {

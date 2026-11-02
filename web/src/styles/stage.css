@@ -16,7 +16,7 @@
 .stage-halo::after {
   content: '';
   position: absolute;
-  left: 50%;
+  left: var(--stage-x, 50%);
   border-radius: 50%;
   translate: -50% 0;
 }
@@ -35,7 +35,8 @@
   scale: calc(1 + var(--voice) * 0.08);
   transition:
     opacity 160ms ease-out,
-    scale 260ms var(--ease-spring);
+    scale 260ms var(--ease-spring),
+    left 520ms var(--ease-spring);
 }
 
 .stage-halo::after {
@@ -49,7 +50,9 @@
     transparent
   );
   opacity: calc(0.55 + var(--voice) * 0.45);
-  transition: opacity 200ms ease-out;
+  transition:
+    opacity 200ms ease-out,
+    left 520ms var(--ease-spring);
 }
 
 html[data-theme='light'] .stage-halo::before,
@@ -103,6 +106,54 @@ html[data-theme='light'] .stage-halo::after {
   opacity: 0.14;
   mix-blend-mode: soft-light;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.55'/%3E%3C/svg%3E");
+}
+
+/* 地面雾：压在人物下半身前面的一层低雾，把裁在画外的腿脚“沉”进舞台，
+   而不是被视口硬切。两层错速横向漂移，只动 transform。 */
+.stage-fog {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 34vh;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    color-mix(in oklab, var(--bg) 62%, transparent),
+    color-mix(in oklab, var(--bg) 22%, transparent) 46%,
+    transparent
+  );
+  animation: lights-on 1800ms ease-out both;
+}
+
+.stage-fog::before,
+.stage-fog::after {
+  content: '';
+  position: absolute;
+  inset: 18% -30% -10%;
+  background:
+    radial-gradient(28% 46% at 22% 70%, color-mix(in oklab, var(--accent) 9%, transparent), transparent 72%),
+    radial-gradient(34% 52% at 70% 78%, color-mix(in oklab, var(--bg) 40%, transparent), transparent 70%);
+  filter: blur(18px);
+  will-change: transform;
+  animation: fog-drift 38s ease-in-out infinite alternate;
+}
+
+.stage-fog::after {
+  background:
+    radial-gradient(30% 44% at 78% 72%, color-mix(in oklab, var(--secondary) 7%, transparent), transparent 72%),
+    radial-gradient(26% 50% at 34% 84%, color-mix(in oklab, var(--bg) 36%, transparent), transparent 70%);
+  animation-duration: 52s;
+  animation-direction: alternate-reverse;
+}
+
+@keyframes fog-drift {
+  from {
+    transform: translate3d(-6%, 0, 0);
+  }
+  to {
+    transform: translate3d(6%, -4%, 0);
+  }
 }
 
 /* 光尘：小、慢、只动 transform/opacity；光晕是静态的，不逐帧重绘阴影 */

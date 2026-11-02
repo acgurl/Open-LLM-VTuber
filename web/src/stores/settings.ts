@@ -11,6 +11,9 @@ interface SettingsState {
   historyOpen: boolean;
   settingsOpen: boolean;
   switching: boolean; // 角色切换 loading
+  // 最近一次切换成功的预设文件：同名预设（如 conf.yaml 与它的副本）只高亮真正选中的那个
+  configFile: string | null;
+  requestedFile: string | null;
   pointerInteractive: boolean;
   scrollToResize: boolean;
   setTtsOn: (v: boolean) => void;
@@ -21,6 +24,8 @@ interface SettingsState {
   setHistoryOpen: (v: boolean) => void;
   setSettingsOpen: (v: boolean) => void;
   setSwitching: (v: boolean) => void;
+  requestConfig: (file: string) => void;
+  confirmConfig: () => void;
   setPointerInteractive: (v: boolean) => void;
   setScrollToResize: (v: boolean) => void;
 }
@@ -34,6 +39,8 @@ export const useSettings = create<SettingsState>((set) => ({
   historyOpen: false,
   settingsOpen: false,
   switching: false,
+  configFile: null,
+  requestedFile: null,
   pointerInteractive: readSetting('l2d.pointer') !== '0',
   scrollToResize: readSetting('l2d.scroll') !== '0',
   setTtsOn: (ttsOn) => {
@@ -50,6 +57,9 @@ export const useSettings = create<SettingsState>((set) => ({
   setHistoryOpen: (historyOpen) => set({ historyOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setSwitching: (switching) => set({ switching }),
+  requestConfig: (requestedFile) => set({ switching: true, requestedFile }),
+  confirmConfig: () =>
+    set((s) => ({ switching: false, configFile: s.requestedFile ?? s.configFile, requestedFile: null })),
   setPointerInteractive: (pointerInteractive) => {
     writeSetting('l2d.pointer', pointerInteractive ? '1' : '0');
     set({ pointerInteractive });

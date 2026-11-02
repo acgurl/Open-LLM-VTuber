@@ -46,6 +46,9 @@ export function handleServerMessage(msg: ServerMessage) {
       }
       conn.setModelConf(msg.model_info ?? {}, msg.conf_name ?? '', msg.conf_uid ?? '');
       conn.setWelcomeMessage(msg.welcome_message ?? '');
+      conn.setStarterPrompts(
+        (msg.starter_prompts ?? []).filter((p) => typeof p === 'string' && p.trim() !== ''),
+      );
       saveCachedModel(msg.model_info ?? null);
       void live2d.load(msg.model_info ?? null);
       break;
@@ -155,8 +158,7 @@ export function handleServerMessage(msg: ServerMessage) {
       break;
 
     case 'config-switched': {
-      const settings = useSettings.getState();
-      settings.setSwitching(false);
+      useSettings.getState().confirmConfig();
       chat.clear();
       audioPlayer.stopAll();
       toast(translateServer(msg.message), 'success');

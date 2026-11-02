@@ -16,6 +16,7 @@ interface ConnectionState {
   confName: string;
   confUid: string;
   welcomeMessage: string; // 角色配置里的纯文本欢迎语（不朗读）
+  starterPrompts: string[]; // 角色配置里的推荐问题，空会话时一键发送
   displayName: string; // 登录用户显示名
   userId: string; // 登录用户内部 ID（角色 allowed_users 用）
   statusText: string; // full-text 状态提示（Thinking... 等）
@@ -24,6 +25,7 @@ interface ConnectionState {
   setClientUid: (uid: string | null) => void;
   setModelConf: (info: ModelInfo, confName: string, confUid: string) => void;
   setWelcomeMessage: (m: string) => void;
+  setStarterPrompts: (p: string[]) => void;
   setDisplayName: (n: string) => void;
   setUserId: (id: string) => void;
   setStatusText: (t: string) => void;
@@ -37,6 +39,7 @@ export const useConnection = create<ConnectionState>((set) => ({
   confName: '',
   confUid: '',
   welcomeMessage: '',
+  starterPrompts: [],
   displayName: '',
   userId: '',
   statusText: '',
@@ -45,6 +48,7 @@ export const useConnection = create<ConnectionState>((set) => ({
   setClientUid: (clientUid) => set({ clientUid }),
   setModelConf: (modelInfo, confName, confUid) => set({ modelInfo, confName, confUid }),
   setWelcomeMessage: (welcomeMessage) => set({ welcomeMessage }),
+  setStarterPrompts: (starterPrompts) => set({ starterPrompts }),
   setDisplayName: (displayName) => set({ displayName }),
   setUserId: (userId) => set({ userId }),
   setStatusText: (statusText) =>
