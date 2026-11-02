@@ -181,6 +181,8 @@ class Live2DController {
           /* ignore */
         }
       }
+      this.applyFocusScale(internal, info?.focusScale);
+      this.applyBreathScale(internal, info?.breathScale);
       this.measureContent();
       this.layout();
       void cacheModelAssets(url);
@@ -192,6 +194,39 @@ class Live2DController {
       }
     } finally {
       if (seq === this.loadSeq) this.loadingUrl = null;
+    }
+  }
+
+  // 鼠标跟踪会在动作之上再叠加头部 ±30° / 身体 ±10°；按模型的 focusScale 缩小头身转动，
+  // 眼球仍按原幅度跟随。只对 Cubism 4 生效，缺省或 >= 1 时不改动。
+  private applyFocusScale(internal: Record<string, any>, scale: number | undefined) {
+    if (typeof scale !== 'number' || !(scale >= 0 && scale < 1)) return;
+    if (typeof internal?.updateFocus !== 'function' || !internal.focusController) return;
+    const original = internal.updateFocus.bind(internal) as () => void;
+    internal.updateFocus = () => {
+      const fc = internal.focusController as { x: number; y: number };
+      const { x, y } = fc;
+      fc.x = x * scale;
+      fc.y = y * scale;
+      original();
+      fc.x = x;
+      fc.y = y;
+      const core = internal.coreModel;
+      core.addParameterValueById(internal.idParamEyeBallX, x - x * scale);
+      core.addParameterValueById(internal.idParamEyeBallY, y - y * scale);
+    };
+  }
+
+  // 运行时自带的“呼吸”会给头身角度叠加持续的正弦摆动；自带待机摆动的模型可用 breathScale 缩小它
+  // （只缩角度，不动 ParamBreath 本身）。
+  private applyBreathScale(internal: Record<string, any>, scale: number | undefined) {
+    if (typeof scale !== 'number' || !(scale >= 0 && scale < 1)) return;
+    const params = internal?.breath?.getParameters?.() as
+      | { parameterId: unknown; peak: number }[]
+      | undefined;
+    if (!Array.isArray(params)) return;
+    for (const p of params) {
+      if (p.parameterId !== internal.idParamBreath) p.peak *= scale;
     }
   }
 

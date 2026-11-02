@@ -665,6 +665,8 @@ LLM 被提示在句子里插入方括号关键字（提示词 `prompts/utils/liv
 | `idleMotionGroupName` | string | 待机动作组名，如 `"Idle"` |
 | `frameHeightRatio` | number（可选） | 构图覆盖：可见轮廓高度 = 视口高度 × 该值，默认 `1.39`。半身像等轮廓较矮的模型调小（如 `0.86`）即可拉远 |
 | `frameTopRatio` | number（可选） | 构图覆盖：轮廓顶部在视口中的位置比例，默认 `0.12` |
+| `focusScale` | number（可选） | 鼠标跟踪时头部/身体转动的缩放（0–1，缺省 `1` 不缩放）；眼球仍完全跟随。头部形变敏感的模型调小（如 `0.5`） |
+| `breathScale` | number（可选） | 运行时自带“呼吸”摆动叠加到头部/身体角度上的幅度缩放（0–1，缺省 `1`）；自带待机摆动的模型调小以免晃动叠加 |
 | `defaultEmotion` | number / string（可选） | 一轮对话结束后回落的表情；缺省使用第 0 个表情 |
 | `emotionMap` | object | 情绪关键字 → **表情索引（int）**。可为 `{}` |
 | `motionMap` | object | 动作关键字 → `{"group": string, "index"?: int}`。可为 `{}` |
