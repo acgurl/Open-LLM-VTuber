@@ -4,7 +4,6 @@ from typing import ClassVar
 from .i18n import I18nMixin, Description
 from .asr import ASRConfig
 from .tts import TTSConfig
-from .vad import VADConfig
 from .tts_preprocessor import TTSPreprocessorConfig
 
 from .agent import AgentConfig
@@ -27,7 +26,6 @@ class CharacterConfig(I18nMixin):
     agent_config: AgentConfig = Field(..., alias="agent_config")
     asr_config: ASRConfig = Field(..., alias="asr_config")
     tts_config: TTSConfig = Field(..., alias="tts_config")
-    vad_config: VADConfig = Field(..., alias="vad_config")
     tts_preprocessor_config: TTSPreprocessorConfig = Field(
         ..., alias="tts_preprocessor_config"
     )
@@ -57,9 +55,6 @@ class CharacterConfig(I18nMixin):
         ),
         "tts_config": Description(
             en="Configuration for Text-to-Speech", zh="语音合成配置"
-        ),
-        "vad_config": Description(
-            en="Configuration for Voice Activity Detection", zh="语音活动检测配置"
         ),
         "tts_preprocessor_config": Description(
             en="Configuration for Text-to-Speech Preprocessor",

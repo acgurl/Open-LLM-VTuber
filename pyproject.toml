@@ -18,8 +18,8 @@ dependencies = [
     "loguru>=0.7.2",
     "mcp[cli]>=1.6.0",
     "numpy>=1.26.4,<2",
-    "onnxruntime>=1.20.1",
     "openai>=1.57.4",
+    "packaging>=24.0",
     "pre-commit>=4.1.0",
     "pydub>=0.25.1",
     "pysbd>=0.3.4",
@@ -29,14 +29,8 @@ dependencies = [
     "requests>=2.32.3",
     "ruamel-yaml>=0.18.10",
     "ruff>=0.8.6",
-    "scipy>=1.14.1",
-    "sherpa-onnx>=1.10.39",
     "soundfile>=0.12.1",
     "tomli>=2.2.1",
-    "torch==2.2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
-    "torch>=2.6.0; sys_platform == 'darwin' and platform_machine == 'arm64'",
-    "torch>=2.6.0; sys_platform != 'darwin'",
-    "tqdm>=4.67.1",
     "uvicorn[standard]>=0.33.0",
     "websocket-client>=1.8.0",
     "letta-client>=0.1.100",
@@ -49,17 +43,6 @@ bilibili = [
     "Brotli~=1.1.0",
     "yarl>=1.12.0,<2.0"
 ]
-
-[tool.pixi.project]
-channels = ["conda-forge"]
-platforms = ["win-64", "linux-64"]
-
-[tool.pixi.pypi-dependencies]
-open-llm-vtuber = { path = ".", editable = true }
-
-[tool.pixi.dependencies]
-cudnn = ">=8.0,<9"
-cudatoolkit = ">=11.0,<12"
 
 [tool.ruff]
 target-version = "py310"

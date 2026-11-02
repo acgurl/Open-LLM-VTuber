@@ -1,4 +1,3 @@
-import os
 import sys
 import atexit
 import shutil
@@ -12,9 +11,6 @@ from upgrade_codes.upgrade_manager import UpgradeManager
 
 from src.open_llm_vtuber.server import WebSocketServer
 from src.open_llm_vtuber.config_manager import Config, read_yaml, validate_config
-
-os.environ["HF_HOME"] = str(Path(__file__).parent / "models")
-os.environ["MODELSCOPE_CACHE"] = str(Path(__file__).parent / "models")
 
 upgrade_manager = UpgradeManager()
 
@@ -86,9 +82,6 @@ def ensure_mcp_config(config_path: Path = Path("mcp_servers.json")) -> None:
 def parse_args():
     parser = argparse.ArgumentParser(description="Open-LLM-VTuber Server")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
-    parser.add_argument(
-        "--hf_mirror", action="store_true", help="Use Hugging Face mirror"
-    )
     return parser.parse_args()
 
 
@@ -152,6 +145,4 @@ if __name__ == "__main__":
         logger.info(
             "Running in standard mode. For detailed debug logs, use: uv run run_server.py --verbose"
         )
-    if args.hf_mirror:
-        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
     run(console_log_level=console_log_level)

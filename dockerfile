@@ -42,7 +42,7 @@ RUN printf '%s\n' \
   '#!/usr/bin/env sh' \
   'set -eu' \
   '' \
-  'mkdir -p /app/conf /app/models' \
+  'mkdir -p /app/conf' \
   '' \
   '# 1) conf.yaml (required)' \
   'if [ -f "/app/conf/conf.yaml" ]; then' \
@@ -84,7 +84,7 @@ RUN printf '%s\n' \
   > /usr/local/bin/start-app && chmod +x /usr/local/bin/start-app
 
 # Volumes
-VOLUME ["/app/conf", "/app/models"]
+VOLUME ["/app/conf"]
 
 EXPOSE 12393
 

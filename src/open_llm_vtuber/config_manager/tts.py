@@ -140,18 +140,6 @@ class AzureTTSConfig(I18nMixin):
     }
 
 
-class BarkTTSConfig(I18nMixin):
-    """Configuration for Bark TTS."""
-
-    voice: str = Field(..., alias="voice")
-
-    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
-        "voice": Description(
-            en="Voice name to use for Bark TTS", zh="Bark TTS 使用的语音名称"
-        ),
-    }
-
-
 class EdgeTTSConfig(I18nMixin):
     """Configuration for Edge TTS."""
 
@@ -212,30 +200,6 @@ class Cosyvoice2TTSConfig(CosyvoiceBaseConfig):
     DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         **CosyvoiceBaseConfig.DESCRIPTIONS,
         "stream": Description(en="Streaming inference", zh="流式推理"),
-        "speed": Description(en="Speech speed multiplier", zh="语速倍数"),
-    }
-
-
-class MeloTTSConfig(I18nMixin):
-    """Configuration for Melo TTS."""
-
-    speaker: str = Field(..., alias="speaker")
-    language: str = Field(..., alias="language")
-    device: str = Field("auto", alias="device")
-    speed: float = Field(1.0, alias="speed")
-
-    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
-        "speaker": Description(
-            en="Speaker name (e.g., EN-Default, ZH)",
-            zh="说话人名称（如 EN-Default、ZH）",
-        ),
-        "language": Description(
-            en="Language code (e.g., EN, ZH)", zh="语言代码（如 EN、ZH）"
-        ),
-        "device": Description(
-            en="Device to use (auto, cpu, cuda, cuda:0, mps)",
-            zh="使用的设备（auto、cpu、cuda、cuda:0、mps）",
-        ),
         "speed": Description(en="Speech speed multiplier", zh="语速倍数"),
     }
 
@@ -314,81 +278,6 @@ class FishAPITTSConfig(I18nMixin):
         "base_url": Description(
             en="Base URL for Fish TTS API", zh="Fish TTS API 的基础 URL"
         ),
-    }
-
-
-class CoquiTTSConfig(I18nMixin):
-    """Configuration for Coqui TTS."""
-
-    model_name: str = Field(..., alias="model_name")
-    speaker_wav: str = Field("", alias="speaker_wav")
-    language: str = Field(..., alias="language")
-    device: str = Field("", alias="device")
-
-    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
-        "model_name": Description(
-            en="Name of the TTS model to use", zh="要使用的 TTS 模型名称"
-        ),
-        "speaker_wav": Description(
-            en="Path to speaker WAV file for voice cloning",
-            zh="用于声音克隆的说话人音频文件路径",
-        ),
-        "language": Description(
-            en="Language code (e.g., en, zh)", zh="语言代码（如 en、zh）"
-        ),
-        "device": Description(
-            en="Device to use (cuda, cpu, or empty for auto)",
-            zh="使用的设备（cuda、cpu 或留空以自动选择）",
-        ),
-    }
-
-
-class SherpaOnnxTTSConfig(I18nMixin):
-    """Configuration for Sherpa Onnx TTS."""
-
-    vits_model: str = Field(..., alias="vits_model")
-    vits_lexicon: str | None = Field(None, alias="vits_lexicon")
-    vits_tokens: str = Field(..., alias="vits_tokens")
-    vits_data_dir: str | None = Field(None, alias="vits_data_dir")
-    vits_dict_dir: str | None = Field(None, alias="vits_dict_dir")
-    tts_rule_fsts: str | None = Field(None, alias="tts_rule_fsts")
-    max_num_sentences: int = Field(2, alias="max_num_sentences")
-    sid: int = Field(1, alias="sid")
-    provider: Literal["cpu", "cuda", "coreml"] = Field("cpu", alias="provider")
-    num_threads: int = Field(1, alias="num_threads")
-    speed: float = Field(1.0, alias="speed")
-    debug: bool = Field(False, alias="debug")
-
-    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
-        "vits_model": Description(en="Path to VITS model file", zh="VITS 模型文件路径"),
-        "vits_lexicon": Description(
-            en="Path to lexicon file (optional)", zh="词典文件路径（可选）"
-        ),
-        "vits_tokens": Description(en="Path to tokens file", zh="词元文件路径"),
-        "vits_data_dir": Description(
-            en="Path to espeak-ng data directory (optional)",
-            zh="espeak-ng 数据目录路径（可选）",
-        ),
-        "vits_dict_dir": Description(
-            en="Path to Jieba dictionary directory (optional)",
-            zh="结巴词典目录路径（可选）",
-        ),
-        "tts_rule_fsts": Description(
-            en="Path to rule FSTs file (optional)", zh="规则 FST 文件路径（可选）"
-        ),
-        "max_num_sentences": Description(
-            en="Maximum number of sentences per batch", zh="每批次最大句子数"
-        ),
-        "sid": Description(
-            en="Speaker ID for multi-speaker models", zh="多说话人模型的说话人 ID"
-        ),
-        "provider": Description(
-            en="Computation provider (cpu, cuda, or coreml)",
-            zh="计算提供者（cpu、cuda 或 coreml）",
-        ),
-        "num_threads": Description(en="Number of computation threads", zh="计算线程数"),
-        "speed": Description(en="Speech speed multiplier", zh="语速倍数"),
-        "debug": Description(en="Enable debug mode", zh="启用调试模式"),
     }
 
 
@@ -525,53 +414,6 @@ class MinimaxTTSConfig(I18nMixin):
     }
 
 
-class PiperTTSConfig(I18nMixin):
-    """Configuration for Piper TTS."""
-
-    model_path: str = Field("models/piper/zh_CN-huayan-medium.onnx", alias="model_path")
-    speaker_id: int = Field(0, alias="speaker_id")
-    length_scale: float = Field(1.0, alias="length_scale")
-    noise_scale: float = Field(0.667, alias="noise_scale")
-    noise_w: float = Field(0.8, alias="noise_w")
-    volume: float = Field(1.0, alias="volume")
-    normalize_audio: bool = Field(True, alias="normalize_audio")
-    use_cuda: bool = Field(False, alias="use_cuda")
-
-    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
-        "model_path": Description(
-            en="Path to Piper ONNX model file",
-            zh="Piper ONNX 模型文件路径",
-        ),
-        "speaker_id": Description(
-            en="Speaker ID for multi-speaker models (default 0 for single-speaker)",
-            zh="多说话人模型的说话人 ID（单说话人模型默认为 0）",
-        ),
-        "length_scale": Description(
-            en="Speech speed control (0.5=2x faster, 1.0=normal, 2.0=2x slower)",
-            zh="语速控制（0.5=快一倍，1.0=正常，2.0=慢一倍）",
-        ),
-        "noise_scale": Description(
-            en="Audio variation degree (0.0-1.0, higher=more varied)",
-            zh="音频变化程度（0.0-1.0，越高音频越丰富多变）",
-        ),
-        "noise_w": Description(
-            en="Speaking style variation (0.0-1.0, higher=more diverse)",
-            zh="说话风格变化（0.0-1.0，越高说话风格越多样）",
-        ),
-        "volume": Description(
-            en="Output volume (0.0-1.0, 1.0=normal)", zh="音量（0.0-1.0，1.0=正常音量）"
-        ),
-        "normalize_audio": Description(
-            en="Whether to normalize audio output (recommended)",
-            zh="是否归一化音频输出（推荐启用）",
-        ),
-        "use_cuda": Description(
-            en="Whether to use GPU acceleration (requires onnxruntime-gpu)",
-            zh="是否使用 GPU 加速（需要安装 onnxruntime-gpu）",
-        ),
-    }
-
-
 class ElevenLabsTTSConfig(I18nMixin):
     """Configuration for ElevenLabs TTS."""
 
@@ -669,23 +511,18 @@ class CartesiaTTSConfig(I18nMixin):
 
 _TTS_CONFIG_FIELDS = {
     "azure_tts": "azure_tts",
-    "bark_tts": "bark_tts",
     "edge_tts": "edge_tts",
     "cosyvoice_tts": "cosyvoice_tts",
     "cosyvoice2_tts": "cosyvoice2_tts",
-    "melo_tts": "melo_tts",
-    "coqui_tts": "coqui_tts",
     "x_tts": "x_tts",
     "gpt_sovits_tts": "gpt_sovits_tts",
     "fish_api_tts": "fish_api_tts",
-    "sherpa_onnx_tts": "sherpa_onnx_tts",
     "siliconflow_tts": "siliconflow_tts",
     "openai_tts": "openai_tts",
     "spark_tts": "spark_tts",
     "minimax_tts": "minimax_tts",
     "elevenlabs_tts": "elevenlabs_tts",
     "cartesia_tts": "cartesia_tts",
-    "piper_tts": "piper_tts",
 }
 
 
@@ -694,51 +531,40 @@ class TTSConfig(I18nMixin):
 
     tts_model: Literal[
         "azure_tts",
-        "bark_tts",
         "edge_tts",
         "pyttsx3_tts",
         "cosyvoice_tts",
         "cosyvoice2_tts",
-        "melo_tts",
-        "coqui_tts",
         "x_tts",
         "gpt_sovits_tts",
         "fish_api_tts",
-        "sherpa_onnx_tts",
         "siliconflow_tts",
         "openai_tts",  # Add openai_tts here
         "spark_tts",
         "minimax_tts",
         "elevenlabs_tts",
         "cartesia_tts",
-        "piper_tts",
     ] = Field(..., alias="tts_model")
 
     azure_tts: AzureTTSConfig | None = Field(None, alias="azure_tts")
-    bark_tts: BarkTTSConfig | None = Field(None, alias="bark_tts")
     edge_tts: EdgeTTSConfig | None = Field(None, alias="edge_tts")
     cosyvoice_tts: CosyvoiceTTSConfig | None = Field(None, alias="cosyvoice_tts")
     cosyvoice2_tts: Cosyvoice2TTSConfig | None = Field(None, alias="cosyvoice2_tts")
-    melo_tts: MeloTTSConfig | None = Field(None, alias="melo_tts")
-    coqui_tts: CoquiTTSConfig | None = Field(None, alias="coqui_tts")
     x_tts: XTTSConfig | None = Field(None, alias="x_tts")
     gpt_sovits_tts: GPTSoVITSConfig | None = Field(None, alias="gpt_sovits")
     fish_api_tts: FishAPITTSConfig | None = Field(None, alias="fish_api_tts")
-    sherpa_onnx_tts: SherpaOnnxTTSConfig | None = Field(None, alias="sherpa_onnx_tts")
     siliconflow_tts: SiliconFlowTTSConfig | None = Field(None, alias="siliconflow_tts")
     openai_tts: OpenAITTSConfig | None = Field(None, alias="openai_tts")
     spark_tts: SparkTTSConfig | None = Field(None, alias="spark_tts")
     minimax_tts: MinimaxTTSConfig | None = Field(None, alias="minimax_tts")
     elevenlabs_tts: ElevenLabsTTSConfig | None = Field(None, alias="elevenlabs_tts")
     cartesia_tts: CartesiaTTSConfig | None = Field(None, alias="cartesia_tts")
-    piper_tts: PiperTTSConfig | None = Field(None, alias="piper_tts")
 
     DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "tts_model": Description(
             en="Text-to-speech model to use", zh="要使用的文本转语音模型"
         ),
         "azure_tts": Description(en="Configuration for Azure TTS", zh="Azure TTS 配置"),
-        "bark_tts": Description(en="Configuration for Bark TTS", zh="Bark TTS 配置"),
         "edge_tts": Description(en="Configuration for Edge TTS", zh="Edge TTS 配置"),
         "cosyvoice_tts": Description(
             en="Configuration for Cosyvoice TTS", zh="Cosyvoice TTS 配置"
@@ -746,17 +572,12 @@ class TTSConfig(I18nMixin):
         "cosyvoice2_tts": Description(
             en="Configuration for Cosyvoice2 TTS", zh="Cosyvoice2 TTS 配置"
         ),
-        "melo_tts": Description(en="Configuration for Melo TTS", zh="Melo TTS 配置"),
-        "coqui_tts": Description(en="Configuration for Coqui TTS", zh="Coqui TTS 配置"),
         "x_tts": Description(en="Configuration for XTTS", zh="XTTS 配置"),
         "gpt_sovits_tts": Description(
             en="Configuration for GPT-SoVITS", zh="GPT-SoVITS 配置"
         ),
         "fish_api_tts": Description(
             en="Configuration for Fish API TTS", zh="Fish API TTS 配置"
-        ),
-        "sherpa_onnx_tts": Description(
-            en="Configuration for Sherpa Onnx TTS", zh="Sherpa Onnx TTS 配置"
         ),
         "siliconflow_tts": Description(
             en="Configuration for SiliconFlow TTS", zh="SiliconFlow TTS 配置"
@@ -774,7 +595,6 @@ class TTSConfig(I18nMixin):
         "cartesia_tts": Description(
             en="Configuration for Cartesia TTS", zh="Cartesia TTS 配置"
         ),
-        "piper_tts": Description(en="Configuration for Piper TTS", zh="Piper TTS 配置"),
     }
 
     @model_validator(mode="after")

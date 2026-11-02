@@ -7,38 +7,6 @@ import numpy as np
 
 from open_llm_vtuber.asr import azure_asr
 from open_llm_vtuber.asr.azure_asr import VoiceRecognition as AzureASR
-from open_llm_vtuber.asr.sherpa_onnx_asr import (
-    VoiceRecognition as SherpaOnnxASR,
-)
-
-
-class SherpaModelPathTests(unittest.TestCase):
-    def setUp(self):
-        self.engine = SherpaOnnxASR.__new__(SherpaOnnxASR)
-        self.engine.model_type = "sense_voice"
-        self.engine.tokens = "tokens.txt"
-        self.engine.num_threads = 1
-        self.engine.use_itn = True
-        self.engine.debug = False
-        self.engine.provider = "cpu"
-
-    def test_missing_sense_voice_path_raises_clear_error(self):
-        self.engine.sense_voice = None
-
-        with self.assertRaises(FileNotFoundError):
-            self.engine._create_recognizer()
-
-    def test_missing_custom_sense_voice_path_raises_clear_error(self):
-        self.engine.sense_voice = "/missing/model.onnx"
-
-        with self.assertRaises(FileNotFoundError):
-            self.engine._create_recognizer()
-
-    def test_unknown_model_type_is_rejected(self):
-        self.engine.model_type = "unknown"
-
-        with self.assertRaises(ValueError):
-            self.engine._create_recognizer()
 
 
 class AzureConfigTests(unittest.TestCase):

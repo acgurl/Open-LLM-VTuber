@@ -64,7 +64,7 @@ character_config:
         temperature: 0.5
 ```
 
-**Note:** Any configuration blocks not specified in this file (e.g., `asr_config`, `vad_config`, etc.) will be automatically inherited from the main `conf.yaml` file.
+**Note:** Any configuration blocks not specified in this file (e.g., `asr_config`, `tts_config`, etc.) will be automatically inherited from the main `conf.yaml` file.
 
 -----
 
@@ -103,7 +103,7 @@ Here is a breakdown of the core fields under `character_config`:
 
       - **Purpose**: **The core of your character\!** This is the system prompt that defines the character's personality, background, speaking style, and code of conduct. This is the most critical part of shaping your character's soul.
 
-  - `asr_config`, `tts_config`, `agent_config`, `vad_config`:
+  - `asr_config`, `tts_config`, `agent_config`:
 
       - **Purpose**: These configuration blocks are used to override the corresponding settings in the main `conf.yaml`. You can assign a different ASR model, TTS engine, LLM, or VAD parameters for each character.
 

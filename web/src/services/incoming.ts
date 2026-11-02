@@ -75,10 +75,7 @@ export function handleServerMessage(msg: ServerMessage) {
         chat.finalizeStream();
         conn.setBusy(false);
         conn.setStatusText('');
-      } else if (msg.text === 'interrupt') {
-        audioPlayer.stopAll();
       }
-      // mic-audio-end 是服务端 VAD 路径的提示，本前端用前端 VAD，忽略
       break;
     }
 

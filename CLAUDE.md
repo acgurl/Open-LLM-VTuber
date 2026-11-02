@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Open-LLM-VTuber is a voice-interactive AI companion with Live2D avatar support that runs completely offline. It's a cross-platform Python application supporting real-time voice conversations, visual perception, and Live2D character animations. The project features modular architecture for LLM, ASR (Automatic Speech Recognition), TTS (Text-to-Speech), and other components.
+Open-LLM-VTuber is a voice-interactive AI companion with Live2D avatar support, served as a self-hosted web app (ASR is cloud-only; the backend runs no ASR/TTS/VAD models in-process). It's a cross-platform Python application supporting real-time voice conversations, visual perception, and Live2D character animations. The project features modular architecture for LLM, ASR (Automatic Speech Recognition), TTS (Text-to-Speech), and other components.
 
 ## Essential Commands
 
@@ -35,7 +35,7 @@ Open-LLM-VTuber is a voice-interactive AI companion with Live2D avatar support t
 
 **Service Context** (`src/open_llm_vtuber/service_context.py`):
 - Central dependency injection container
-- Manages all engines (LLM, ASR, TTS, VAD, etc.)
+- Manages all engines (LLM, ASR, TTS, translation, etc.)
 - Each WebSocket connection gets its own service context instance
 
 **WebSocket Handler** (`src/open_llm_vtuber/websocket_handler.py`):
@@ -53,16 +53,16 @@ The project uses a factory pattern for all AI engines:
 - `stateless_llm/` - Stateless LLM implementations (Claude, OpenAI, Ollama, etc.)
 
 **ASR Engines** (`src/open_llm_vtuber/asr/`):
-- Support for multiple ASR backends: Sherpa-ONNX, FunASR, Faster-Whisper, OpenAI Whisper, etc.
+- Cloud ASR backends only: Groq Whisper and Azure (in-process local models were removed)
 - Factory pattern for engine selection based on configuration
 
 **TTS Engines** (`src/open_llm_vtuber/tts/`):
-- Multiple TTS options: Azure TTS, Edge TTS, MeloTTS, CosyVoice, GPT-SoVITS, etc.
+- Cloud TTS (Azure, Edge, OpenAI-compatible, ElevenLabs, ...) plus HTTP clients for self-hosted servers (GPT-SoVITS, CosyVoice, XTTS, Spark); no in-process TTS models
 - Configurable voice cloning and multi-language support
 
-**VAD (Voice Activity Detection)** (`src/open_llm_vtuber/vad/`):
-- Silero VAD for detecting speech activity
-- Essential for voice interruption without feedback loops
+**VAD (Voice Activity Detection)**:
+- Runs in the browser only (`@ricky0123/vad-web` in `web/src/services/mic.ts`), which sends `mic-audio-data` + `mic-audio-end`
+- The server-side Silero VAD, `vad_config` and the `raw-audio-data` message were removed
 
 ### Configuration Management
 

@@ -115,9 +115,7 @@ export interface ConfigFileEntry {
 
 export type ControlText =
   | 'conversation-chain-start'
-  | 'conversation-chain-end'
-  | 'interrupt'
-  | 'mic-audio-end';
+  | 'conversation-chain-end';
 
 export type ServerMessage =
   | { type: 'full-text'; text: string }
@@ -175,7 +173,6 @@ export type ClientMessage =
   | { type: 'text-input'; text: string; images?: ImagePayload[] }
   | { type: 'mic-audio-end'; images?: ImagePayload[] }
   | { type: 'mic-audio-data'; audio: number[] }
-  | { type: 'raw-audio-data'; audio: number[] }
   | { type: 'ai-speak-signal' }
   | { type: 'interrupt-signal'; text: string }
   | { type: 'frontend-playback-complete' }

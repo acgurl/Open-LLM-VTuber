@@ -6,7 +6,6 @@ from pydantic import ValidationError
 from open_llm_vtuber.config_manager import read_yaml, validate_config
 from open_llm_vtuber.config_manager.asr import ASRConfig
 from open_llm_vtuber.config_manager.tts import TTSConfig
-from open_llm_vtuber.config_manager.vad import VADConfig
 
 TEMPLATE = (
     Path(__file__).resolve().parents[1] / "config_templates" / "conf.default.yaml"
@@ -23,12 +22,6 @@ class SelectedModelConfigTests(unittest.TestCase):
     def test_asr_requires_config_for_selected_model(self):
         with self.assertRaises(ValidationError) as raised:
             ASRConfig(asr_model="azure_asr")
-
-        self.assertIn("Missing configuration", str(raised.exception))
-
-    def test_vad_requires_config_for_selected_model(self):
-        with self.assertRaises(ValidationError) as raised:
-            VADConfig(vad_model="silero_vad")
 
         self.assertIn("Missing configuration", str(raised.exception))
 

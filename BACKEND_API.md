@@ -1,6 +1,6 @@
 # Open-LLM-VTuber 后端接口文档（面向新前端实现）
 
-基线：本仓库 `main` 分支，2026-10-23 代码状态（父仓库提交 `32840ac`），**含 2026-10-23 的服务端 VAD 采样归一化修复**（`websocket_handler.py:679-685`）；**2026-10-25 增加按用户 MCP 与浏览器本地 MCP**（见[第 22 节](#22-用户-mcp-与浏览器本地-mcp2026-10-25)）。
+基线：本仓库 `main` 分支，2026-10-23 代码状态（父仓库提交 `32840ac`），**2026-10-25 增加按用户 MCP 与浏览器本地 MCP**（见[第 22 节](#22-用户-mcp-与浏览器本地-mcp2026-10-25)）。
 读者：要从零写一个 Web/桌面前端的人。本文只描述**后端对外契约**，不描述现有 React 前端的实现。
 所有字段名、常量、路径均与源码逐条核对，引用格式为 `文件:行号`。**2026-10-25 的用户/本地 MCP 改动在部分文件顶部新增了 import、常量和 schema，旧章节的行号可能整体偏移；字段与常量语义未变，行号以当前源码为准。**
 
@@ -235,20 +235,12 @@ Cookie（`auth/manager.py`）：
 | type | 字段 | 说明 |
 | --- | --- | --- |
 | `mic-audio-data` | `audio`: number[] | 追加到该连接的录音缓冲。非数组或空数组被静默忽略（`websocket_handler.py:617-639`） |
-| `raw-audio-data` | `audio`: number[] | 交给**服务端 VAD**（Silero）处理；VAD 未启用时静默丢弃（`websocket_handler.py:655-686`） |
 
-音频格式（两条路径相同）：**16000 Hz、单声道、float32 语义、取值 [-1.0, 1.0]**，以 JSON 数字数组传输（无 base64、无字节流）。采样率常量 `ASR_SAMPLE_RATE = 16000`（`utils/audio.py:16`）。
+音频格式：**16000 Hz、单声道、float32 语义、取值 [-1.0, 1.0]**，以 JSON 数字数组传输（无 base64、无字节流）。采样率常量 `ASR_SAMPLE_RATE = 16000`（`utils/audio.py:16`）。
 
 缓冲上限 `MAX_AUDIO_SAMPLES = 16000 * 120 = 1,920,000` 个样本（120 秒）。单条消息超限**或累积后超限**都会：清空整个缓冲 + 回 `{"type":"error","message":"Audio input is too long; the recording was discarded"}`（`websocket_handler.py:625-653`）。注意是**整段丢弃**，不是丢弃超限那一段。
 
-两条路径写入**同一个录音缓冲**，样本统一为 [-1,1] 归一化 float32：`mic-audio-data` 直接存前端给的浮点数；`raw-audio-data` 由 Silero 转成 int16 PCM 字节（`vad/silero.py:127-129`），后端再除以 32768 归一化（`websocket_handler.py:679-685`）。因此两种模式产出的音频对 ASR 是等价的，但**同一次录音里不要混用两条路径**。
-
-选择建议：前端自己做 VAD（例如 `@ricky0123/vad-web`）走 `mic-audio-data` + `mic-audio-end`，起止判定和延迟由前端掌控；服务端 VAD 走 `raw-audio-data`，前端只需持续推流，由后端判定并回 `control` 提示。
-
-`raw-audio-data` 路径下服务端会回两种 `control` 消息：
-
-- `{"type":"control","text":"interrupt"}` — 检测到用户开口，前端应立即停止播放并（可选）发 `interrupt-signal`
-- `{"type":"control","text":"mic-audio-end"}` — 检测到一段完整语音已入缓冲，**前端需要自己再发一条 `mic-audio-end` 才会真正触发对话**（服务端只是把语音塞进缓冲，不自动开轮次）
+**VAD 只在前端做**（例如 `@ricky0123/vad-web`）：分块发 `mic-audio-data`，静音结束发 `mic-audio-end`。2026-11-02 起后端不再内置 Silero VAD，`raw-audio-data` 消息与 `vad_config` 配置块已移除；旧客户端发 `raw-audio-data` 只会得到一条 `Unknown message type` 警告日志，不会有回包。旧 YAML 里残留的 `vad_config` 会被忽略。
 
 ### 5.4 历史记录
 
@@ -349,8 +341,6 @@ Cookie（`auth/manager.py`）：
 | --- | --- | --- |
 | `conversation-chain-start` | 一轮开始 | `conversation_utils.py:292-299` |
 | `conversation-chain-end` | 一轮结束（所有音频已交付且回放回执已收到/超时） | `conversation_utils.py:360-378` |
-| `interrupt` | 服务端 VAD 检测到用户开口，应停止播放 | `websocket_handler.py:667-669` |
-| `mic-audio-end` | 服务端 VAD 收完一段语音，提示前端可以提交 | `websocket_handler.py:684-686` |
 
 **`force-new-message`** — `{ "type":"force-new-message" }`，无其它字段。语义："上一条 AI 回复已完整结束，请把后续内容当作新气泡"。群聊中同时群播给其他成员（`conversation_utils.py:348-355`）。
 
@@ -801,7 +791,7 @@ character_config:
     ...
   persona_prompt: |
     ...
-  # 可选覆盖：agent_config / asr_config / tts_config / vad_config / tts_preprocessor_config
+  # 可选覆盖：agent_config / asr_config / tts_config / tts_preprocessor_config
 ```
 
 ### 13.2 切换流程
@@ -818,7 +808,7 @@ character_config:
 - 回到基础配置用 `{"type":"switch-config","file":"conf.yaml"}`（特例，读根文件，`service_context.py:641-642`）
 - 其它值必须在 `config_alts_dir` 内、`.yaml` 后缀；路径穿越被 `resolve_existing_file_within` 拦截（`service_context.py:647-653`）
 - 失败回 `{"type":"error","message":"Failed to switch configuration"}`（文案固定，不含细节，避免泄露配置内容，`service_context.py:712-724`）
-- 切换会按需重建 Live2D / ASR / TTS / VAD / agent / 翻译引擎（子配置相同则复用），**可能耗时数秒**，UI 要有 loading 态
+- 切换会按需重建 Live2D / ASR / TTS / agent / 翻译引擎（子配置相同则复用），**可能耗时数秒**，UI 要有 loading 态
 - **切换后 `history_uid` 被清空**，必须重新 `create-new-history` 或 `fetch-and-set-history`，否则对话不落库
 
 ### 13.3 背景图
@@ -1013,7 +1003,7 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 2. **`set-model-and-conf` 在 `switch-config` 后不带 `client_uid`。** 首次连接和 `request-init-config` 才带。若前端无条件用该消息覆盖 `client_uid`，切角色后 `/audio-ws` 会连不上（1008 Unknown client）。
 3. **连接建立时 `history_uid` 为空，对话不落库。** 必须在开始聊天前发 `create-new-history` 或 `fetch-and-set-history`。`switch-config` 之后同样要重做。
 4. **必须回 `frontend-playback-complete`**（不带 `request_id`），否则每轮白等 120s，群聊会卡住全员。
-5. **服务端 VAD 不会自动开启对话轮次。** `raw-audio-data` 路径下，后端把检测到的语音塞进录音缓冲后，只回一条 `{"type":"control","text":"mic-audio-end"}` 作为**提示**；前端必须自己再发一条真正的 `mic-audio-end` 消息，才会触发 ASR 和新一轮对话。另外该路径要求 `vad_config.vad_model` 已启用，否则消息被静默丢弃。
+5. **后端没有 VAD。** 2026-11-02 起服务端 Silero VAD 与 `raw-audio-data` 已移除，语音起止只能由前端判定，然后发 `mic-audio-end` 触发 ASR 和新一轮对话；`control` 也不再有 `interrupt` / `mic-audio-end` 两个值。
 6. **`display_text.text` 不剥离 `[joy]` 这类方括号标签。** 前端必须自己处理（剥离或渲染成动作块），否则文本里会出现方括号关键字。
 7. **`audio:null` 的静音载荷是正常消息**，不是错误。think 段、TTS 超时都会产生它，必须照常渲染文本并计入句子序号。
 8. **`streamed:true` 的载荷不能把 `display_text.text` 再追加一次**，否则文本重复。
@@ -1414,7 +1404,7 @@ remote 服务器失败（DNS、TLS、超时、401）只影响该服务器：会�
 
 **客户端 → 服务端（`/client-ws`）**
 
-`text-input`、`mic-audio-data`、`mic-audio-end`、`raw-audio-data`、`interrupt-signal`、`frontend-playback-complete`、`ai-speak-signal`、`audio-play-start`、`fetch-configs`、`switch-config`、`request-init-config`、`fetch-backgrounds`、`fetch-history-list`、`fetch-and-set-history`、`create-new-history`、`delete-history`、`add-client-to-group`、`remove-client-from-group`、`request-group-info`、`heartbeat`、`register-local-mcp`、`unregister-local-mcp`、`local-tool-result`
+`text-input`、`mic-audio-data`、`mic-audio-end`、`interrupt-signal`、`frontend-playback-complete`、`ai-speak-signal`、`audio-play-start`、`fetch-configs`、`switch-config`、`request-init-config`、`fetch-backgrounds`、`fetch-history-list`、`fetch-and-set-history`、`create-new-history`、`delete-history`、`add-client-to-group`、`remove-client-from-group`、`request-group-info`、`heartbeat`、`register-local-mcp`、`unregister-local-mcp`、`local-tool-result`
 
 **服务端 → 客户端（`/client-ws` 文本通道）**
 

@@ -80,9 +80,9 @@
   - 🌍 TTS 번역 지원: (예 AI는 일본어 음성으로 말하면서 중국어로 채팅할 수 있습니다.)
 
 - 🧠 **광범위한 모델 지원**:
-  - 🤖 Large Language Models (LLM): Ollama, OpenAI (and any OpenAI-compatible API), Gemini, Claude, Mistral, DeepSeek, Zhipu AI, GGUF, LM Studio, vLLM, etc.
-  - 🎙️ Automatic Speech Recognition (ASR): sherpa-onnx, FunASR, Faster-Whisper, Whisper.cpp, Whisper, Groq Whisper, Azure ASR, etc.
-  - 🔊 Text-to-Speech (TTS): sherpa-onnx, pyttsx3, MeloTTS, Coqui-TTS, GPTSoVITS, Bark, CosyVoice, Edge TTS, Fish Audio, Azure TTS, etc.
+  - 🤖 Large Language Models (LLM): Ollama, OpenAI (and any OpenAI-compatible API), Gemini, Claude, Mistral, DeepSeek, Zhipu AI, LM Studio, vLLM, etc.
+  - 🎙️ Automatic Speech Recognition (ASR): Groq Whisper, Azure ASR
+  - 🔊 Text-to-Speech (TTS): pyttsx3, GPTSoVITS, CosyVoice, XTTS, Spark, Edge TTS, Fish Audio, Azure TTS, OpenAI, ElevenLabs, Cartesia, MiniMax, SiliconFlow
 
 - 🔧 **높은 커스터마이징 자유도**:
   - ⚙️ **간단한 모듈 구성**: 간단한 설정 파일 수정만으로 다양한 기능 모듈을 전환할 수 있으며, 코드 수정은 필요하지 않습니다.
@@ -110,9 +110,7 @@
 `v1.0.0` 이후 버전을 설치한 경우, 업데이트는 `uv run update.py`를 사용하세요.
 
 ## 😢 삭제 (Uninstall)
-대부분의 파일은 Python 의존성과 모델을 포함하여 프로젝트 폴더에 저장됩니다.
-
-다만, ModelScope나 Hugging Face를 통해 다운로드한 모델은 `MODELSCOPE_CACHE` 또는 `HF_HOME`에 저장될 수도 있습니다. 프로젝트의 `models` 디렉토리에 보관하는 것이 목표이지만, 한 번 확인해보는 것이 좋습니다.
+대부분의 파일은 Python 의존성을 포함하여 프로젝트 폴더에 저장됩니다.
 
 또한 설치 가이드를 참고하여 더 이상 필요 없는 추가 도구(`uv`, `ffmpeg`, `deeplx` 등)가 있는지 점검하세요.
 
