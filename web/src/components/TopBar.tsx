@@ -3,6 +3,7 @@ import { useConnection } from '../stores/connection';
 import { useSettings } from '../stores/settings';
 import { useTheme } from '../stores/theme';
 import { audioPlayer } from '../services/audioPlayer';
+import { newHistory } from '../services/actions';
 
 const DOT_CLASS: Record<string, string> = {
   online: 'dot online',
@@ -34,14 +35,24 @@ export function TopBar() {
 
   return (
     <header className="topbar">
-      <button
-        className="icon-btn"
-        aria-label={t('drawer.history')}
-        title={t('drawer.history')}
-        onClick={() => setHistoryOpen(true)}
-      >
-        <MenuIcon />
-      </button>
+      <div className="topbar-side">
+        <button
+          className="icon-btn"
+          aria-label={t('drawer.history')}
+          title={t('drawer.history')}
+          onClick={() => setHistoryOpen(true)}
+        >
+          <MenuIcon />
+        </button>
+        <button
+          className="icon-btn"
+          aria-label={t('history.new')}
+          title={t('history.new')}
+          onClick={newHistory}
+        >
+          <NewChatIcon />
+        </button>
+      </div>
       <div className="topbar-middle">
         <div className={`topbar-center${busy ? ' busy' : ''}`}>
           <span className={DOT_CLASS[status] ?? 'dot'} />
@@ -72,14 +83,16 @@ export function TopBar() {
           {theme === 'light' ? <MoonIcon /> : <SunIcon />}
         </button>
       </div>
-      <button
-        className="icon-btn"
-        aria-label={t('drawer.settings')}
-        title={t('drawer.settings')}
-        onClick={() => setSettingsOpen(true)}
-      >
-        <GearIcon />
-      </button>
+      <div className="topbar-side end">
+        <button
+          className="icon-btn"
+          aria-label={t('drawer.settings')}
+          title={t('drawer.settings')}
+          onClick={() => setSettingsOpen(true)}
+        >
+          <GearIcon />
+        </button>
+      </div>
     </header>
   );
 }
@@ -88,6 +101,15 @@ function MenuIcon() {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
       <path d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
+
+function NewChatIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6" />
+      <path d="M18.4 2.6a2 2 0 0 1 2.8 2.8L12 14.6l-3.6.9.9-3.6z" />
     </svg>
   );
 }

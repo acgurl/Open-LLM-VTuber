@@ -173,7 +173,8 @@ html[data-theme='light'] .sheen-on {
 .bubble-meta {
   position: absolute;
   top: 100%;
-  left: 2px;
+  /* 与气泡正文左缘对齐（扣掉自身 3px 内边距），别贴在 20px 圆角的弧线下 */
+  left: calc(var(--surface-pad-x) - 3px);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -191,7 +192,7 @@ html[data-theme='light'] .sheen-on {
 
 .bubble-row.human .bubble-meta {
   left: auto;
-  right: 2px;
+  right: calc(var(--surface-pad-x) - 3px);
 }
 
 .bubble-row:hover .bubble-meta,
