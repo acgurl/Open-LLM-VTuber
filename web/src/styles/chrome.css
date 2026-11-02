@@ -60,6 +60,23 @@
   pointer-events: auto;
 }
 
+/* 两侧等宽占位，让中间小岛不随左侧多一个按钮而偏心 */
+.topbar-side {
+  flex: 1 1 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.topbar-side.end {
+  justify-content: flex-end;
+}
+
+.topbar-side > * {
+  pointer-events: auto;
+}
+
 .topbar-middle {
   display: flex;
   align-items: center;
