@@ -73,8 +73,3 @@ export function splitThink(text: string): ThinkBlock[] {
 export function backgroundUrl(file: string): string {
   return `/bg/${file}`;
 }
-
-export function cacheUrl(audioPath: string): string {
-  const base = audioPath.split(/[\\/]/).pop() ?? audioPath;
-  return `/cache/${base}`;
-}

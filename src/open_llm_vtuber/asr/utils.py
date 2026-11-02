@@ -6,6 +6,26 @@ from tqdm import tqdm
 from loguru import logger
 
 
+def _extract_tar_bz2(archive_path: str | Path, output_dir: str) -> None:
+    """Extract a model archive without letting members escape ``output_dir``."""
+    with tarfile.open(archive_path, "r:bz2") as tar:
+        if hasattr(tarfile, "data_filter"):
+            tar.extractall(path=output_dir, filter="data")
+            return
+        # Python builds without PEP 706 extraction filters.
+        root = Path(output_dir).resolve()
+        for member in tar.getmembers():
+            target = (root / member.name).resolve()
+            if (
+                not target.is_relative_to(root)
+                or member.issym()
+                or member.islnk()
+                or member.isdev()
+            ):
+                raise ValueError(f"Unsafe path in archive: {member.name}")
+        tar.extractall(path=output_dir)
+
+
 def download_and_extract(url: str, output_dir: str) -> Path:
     """
     Download a file from a URL and extract it if it is a tar.bz2 archive.
@@ -38,7 +58,8 @@ def download_and_extract(url: str, output_dir: str) -> Path:
 
     # Download the file
     logger.info(f"🏃‍♂️Downloading {url} to {file_path}...")
-    response = requests.get(url, stream=True)
+    # (connect, read) timeout; the read timeout applies per chunk.
+    response = requests.get(url, stream=True, timeout=(15, 60))
     response.raise_for_status()  # Raise an error for bad status codes
     total_size = int(response.headers.get("content-length", 0))
     logger.debug(f"Total file size: {total_size / 1024 / 1024:.2f} MB")
@@ -62,8 +83,7 @@ def download_and_extract(url: str, output_dir: str) -> Path:
     # Extract the tar.bz2 file
     if file_name.endswith(".tar.bz2"):
         logger.info(f"Extracting {file_name}...")
-        with tarfile.open(file_path, "r:bz2") as tar:
-            tar.extractall(path=output_dir)
+        _extract_tar_bz2(file_path, output_dir)
         logger.info("Extraction completed.")
 
         # Delete the compressed file
@@ -105,8 +125,7 @@ def check_and_extract_local_file(url: str, output_dir: str) -> Path | None:
 
         try:
             logger.info("⏳ Extracting archive file...")
-            with tarfile.open(compressed_path, "r:bz2") as tar:
-                tar.extractall(path=output_dir)
+            _extract_tar_bz2(compressed_path, output_dir)
             logger.success(f"Extracted archive to the path: {extracted_dir}")
             os.remove(compressed_path)  # Remove the compressed file
             return extracted_dir

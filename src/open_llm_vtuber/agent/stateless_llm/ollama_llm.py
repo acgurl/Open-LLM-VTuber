@@ -3,6 +3,9 @@ import requests
 from loguru import logger
 from .openai_compatible_llm import AsyncLLM
 
+# Preloading can include reading the model from disk.
+OLLAMA_CONTROL_TIMEOUT_SECONDS = 120
+
 
 class OllamaLLM(AsyncLLM):
     def __init__(
@@ -28,18 +31,8 @@ class OllamaLLM(AsyncLLM):
             temperature=temperature,
         )
         try:
-            # preload model
             logger.info("Preloading model for Ollama")
-            # Send the POST request to preload model
-            logger.debug(
-                requests.post(
-                    base_url.replace("/v1", "") + "/api/chat",
-                    json={
-                        "model": model,
-                        "keep_alive": keep_alive,
-                    },
-                )
-            )
+            logger.debug(self._post_keep_alive(keep_alive))
         except requests.exceptions.ConnectionError as e:
             logger.error(f"Failed to preload model: {e}")
             logger.critical(
@@ -51,23 +44,21 @@ class OllamaLLM(AsyncLLM):
         if unload_at_exit:
             atexit.register(self.cleanup)
 
-    def __del__(self):
-        """Destructor to unload the model"""
-        self.cleanup()
-
     def cleanup(self):
         """Clean up function to unload the model when exitting"""
         if not self.cleaned and self.unload_at_exit:
             logger.info(f"Ollama: Unloading model: {self.model}")
-            # Unload the model
-            # unloading is just the same as preload, but with keep alive set to 0
-            logger.debug(
-                requests.post(
-                    self.base_url.replace("/v1", "") + "/api/chat",
-                    json={
-                        "model": self.model,
-                        "keep_alive": 0,
-                    },
-                )
-            )
+            # Unloading is a preload request with keep_alive set to 0.
+            try:
+                logger.debug(self._post_keep_alive(0))
+            except requests.RequestException as e:
+                logger.warning(f"Ollama: failed to unload model: {e}")
             self.cleaned = True
+
+    def _post_keep_alive(self, keep_alive: float) -> requests.Response:
+        """Load (keep_alive != 0) or unload (0) the model on the Ollama server."""
+        return requests.post(
+            self.base_url.replace("/v1", "") + "/api/chat",
+            json={"model": self.model, "keep_alive": keep_alive},
+            timeout=OLLAMA_CONTROL_TIMEOUT_SECONDS,
+        )

@@ -206,9 +206,8 @@ def _filter_nested(text: str, left: str, right: str) -> str:
         elif char == right:
             if depth > 0:
                 depth -= 1
-        else:
-            if depth == 0:
-                result.append(char)
+        elif depth == 0:
+            result.append(char)
     filtered_text = "".join(result)
     filtered_text = re.sub(r"\s+", " ", filtered_text).strip()
     return filtered_text

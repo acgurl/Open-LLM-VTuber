@@ -11,7 +11,7 @@ from ..service_context import ServiceContext
 from ..utils.async_utils import cancel_and_wait
 from .group_conversation import process_group_conversation
 from .single_conversation import process_single_conversation
-from .conversation_utils import EMOJI_LIST
+from .conversation_utils import new_session_emoji
 from .types import GroupConversationState, OutboundChannels
 from prompts import prompt_loader
 
@@ -119,16 +119,14 @@ async def handle_conversation_trigger(
         received_data_buffers[client_uid] = np.array([])
 
     images = data.get("images")
-    session_emoji = np.random.choice(EMOJI_LIST)
+    session_emoji = new_session_emoji()
 
     group = chat_group_manager.get_client_group(client_uid)
     if group and len(group.members) > 1:
         # Use group_id as task key for group conversations
         task_key = group.group_id
-        if (
-            task_key not in current_conversation_tasks
-            or current_conversation_tasks[task_key].done()
-        ):
+        running = current_conversation_tasks.get(task_key)
+        if running is None or running.done():
             if await _reject_if_at_capacity(websocket, current_conversation_tasks):
                 return
 
@@ -240,12 +238,11 @@ async def handle_group_interrupt(
         logger.warning(f"No context found for group {group_id}, using first member")
         context = client_contexts.get(next(iter(group.members)))
 
-    # Now cancel the task
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        logger.info(f"🛑 Group conversation {group_id} cancelled successfully.")
+    await cancel_and_wait(
+        task,
+        failure_message=f"Group conversation {group_id} failed while interrupting",
+        cancel_message=f"🛑 Group conversation {group_id} cancelled successfully.",
+    )
 
     current_conversation_tasks.pop(group_id, None)
     GroupConversationState.remove_state(group_id)  # Clean up state after we've used it

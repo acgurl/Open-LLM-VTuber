@@ -36,7 +36,7 @@ class VoiceRecognition(ASRInterface):
                 initial_prompt=self.prompt,
             )
         else:
-            segments, info = self.model.transcribe(
+            segments, _info = self.model.transcribe(
                 audio,
                 beam_size=5 if self.BEAM_SEARCH else 1,
                 language=self.LANG if self.LANG else None,

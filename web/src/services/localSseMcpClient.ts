@@ -17,6 +17,7 @@ import {
   errorFromHttp,
   filterCustomHeaders,
   listToolsPaged,
+  takeSseFrames,
 } from './localMcpClient';
 
 interface PendingRequest {
@@ -96,11 +97,7 @@ export class LocalSseMcpClient implements LocalMcpClientLike {
     if (this.closed) return;
     this.closed = true;
     this.abort.abort();
-    for (const [id, pending] of this.pending) {
-      clearTimeout(pending.timer);
-      pending.reject(new Error('本地 SSE MCP 已断开'));
-      this.pending.delete(id);
-    }
+    this.rejectAllPending(new Error('本地 SSE MCP 已断开'));
     try {
       await this.reader?.cancel();
     } catch {
@@ -150,15 +147,11 @@ export class LocalSseMcpClient implements LocalMcpClientLike {
       while (!this.closed) {
         const { value, done } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let boundary = buffer.search(/\r?\n\r?\n/);
-        while (boundary !== -1) {
-          const chunk = buffer.slice(0, boundary);
-          const separator = buffer.slice(boundary).match(/^\r?\n\r?\n/);
-          buffer = buffer.slice(boundary + (separator ? separator[0].length : 0));
-          this.handleEvent(parseSseEvent(chunk));
-          boundary = buffer.search(/\r?\n\r?\n/);
-        }
+        const { frames, rest } = takeSseFrames(
+          buffer + decoder.decode(value, { stream: true }),
+        );
+        buffer = rest;
+        for (const frame of frames) this.handleEvent(parseSseEvent(frame));
       }
       if (!this.closed) {
         this.rejectEndpoint(new Error('本地 SSE MCP 连接已关闭'));
@@ -168,12 +161,24 @@ export class LocalSseMcpClient implements LocalMcpClientLike {
       const reason =
         error instanceof Error ? error : new Error(String(error));
       this.rejectEndpoint(reason);
-      for (const [id, pending] of this.pending) {
-        clearTimeout(pending.timer);
-        pending.reject(reason);
-        this.pending.delete(id);
-      }
+      this.rejectAllPending(reason);
     }
+  }
+
+  private rejectAllPending(reason: Error): void {
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(reason);
+    }
+    this.pending.clear();
+  }
+
+  /** Forget a request whose POST failed; the caller gets the POST error instead. */
+  private dropPending(id: number): void {
+    const pending = this.pending.get(String(id));
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.pending.delete(String(id));
   }
 
   private handleEvent(event: SseEvent | null): void {
@@ -220,18 +225,24 @@ export class LocalSseMcpClient implements LocalMcpClientLike {
       this.pending.set(String(id), { resolve, reject, timer });
     });
 
-    const response = await fetch(this.endpoint, {
-      method: 'POST',
-      headers: {
-        ...this.customHeaders,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
-      credentials: 'omit',
-      signal: this.abort.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: {
+          ...this.customHeaders,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
+        credentials: 'omit',
+        signal: this.abort.signal,
+      });
+    } catch (error) {
+      this.dropPending(id);
+      throw error;
+    }
     if (!response.ok && response.status !== 202) {
-      this.pending.delete(String(id));
+      this.dropPending(id);
       throw errorFromHttp(response.status, await response.text());
     }
     return promise;

@@ -1316,6 +1316,8 @@ CREATE TABLE user_mcp_servers (
 
 remote 服务器失败（DNS、TLS、超时、401）只影响该服务器：会话照常启动，只是少了这些工具。
 
+单轮对话里模型连续调用工具时，最多请求 LLM `basic_memory_agent.max_tool_rounds` 次（默认 10，`>= 1`）；超过后本轮以 `[Stopped: too many consecutive tool calls]` 结束。缺少 ToolExecutor 时本轮立即结束，不再重试。
+
 **保存配置不会热更新当前会话。** 保存/启用/删除/改名后需要重连（刷新页面）；local 条目在每次连接/重连后由 `local-mcp-config` 重新下发，浏览器必须重新注册。
 
 ### 22.4 浏览器本地 MCP：完整流程

@@ -90,26 +90,26 @@ class Live2dModel:
         try:
             file_content = self._load_file_content(self.model_dict_path)
             model_dict = json.loads(file_content)
-        except FileNotFoundError as file_e:
+        except FileNotFoundError:
             logger.critical(
                 f"Model dictionary file not found at {self.model_dict_path}."
             )
-            raise file_e
-        except json.JSONDecodeError as json_e:
+            raise
+        except json.JSONDecodeError:
             logger.critical(
                 f"Error decoding JSON from model dictionary file at {self.model_dict_path}."
             )
-            raise json_e
-        except UnicodeError as uni_e:
+            raise
+        except UnicodeError:
             logger.critical(
                 f"Error reading model dictionary file at {self.model_dict_path}."
             )
-            raise uni_e
-        except Exception as e:
+            raise
+        except Exception:
             logger.critical(
                 f"Error occurred while reading model dictionary file at {self.model_dict_path}."
             )
-            raise e
+            raise
 
         # Find the model in the model_dict
         matched_model = next(

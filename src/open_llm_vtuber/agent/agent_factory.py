@@ -4,7 +4,7 @@ from collections.abc import Callable
 from loguru import logger
 
 from .agents.agent_interface import AgentInterface
-from .agents.basic_memory_agent import BasicMemoryAgent
+from .agents.basic_memory_agent import DEFAULT_MAX_TOOL_ROUNDS, BasicMemoryAgent
 from .stateless_llm_factory import LLMFactory as StatelessLLMFactory
 from .agents.hume_ai import HumeAIAgent
 from .agents.letta_agent import LettaAgent
@@ -55,6 +55,9 @@ def _build_basic_memory_agent(
         faster_first_response=basic_memory_settings.get("faster_first_response", True),
         segment_method=basic_memory_settings.get("segment_method", "pysbd"),
         use_mcpp=basic_memory_settings.get("use_mcpp", False),
+        max_tool_rounds=basic_memory_settings.get(
+            "max_tool_rounds", DEFAULT_MAX_TOOL_ROUNDS
+        ),
         interrupt_method=interrupt_method,
         tool_prompts=tool_prompts,
         tool_manager=tool_manager,

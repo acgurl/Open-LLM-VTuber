@@ -47,12 +47,15 @@ class TTSEngine(TTSInterface):
 
         try:
             with open(file_name, "wb") as f:
-                for chunk in self.session.tts(
-                    TTSRequest(
-                        text=text, reference_id=self.reference_id, latency=self.latency
+                f.writelines(
+                    self.session.tts(
+                        TTSRequest(
+                            text=text,
+                            reference_id=self.reference_id,
+                            latency=self.latency,
+                        )
                     )
-                ):
-                    f.write(chunk)
+                )
 
         except Exception as e:
             logger.critical(f"\nError: Fish TTS API fail to generate audio: {e}")

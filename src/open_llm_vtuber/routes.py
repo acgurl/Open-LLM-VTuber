@@ -123,6 +123,11 @@ async def _serve_tts_connection(websocket: WebSocket, tts_engine) -> None:
         await websocket.close()
 
 
+def _default_user_id(default_context_cache: ServiceContext) -> str:
+    """User id for unauthenticated (single-user) deployments."""
+    return getattr(default_context_cache, "user_id", None) or "local"
+
+
 def _websocket_identity(
     websocket: WebSocket,
     auth: AuthManager | None,
@@ -235,9 +240,7 @@ def init_client_ws_route(
     async def websocket_endpoint(websocket: WebSocket):
         """WebSocket endpoint for client connections"""
         identity = await _require_websocket_identity(
-            websocket,
-            auth,
-            getattr(default_context_cache, "user_id", None) or "local",
+            websocket, auth, _default_user_id(default_context_cache)
         )
         if identity is None:
             return
@@ -246,9 +249,8 @@ def init_client_ws_route(
         per_user_id = identity.user_id if auth is not None and auth.enabled else None
 
         if not ws_handler.try_reserve_connection(client_uid, per_user_id):
-            await websocket.accept()
-            await websocket.close(
-                code=1013, reason="Too many connections for this user"
+            await _reject_websocket(
+                websocket, 1013, "Too many connections for this user"
             )
             return
 
@@ -273,7 +275,7 @@ def init_client_ws_route(
     async def audio_endpoint(websocket: WebSocket):
         """Secondary WebSocket that carries only audio payloads."""
         identity = _websocket_identity(
-            websocket, auth, getattr(default_context_cache, "user_id", None) or "local"
+            websocket, auth, _default_user_id(default_context_cache)
         )
         client_uid = websocket.query_params.get("client_uid")
         await websocket.accept()
@@ -335,12 +337,12 @@ def init_webtool_routes(
 
     @router.get("/web-tool")
     async def web_tool_redirect():
-        """Redirect /web-tool to /web_tool/index.html"""
+        """Redirect /web-tool to /web-tool/index.html"""
         return Response(status_code=302, headers={"Location": "/web-tool/index.html"})
 
     @router.get("/web_tool")
     async def web_tool_redirect_alt():
-        """Redirect /web_tool to /web_tool/index.html"""
+        """Redirect /web_tool to /web-tool/index.html"""
         return Response(status_code=302, headers={"Location": "/web-tool/index.html"})
 
     @router.get("/live2d-models/info")
@@ -405,16 +407,13 @@ def init_webtool_routes(
     async def tts_endpoint(websocket: WebSocket):
         """WebSocket endpoint for TTS generation"""
         identity = await _require_websocket_identity(
-            websocket,
-            auth,
-            getattr(default_context_cache, "user_id", None) or "local",
+            websocket, auth, _default_user_id(default_context_cache)
         )
         if identity is None:
             return
 
         if tts_slots.locked():
-            await websocket.accept()
-            await websocket.close(code=1013, reason="Server is at capacity")
+            await _reject_websocket(websocket, 1013, "Server is at capacity")
             return
 
         await tts_slots.acquire()

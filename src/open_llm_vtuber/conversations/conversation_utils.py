@@ -1,4 +1,5 @@
 import asyncio
+import random
 from typing import Any
 from collections.abc import Awaitable, Callable
 import numpy as np
@@ -104,7 +105,6 @@ class TextDeltaBuffer:
         )
 
 
-# Convert class methods to standalone functions
 def should_store_history(context: Any, skip_history: bool = False) -> bool:
     """Persist a turn only for an open history that is not a proactive turn."""
     return bool(context.history_uid) and not skip_history
@@ -412,7 +412,8 @@ def cleanup_conversation(tts_manager: TTSTaskManager, session_emoji: str) -> Non
     logger.debug(f"🧹 Clearing up conversation {session_emoji}.")
 
 
-EMOJI_LIST = [
+# Tags log lines of one conversation chain so interleaved turns stay readable.
+_SESSION_EMOJIS = (
     "🐶",
     "🐱",
     "🐭",
@@ -467,7 +468,6 @@ EMOJI_LIST = [
     "🌩",
     "⛄️",
     "🎃",
-    "🎄",
     "🎉",
     "🎏",
     "🎗",
@@ -484,4 +484,8 @@ EMOJI_LIST = [
     "👕",
     "👜",
     "👑",
-]
+)
+
+
+def new_session_emoji() -> str:
+    return random.choice(_SESSION_EMOJIS)

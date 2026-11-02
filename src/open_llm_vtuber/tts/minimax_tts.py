@@ -66,7 +66,12 @@ class TTSEngine(TTSInterface):
 
         try:
             response = requests.request(
-                "POST", url, stream=True, headers=headers, data=json.dumps(body)
+                "POST",
+                url,
+                stream=True,
+                headers=headers,
+                data=json.dumps(body),
+                timeout=120,
             )
             audio = b""
             for chunk in response.raw:

@@ -79,6 +79,8 @@ character_config:
         # 'Plus' 意味着它包含了通过 OpenAI API 调用工具的能力。
         use_mcpp: False
         mcp_enabled_servers: ["time", "ddg-search"] # 启用的 MCP 服务器
+        # 单轮对话中模型连续调用工具时最多请求 LLM 的次数，超过后停止本轮
+        max_tool_rounds: 10
 
       hume_ai_agent:
         api_key: ''

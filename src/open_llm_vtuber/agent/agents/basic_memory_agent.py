@@ -24,11 +24,18 @@ from ...mcpp.json_detector import StreamJSONDetector
 from ...mcpp.types import ToolCallObject
 from ...mcpp.tool_executor import ToolExecutor
 
+# Default for ``basic_memory_agent.max_tool_rounds``: LLM requests per user turn
+# in a tool loop. A model that keeps asking for tools (or a server that keeps
+# failing) must not loop, and bill, without bound.
+DEFAULT_MAX_TOOL_ROUNDS = 10
+TOOL_ROUND_LIMIT_NOTICE = "[Stopped: too many consecutive tool calls]"
+
 
 class BasicMemoryAgent(AgentInterface):
     """Agent with basic chat memory and tool calling support."""
 
     _system: str = "You are a helpful assistant."
+    _max_tool_rounds: int = DEFAULT_MAX_TOOL_ROUNDS
 
     def __init__(
         self,
@@ -44,6 +51,7 @@ class BasicMemoryAgent(AgentInterface):
         tool_manager: ToolManager | None = None,
         tool_executor: ToolExecutor | None = None,
         mcp_prompt_string: str = "",
+        max_tool_rounds: int = DEFAULT_MAX_TOOL_ROUNDS,
     ):
         """Initialize agent with LLM and configuration."""
         super().__init__()
@@ -53,6 +61,7 @@ class BasicMemoryAgent(AgentInterface):
         self._faster_first_response = faster_first_response
         self._segment_method = segment_method
         self._use_mcpp = use_mcpp
+        self._max_tool_rounds = max_tool_rounds
         self.interrupt_method = interrupt_method
         self._tool_prompts = tool_prompts or {}
         self._interrupt_handled = False
@@ -141,6 +150,7 @@ class BasicMemoryAgent(AgentInterface):
             tool_manager=tool_manager,
             tool_executor=tool_executor,
             mcp_prompt_string=mcp_prompt_string,
+            max_tool_rounds=self._max_tool_rounds,
         )
 
     def set_tooling(
@@ -383,7 +393,7 @@ class BasicMemoryAgent(AgentInterface):
         pending_tool_calls = []
         current_assistant_message_content = []
 
-        while True:
+        for _round in range(self._max_tool_rounds):
             stream = self._llm.chat_completion(messages, self._system, tools=tools)
             pending_tool_calls.clear()
             current_assistant_message_content.clear()
@@ -468,10 +478,12 @@ class BasicMemoryAgent(AgentInterface):
                     messages.append({"role": "user", "content": tool_results_for_llm})
 
                 continue
-            else:
-                if current_turn_text:
-                    self._add_message(current_turn_text, "assistant")
-                return
+            if current_turn_text:
+                self._add_message(current_turn_text, "assistant")
+            return
+
+        logger.warning(f"Claude tool loop stopped after {self._max_tool_rounds} rounds")
+        yield TOOL_ROUND_LIMIT_NOTICE
 
     async def _openai_tool_interaction_loop(
         self,
@@ -484,7 +496,7 @@ class BasicMemoryAgent(AgentInterface):
         pending_tool_calls: list[ToolCallObject] | list[dict[str, Any]] = []
         current_system_prompt = self._system
 
-        while True:
+        for _round in range(self._max_tool_rounds):
             if self.prompt_mode_flag:
                 if self._mcp_prompt_string:
                     current_system_prompt = (
@@ -513,56 +525,45 @@ class BasicMemoryAgent(AgentInterface):
                         current_turn_text += event
                         if self._json_detector:
                             potential_json = self._json_detector.process_chunk(event)
-                            if potential_json:
-                                try:
-                                    if isinstance(potential_json, list):
-                                        detected_prompt_json = potential_json
-                                    elif isinstance(potential_json, dict):
-                                        detected_prompt_json = [potential_json]
-
-                                    if detected_prompt_json:
-                                        break
-                                except Exception as e:
-                                    logger.error(f"Error parsing detected JSON: {e}")
-                                    if self._json_detector:
-                                        self._json_detector.reset()
-                                    yield f"[Error parsing tool JSON: {e}]"
-                                    goto_next_while_iteration = True
-                                    break
+                            if isinstance(potential_json, list) and potential_json:
+                                detected_prompt_json = potential_json
+                                break
+                            if isinstance(potential_json, dict):
+                                detected_prompt_json = [potential_json]
+                                break
                         yield event
-                else:
-                    if event == "__API_NOT_SUPPORT_TOOLS__":
-                        logger.warning(
-                            f"LLM {getattr(self._llm, 'model', '')} has no native tool support. Switching to prompt mode."
-                        )
-                        self.prompt_mode_flag = True
-                        if self._json_detector:
-                            self._json_detector.reset()
-                        goto_next_while_iteration = True
-                        break
-                    elif isinstance(event, str):
-                        current_turn_text += event
-                        yield event
-                    elif isinstance(event, list) and all(
-                        isinstance(tc, ToolCallObject) for tc in event
-                    ):
-                        pending_tool_calls = event
-                        assistant_message_for_api = {
-                            "role": "assistant",
-                            "content": current_turn_text if current_turn_text else None,
-                            "tool_calls": [
-                                {
-                                    "id": tc.id,
-                                    "type": tc.type,
-                                    "function": {
-                                        "name": tc.function.name,
-                                        "arguments": tc.function.arguments,
-                                    },
-                                }
-                                for tc in pending_tool_calls
-                            ],
-                        }
-                        break
+                elif event == "__API_NOT_SUPPORT_TOOLS__":
+                    logger.warning(
+                        f"LLM {getattr(self._llm, 'model', '')} has no native tool support. Switching to prompt mode."
+                    )
+                    self.prompt_mode_flag = True
+                    if self._json_detector:
+                        self._json_detector.reset()
+                    goto_next_while_iteration = True
+                    break
+                elif isinstance(event, str):
+                    current_turn_text += event
+                    yield event
+                elif isinstance(event, list) and all(
+                    isinstance(tc, ToolCallObject) for tc in event
+                ):
+                    pending_tool_calls = event
+                    assistant_message_for_api = {
+                        "role": "assistant",
+                        "content": current_turn_text if current_turn_text else None,
+                        "tool_calls": [
+                            {
+                                "id": tc.id,
+                                "type": tc.type,
+                                "function": {
+                                    "name": tc.function.name,
+                                    "arguments": tc.function.arguments,
+                                },
+                            }
+                            for tc in pending_tool_calls
+                        ],
+                    }
+                    break
             if goto_next_while_iteration:
                 continue
 
@@ -577,7 +578,7 @@ class BasicMemoryAgent(AgentInterface):
                         "Prompt Tool interaction requested but ToolExecutor/MCPClient is not available."
                     )
                     yield "[Error: ToolExecutor/MCPClient not configured for prompt mode]"
-                    continue
+                    return
 
                 parsed_tools = self._tool_executor.process_tool_from_prompt_json(
                     detected_prompt_json
@@ -614,7 +615,7 @@ class BasicMemoryAgent(AgentInterface):
                         "OpenAI Tool interaction requested but ToolExecutor/MCPClient is not available."
                     )
                     yield "[Error: ToolExecutor/MCPClient not configured for OpenAI mode]"
-                    continue
+                    return
 
                 async for update in self._execute_tool_calls(
                     pending_tool_calls,
@@ -628,10 +629,12 @@ class BasicMemoryAgent(AgentInterface):
                     messages.extend(tool_results_for_llm)
                 continue
 
-            else:
-                if current_turn_text:
-                    self._add_message(current_turn_text, "assistant")
-                return
+            if current_turn_text:
+                self._add_message(current_turn_text, "assistant")
+            return
+
+        logger.warning(f"OpenAI tool loop stopped after {self._max_tool_rounds} rounds")
+        yield TOOL_ROUND_LIMIT_NOTICE
 
     def _chat_function_factory(
         self,
