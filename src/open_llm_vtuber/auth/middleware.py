@@ -14,8 +14,10 @@ from starlette.responses import JSONResponse, RedirectResponse
 from .manager import AuthManager
 
 _PUBLIC_PATHS = {"/healthz", "/api/session", "/favicon.ico"}
-# Character assets are public; /cache holds generated TTS audio and stays
-# behind authentication.
+# Character assets are public unless a preset's allowed_users makes them
+# private (enforced by the static handler); /cache holds generated TTS audio
+# and stays behind authentication.
+_IDENTITY_AWARE_PREFIXES = ("/live2d-models/", "/avatars/")
 _PUBLIC_PREFIXES = (
     "/auth/",
     "/assets/",
@@ -51,12 +53,13 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         if self._is_public(path):
+            # Public character assets can still be private to some users; the
+            # static handler decides, so pass the identity along when present.
+            if path.startswith(_IDENTITY_AWARE_PREFIXES):
+                self._attach_identity(request)
             return await call_next(request)
 
-        identity = self.auth.resolve_identity(request.cookies)
-        if identity is not None:
-            request.state.identity = identity
-            request.scope[IDENTITY_SCOPE_KEY] = identity
+        if self._attach_identity(request) is not None:
             return await call_next(request)
 
         if self._wants_html(request):
@@ -69,6 +72,13 @@ class AuthRedirectMiddleware(BaseHTTPMiddleware):
             )
 
         return JSONResponse({"error": "Authentication required"}, status_code=401)
+
+    def _attach_identity(self, request: Request):
+        identity = self.auth.resolve_identity(request.cookies)
+        if identity is not None:
+            request.state.identity = identity
+            request.scope[IDENTITY_SCOPE_KEY] = identity
+        return identity
 
     @staticmethod
     def _is_public(path: str) -> bool:
