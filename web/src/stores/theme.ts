@@ -6,7 +6,7 @@ export type ThemeMode = 'auto' | 'light' | 'dark';
 export type ResolvedTheme = 'light' | 'dark';
 
 // AIRI 同款：整个界面由单一色相派生，主色、补色、第三色随它一起转。
-export const DEFAULT_HUE = 220.44;
+const DEFAULT_HUE = 220.44;
 
 // 跟随系统时用系统的昼夜偏好作为自动切换源，系统切换后页面实时响应。
 const systemLight = window.matchMedia('(prefers-color-scheme: light)');

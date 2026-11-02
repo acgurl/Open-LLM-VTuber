@@ -1,16 +1,16 @@
 import type { ModelInfo } from '../protocol/types';
-import { storageKey } from '../utils/storage';
+import { readSetting, writeSetting } from '../utils/storage';
 
 // 上次的模型配置仅用于首屏秒开，服务端 set-model-and-conf 仍是最终来源。
-// Key is per-account so a shared browser does not warm-start another user's model.
-const KEY = storageKey('model');
+// Keys are per-account so a shared browser does not warm-start another user's model.
+const KEY = 'model';
 // 解析后的贴图地址，供 index.html 的内联脚本提前 preload（与主包并行下载）。
-const ASSET_KEY = storageKey('model.assets');
+const ASSET_KEY = 'model.assets';
 
 export function loadCachedModel(): ModelInfo | null {
+  const raw = readSetting(KEY);
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return null;
     const parsed = JSON.parse(raw) as ModelInfo;
     return typeof parsed?.url === 'string' && parsed.url ? parsed : null;
   } catch {
@@ -19,12 +19,7 @@ export function loadCachedModel(): ModelInfo | null {
 }
 
 export function saveCachedModel(info: ModelInfo | null | undefined) {
-  try {
-    if (info?.url) localStorage.setItem(KEY, JSON.stringify(info));
-    else localStorage.removeItem(KEY);
-  } catch {
-    /* ignore */
-  }
+  writeSetting(KEY, info?.url ? JSON.stringify(info) : null);
 }
 
 // model3.json 的 Textures 只在首次加载后解析一次；地址是相对 model3 的。
@@ -44,7 +39,7 @@ export async function cacheModelAssets(modelUrl: string): Promise<void> {
       })
       .slice(0, 8);
     if (images.length === 0) return;
-    localStorage.setItem(ASSET_KEY, JSON.stringify({ url: modelUrl, images }));
+    writeSetting(ASSET_KEY, JSON.stringify({ url: modelUrl, images }));
   } catch {
     /* 预加载是锦上添花，失败不影响正常加载 */
   }

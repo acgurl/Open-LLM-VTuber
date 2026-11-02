@@ -52,8 +52,19 @@ export function localMcpErrorMessage(error: unknown): string {
   return '本地 MCP 连接失败';
 }
 
-function timeoutSignal(ms: number): AbortSignal {
-  return AbortSignal.timeout(ms);
+const SSE_FRAME_SEPARATOR = /\r?\n\r?\n/;
+
+/** Split complete SSE frames off `buffer`, returning them and the unread tail. */
+export function takeSseFrames(buffer: string): { frames: string[]; rest: string } {
+  const frames: string[] = [];
+  let rest = buffer;
+  let match = SSE_FRAME_SEPARATOR.exec(rest);
+  while (match) {
+    frames.push(rest.slice(0, match.index));
+    rest = rest.slice(match.index + match[0].length);
+    match = SSE_FRAME_SEPARATOR.exec(rest);
+  }
+  return { frames, rest };
 }
 
 function parseSseMessage(chunk: string): JsonRpcMessage | null {
@@ -81,7 +92,7 @@ export function filterCustomHeaders(
   );
 }
 
-export function normalizeContent(
+function normalizeContent(
   items: unknown[],
 ): Array<Record<string, unknown>> {
   const normalized: Array<Record<string, unknown>> = [];
@@ -250,7 +261,7 @@ export class LocalMcpClient implements LocalMcpClientLike {
         method: 'DELETE',
         headers: this.headers(),
         credentials: 'omit',
-        signal: timeoutSignal(3000),
+        signal: AbortSignal.timeout(3000),
       });
     } catch {
       /* best effort */
@@ -279,7 +290,7 @@ export class LocalMcpClient implements LocalMcpClientLike {
       headers: this.headers(),
       body: JSON.stringify({ jsonrpc: '2.0', method }),
       credentials: 'omit',
-      signal: timeoutSignal(5000),
+      signal: AbortSignal.timeout(5000),
     });
     this.captureSession(response);
     if (!response.ok && response.status !== 202) {
@@ -298,7 +309,7 @@ export class LocalMcpClient implements LocalMcpClientLike {
       headers: this.headers(),
       body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
       credentials: 'omit',
-      signal: timeoutSignal(timeoutMs),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     this.captureSession(response);
     if (response.status === 202) return { jsonrpc: '2.0', id };
@@ -345,15 +356,13 @@ export class LocalMcpClient implements LocalMcpClientLike {
       while (Date.now() < deadline) {
         const { value, done } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let boundary = buffer.search(/\r?\n\r?\n/);
-        while (boundary !== -1) {
-          const chunk = buffer.slice(0, boundary);
-          const match = buffer.slice(boundary).match(/^\r?\n\r?\n/);
-          buffer = buffer.slice(boundary + (match ? match[0].length : 0));
-          const message = parseSseMessage(chunk);
+        const { frames, rest } = takeSseFrames(
+          buffer + decoder.decode(value, { stream: true }),
+        );
+        buffer = rest;
+        for (const frame of frames) {
+          const message = parseSseMessage(frame);
           if (message && message.id === id) return message;
-          boundary = buffer.search(/\r?\n\r?\n/);
         }
       }
       throw new Error('本地 MCP 响应超时');
