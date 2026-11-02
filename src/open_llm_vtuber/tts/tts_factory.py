@@ -16,12 +16,6 @@ def _build_azure(kwargs: dict) -> TTSInterface:
     )
 
 
-def _build_bark(kwargs: dict) -> TTSInterface:
-    from .bark_tts import TTSEngine as BarkTTSEngine
-
-    return BarkTTSEngine(kwargs.get("voice"))
-
-
 def _build_edge(kwargs: dict) -> TTSInterface:
     from .edge_tts import TTSEngine as EdgeTTSEngine
 
@@ -68,17 +62,6 @@ def _build_cosyvoice2(kwargs: dict) -> TTSInterface:
     )
 
 
-def _build_melo(kwargs: dict) -> TTSInterface:
-    from .melo_tts import TTSEngine as MeloTTSEngine
-
-    return MeloTTSEngine(
-        speaker=kwargs.get("speaker"),
-        language=kwargs.get("language"),
-        device=kwargs.get("device"),
-        speed=kwargs.get("speed"),
-    )
-
-
 def _build_x_tts(kwargs: dict) -> TTSInterface:
     from .x_tts import TTSEngine as XTTSEngine
 
@@ -121,17 +104,6 @@ def _build_siliconflow(kwargs: dict) -> TTSInterface:
     )
 
 
-def _build_coqui(kwargs: dict) -> TTSInterface:
-    from .coqui_tts import TTSEngine as CoquiTTSEngine
-
-    return CoquiTTSEngine(
-        model_name=kwargs.get("model_name"),
-        speaker_wav=kwargs.get("speaker_wav"),
-        language=kwargs.get("language"),
-        device=kwargs.get("device"),
-    )
-
-
 def _build_fish(kwargs: dict) -> TTSInterface:
     from .fish_api_tts import TTSEngine as FishAPITTSEngine
 
@@ -153,12 +125,6 @@ def _build_minimax(kwargs: dict) -> TTSInterface:
         voice_id=kwargs.get("voice_id", "male-qn-qingse"),
         pronunciation_dict=kwargs.get("pronunciation_dict", ""),
     )
-
-
-def _build_sherpa_onnx(kwargs: dict) -> TTSInterface:
-    from .sherpa_onnx_tts import TTSEngine as SherpaOnnxTTSEngine
-
-    return SherpaOnnxTTSEngine(**kwargs)
 
 
 def _build_openai(kwargs: dict) -> TTSInterface:
@@ -216,41 +182,21 @@ def _build_cartesia(kwargs: dict) -> TTSInterface:
     )
 
 
-def _build_piper(kwargs: dict) -> TTSInterface:
-    from .piper_tts import TTSEngine as PiperTTSEngine
-
-    return PiperTTSEngine(
-        model_path=kwargs.get("model_path"),
-        speaker_id=kwargs.get("speaker_id"),
-        length_scale=kwargs.get("length_scale"),
-        noise_scale=kwargs.get("noise_scale"),
-        noise_w=kwargs.get("noise_w"),
-        volume=kwargs.get("volume"),
-        normalize_audio=kwargs.get("normalize_audio"),
-        use_cuda=kwargs.get("use_cuda"),
-    )
-
-
 _TTS_ENGINE_BUILDERS: dict[str, Callable[[dict], TTSInterface]] = {
     "azure_tts": _build_azure,
-    "bark_tts": _build_bark,
     "edge_tts": _build_edge,
     "pyttsx3_tts": _build_pyttsx3,
     "cosyvoice_tts": _build_cosyvoice,
     "cosyvoice2_tts": _build_cosyvoice2,
-    "melo_tts": _build_melo,
     "x_tts": _build_x_tts,
     "gpt_sovits_tts": _build_gpt_sovits,
     "siliconflow_tts": _build_siliconflow,
-    "coqui_tts": _build_coqui,
     "fish_api_tts": _build_fish,
     "minimax_tts": _build_minimax,
-    "sherpa_onnx_tts": _build_sherpa_onnx,
     "openai_tts": _build_openai,
     "spark_tts": _build_spark,
     "elevenlabs_tts": _build_elevenlabs,
     "cartesia_tts": _build_cartesia,
-    "piper_tts": _build_piper,
 }
 
 

@@ -16,13 +16,11 @@ from open_llm_vtuber.config_manager.agent import AgentConfig
 from open_llm_vtuber.config_manager.asr import ASRConfig
 from open_llm_vtuber.config_manager.tts import TTSConfig
 from open_llm_vtuber.config_manager.tts_preprocessor import TranslatorConfig
-from open_llm_vtuber.config_manager.vad import VADConfig
 from open_llm_vtuber.translate.translate_factory import (
     _TRANSLATOR_BUILDERS,
     TranslateFactory,
 )
 from open_llm_vtuber.tts.tts_factory import _TTS_ENGINE_BUILDERS, TTSFactory
-from open_llm_vtuber.vad.vad_factory import _VAD_BUILDERS, VADFactory
 
 
 def _literal_values(annotation) -> set:
@@ -36,10 +34,6 @@ class FactoryRegistryTests(unittest.TestCase):
     def test_asr_registry_covers_config_choices(self):
         choices = _literal_values(ASRConfig.model_fields["asr_model"].annotation)
         self.assertTrue(choices <= set(_ASR_BUILDERS))
-
-    def test_vad_registry_covers_config_choices(self):
-        choices = _literal_values(VADConfig.model_fields["vad_model"].annotation)
-        self.assertTrue(choices <= set(_VAD_BUILDERS))
 
     def test_translate_registry_covers_config_choices(self):
         choices = _literal_values(
@@ -155,10 +149,6 @@ class FactoryRegistryTests(unittest.TestCase):
     def test_unknown_asr_choice_raises(self):
         with self.assertRaises(ValueError):
             ASRFactory.get_asr_system("missing")
-
-    def test_unknown_vad_choice_raises(self):
-        with self.assertRaises(ValueError):
-            VADFactory.get_vad_engine("missing")
 
     def test_unknown_translator_choice_raises(self):
         with self.assertRaises(ValueError):

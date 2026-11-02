@@ -28,7 +28,7 @@ Open-LLM-VTuber 是一个运行在浏览器里的 Live2D AI 伴侣。你可以�
 文本和合成语音回复，Live2D 形象会配合表情与动作作出反应。它还支持视觉输入（摄像头、屏幕截图或
 上传图片）以及搜索、时间、私有知识库等 MCP 工具。
 
-项目可以完全自托管：LLM、ASR、TTS 既能使用本地引擎，也能使用云 API；认证、对话历史和生成的音频
+项目可以自托管：LLM 可接 Ollama/LM Studio 或云 API，ASR 走云 API，TTS 可接云 API 或自建服务；认证、对话历史和生成的音频
 都留在自己的服务器上。
 
 本 fork **只提供网页端**。上游的 Electron 桌面客户端和透明桌宠模式不在本仓库范围内。
@@ -60,8 +60,9 @@ Open-LLM-VTuber 是一个运行在浏览器里的 Live2D AI 伴侣。你可以�
 - **多用户隔离** —— 启用 OIDC 后，历史、用户 MCP、TTS 缓存文件和浏览器 localStorage 键都按用户隔离；
   默认是单用户免登录模式。
 - **模型支持** —— 兼容 OpenAI 的 API、Ollama、Gemini、Claude、DeepSeek、智谱、Groq、Mistral、
-  LM Studio、llama.cpp；ASR 支持 sherpa-onnx、FunASR、Faster-Whisper、Whisper、Groq、Azure；
-  TTS 支持 Azure、Edge、MeloTTS、GPT-SoVITS、CosyVoice、Fish Audio、Bark、pyttsx3、sherpa-onnx。
+  LM Studio；ASR 支持 Groq Whisper、Azure；TTS 支持 Azure、Edge、OpenAI 兼容接口、ElevenLabs、
+  Cartesia、Fish Audio、MiniMax、SiliconFlow、pyttsx3，以及自建的 GPT-SoVITS、CosyVoice、XTTS、
+  Spark 服务。后端不再在进程内运行 ASR/TTS/VAD 模型。
 
 ## 架构
 
@@ -367,7 +368,7 @@ tests/                        unittest 测试集
 - 生成的 TTS 文件位于 `/cache/<user_id>/`，已登录用户无法获取其他用户的文件。
 - `conf.yaml`、`mcp_servers.json`、`model_dict.json`、`data/` 以及大部分模型/角色资源都被 Git 和
   `.dockerignore` 排除。不要把 API key 或 MCP token 写进受版本管理的文件。
-- 云 ASR/TTS 会把音频或文本发送给第三方；无法接受时请使用本地引擎。
+- 云 ASR/TTS 会把音频或文本发送给第三方。ASR 只有云端选项；TTS 无法接受时请改用自建服务（GPT-SoVITS、CosyVoice、XTTS、Spark）。
 - 默认的 single 模式没有认证。不要在没有任何反向代理或访问控制的情况下直接暴露到公网；需要公开
   访问时请启用 OIDC。
 

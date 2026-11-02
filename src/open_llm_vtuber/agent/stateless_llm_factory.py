@@ -46,12 +46,6 @@ def _build_ollama(kwargs: dict) -> StatelessLLMInterface:
     )
 
 
-def _build_llama_cpp(kwargs: dict) -> StatelessLLMInterface:
-    from .stateless_llm.llama_cpp_llm import LLM as LlamaLLM
-
-    return LlamaLLM(model_path=kwargs.get("model_path"))
-
-
 def _build_claude(kwargs: dict) -> StatelessLLMInterface:
     return ClaudeLLM(
         system=kwargs.get("system_prompt"),
@@ -72,7 +66,6 @@ _LLM_BUILDERS: dict[str, Callable[[dict], StatelessLLMInterface]] = {
     "lmstudio_llm": _build_openai_compatible,
     "stateless_llm_with_template": _build_template,
     "ollama_llm": _build_ollama,
-    "llama_cpp_llm": _build_llama_cpp,
     "claude_llm": _build_claude,
 }
 

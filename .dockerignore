@@ -60,12 +60,9 @@ logs/*
 # Cache & models
 cache/*
 asset/
-models/*
-!models/piper_voice/**
+models/
 src/open_llm_vtuber/tts/asset/
 src/open_llm_vtuber/tts/config/
-src/open_llm_vtuber/asr/models/*
-!src/open_llm_vtuber/asr/models/silero_vad.onnx
 
 # Misc
 tmp/
@@ -73,7 +70,6 @@ private/
 legacy/
 chat_history/
 knowledge_base/
-submodules/MeloTTS
 openapi_*.json
 
 # Windows builds

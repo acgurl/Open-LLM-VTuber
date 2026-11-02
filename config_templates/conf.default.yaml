@@ -68,7 +68,7 @@ character_config:
         # choose one of the llm provider from the llm_config
         # and set the required parameters in the corresponding field
         # examples:
-        # 'openai_compatible_llm', 'llama_cpp_llm', 'claude_llm', 'ollama_llm'
+        # 'openai_compatible_llm', 'claude_llm', 'ollama_llm'
         # 'openai_llm', 'gemini_llm', 'zhipu_llm', 'deepseek_llm', 'groq_llm'
         # 'mistral_llm', 'lmstudio_llm', and more
         llm_provider: 'ollama_llm'
@@ -137,10 +137,6 @@ character_config:
         llm_api_key: 'YOUR API KEY HERE'
         model: 'claude-3-haiku-20240307'
 
-      llama_cpp_llm:
-        model_path: '<path-to-gguf-model-file>'
-        verbose: False
-
       ollama_llm:
         base_url: 'http://localhost:11434/v1'
         model: 'qwen2.5:latest'
@@ -187,98 +183,13 @@ character_config:
 
   # === Automatic Speech Recognition ===
   asr_config:
-    # speech to text model options: 'faster_whisper', 'whisper_cpp', 'whisper', 'azure_asr', 'fun_asr', 'groq_whisper_asr', 'sherpa_onnx_asr'
-    asr_model: 'sherpa_onnx_asr'
+    # speech to text model options: 'azure_asr', 'groq_whisper_asr'
+    asr_model: 'groq_whisper_asr'
 
     azure_asr:
       api_key: 'azure_api_key'
       region: 'eastus'
       languages: ['en-US', 'zh-CN'] # List of languages to detect
-
-    # Faster whisper config
-    faster_whisper:
-      model_path: 'large-v3-turbo' # model path, name, or id from hf hub
-      download_root: 'models/whisper'
-      language: 'en' # en, zh, or something else. put nothing for auto-detect.
-      device: 'auto' # cpu, cuda, or auto. faster-whisper doesn't support mps
-      compute_type: 'int8'
-      prompt: '' # You can put a prompt here to help the model understand the context of the audio
-
-    whisper_cpp:
-      # all available models are listed on https://abdeladim-s.github.io/pywhispercpp/#pywhispercpp.constants.AVAILABLE_MODELS
-      model_name: 'small'
-      model_dir: 'models/whisper'
-      print_realtime: False
-      print_progress: False
-      language: 'auto' # en, zh, auto,
-      prompt: '' # You can put a prompt here to help the model understand the context of the audio
-
-    whisper:
-      name: 'medium'
-      download_root: 'models/whisper'
-      device: 'cpu'
-      prompt: '' # You can put a prompt here to help the model understand the context of the audio
-
-    # FunASR currently needs internet connection on launch
-    # to download / check the models. You can disconnect the internet after initialization.
-    # Or you can use sherpa onnx asr or Faster-Whisper for complete offline experience
-    fun_asr:
-      model_name: 'iic/SenseVoiceSmall' # or 'paraformer-zh'
-      vad_model: 'fsmn-vad' # this is only used to make it works if audio is longer than 30s
-      punc_model: 'ct-punc' # punctuation model.
-      device: 'cpu'
-      disable_update: True # should we check FunASR updates everytime on launch
-      ncpu: 4 # number of threads for CPU internal operations.
-      hub: 'ms' # ms (default) to download models from ModelScope. Use hf to download models from Hugging Face.
-      use_itn: False
-      language: 'auto' # zh, en, auto
-
-    # pip install sherpa-onnx
-    # documentation: https://k2-fsa.github.io/sherpa/onnx/index.html
-    # ASR models download: https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models
-    sherpa_onnx_asr:
-      model_type: 'sense_voice' # 'transducer', 'paraformer', 'nemo_ctc', 'wenet_ctc', 'whisper', 'tdnn_ctc', 'sense_voice', 'fire_red_asr'
-      #  Choose only ONE of the following, depending on the model_type:
-      # --- For model_type: 'transducer' ---
-      # encoder: ''        # Path to the encoder model (e.g., 'path/to/encoder.onnx')
-      # decoder: ''        # Path to the decoder model (e.g., 'path/to/decoder.onnx')
-      # joiner: ''         # Path to the joiner model (e.g., 'path/to/joiner.onnx')
-      # --- For model_type: 'paraformer' ---
-      # paraformer: ''     # Path to the paraformer model (e.g., 'path/to/model.onnx')
-      # --- For model_type: 'fire_red_asr' (FireredASR - High-performance Chinese & English ASR with dialect support) ---
-      # fire_red_asr_encoder: ''    # Path to the encoder model (e.g., 'path/to/encoder.onnx')
-      # fire_red_asr_decoder: ''    # Path to the decoder model (e.g., 'path/to/decoder.onnx')
-      # --- For model_type: 'nemo_ctc' ---
-      # nemo_ctc: ''        # Path to the NeMo CTC model (e.g., 'path/to/model.onnx')
-      # --- For model_type: 'wenet_ctc' ---
-      # wenet_ctc: ''       # Path to the WeNet CTC model (e.g., 'path/to/model.onnx')
-      # --- For model_type: 'tdnn_ctc' ---
-      # tdnn_model: ''      # Path to the TDNN CTC model (e.g., 'path/to/model.onnx')
-      # --- For model_type: 'whisper' ---
-      # whisper_encoder: '' # Path to the Whisper encoder model (e.g., 'path/to/encoder.onnx')
-      # whisper_decoder: '' # Path to the Whisper decoder model (e.g., 'path/to/decoder.onnx')
-      # --- For model_type: 'sense_voice' ---
-      # I've coded so that the sense voice model will get automatically downloaded.
-      # For other models, you need to download them yourself
-      sense_voice: './models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx' # Path to the SenseVoice model (e.g., 'path/to/model.onnx')
-      tokens: './models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/tokens.txt' # Path to tokens.txt (required for all model types)
-      # --- Optional parameters (with defaults shown) ---
-      # hotwords_file: ''     # Path to hotwords file (if using hotwords)
-      # hotwords_score: 1.5   # Score for hotwords
-      # modeling_unit: ''     # Modeling unit for hotwords (if applicable)
-      # bpe_vocab: ''         # Path to BPE vocabulary (if applicable)
-      num_threads: 4 # Number of threads
-      # whisper_language: '' # Language for Whisper models (e.g., 'en', 'zh', etc. - if using Whisper)
-      # whisper_task: 'transcribe'  # Task for Whisper models ('transcribe' or 'translate' - if using Whisper)
-      # whisper_tail_paddings: -1   # Tail padding for Whisper models (if using Whisper)
-      # blank_penalty: 0.0    # Penalty for blank symbol
-      # decoding_method: 'greedy_search'  # 'greedy_search' or 'modified_beam_search'
-      # debug: False # Enable debug mode
-      # sample_rate: 16000 # Sample rate (should match the model's expected sample rate)
-      # feature_dim: 80       # Feature dimension (should match the model's expected feature dimension)
-      use_itn: True # Enable ITN for SenseVoice models (should set to False if not using SenseVoice models)
-      # Provider for inference (cpu or cuda) (cuda option needs additional settings. Please check our docs)
-      provider: 'cpu'
 
     groq_whisper_asr:
       api_key: ''
@@ -289,9 +200,9 @@ character_config:
   tts_config:
     tts_model: 'edge_tts'
     # text to speech model options:
-    #   'azure_tts', 'pyttsx3_tts', 'edge_tts', 'bark_tts',
-    #   'cosyvoice_tts', 'melo_tts', 'coqui_tts', 'piper_tts',
-    #   'fish_api_tts', 'x_tts', 'gpt_sovits_tts', 'sherpa_onnx_tts'
+    #   'azure_tts', 'pyttsx3_tts', 'edge_tts',
+    #   'cosyvoice_tts', 'cosyvoice2_tts', 'siliconflow_tts', 'openai_tts', 'spark_tts',
+    #   'fish_api_tts', 'x_tts', 'gpt_sovits_tts',
     #   'minimax_tts', 'elevenlabs_tts', 'cartesia_tts'
 
     azure_tts:
@@ -302,25 +213,12 @@ character_config:
       rate: '1' # rate of speak
       tailing_silence_ms: 0 # SSML trailing silence (ms); Azure keeps a small inherent tail
 
-    bark_tts:
-      voice: 'v2/en_speaker_1'
-
     edge_tts:
       # Check out doc at https://github.com/rany2/edge-tts
       # Use `edge-tts --list-voices` to list all available voices
       voice: 'en-US-AvaMultilingualNeural' # 'en-US-AvaMultilingualNeural' #'zh-CN-XiaoxiaoNeural' # 'ja-JP-NanamiNeural'
 
     # pyttsx3_tts doesn't have any config.
-
-    piper_tts:
-      model_path: 'models/piper/zh_CN-huayan-medium.onnx'  # Path to the model file (.onnx)
-      speaker_id: 0             # Speaker ID (for multi-speaker models; keep 0 for single-speaker models)
-      length_scale: 1.0         # Speech speed control (0.5 = 2x faster, 1.0 = normal, 2.0 = 2x slower)
-      noise_scale: 0.667        # Degree of audio variation (0.0–1.0; higher = richer, more varied; recommended 0.667)
-      noise_w: 0.8              # Speaking style variation (0.0–1.0; higher = more expressive; recommended 0.8)
-      volume: 1.0               # Volume level (0.0–1.0; 1.0 = normal)
-      normalize_audio: true     # Whether to normalize audio (recommended: true, for more consistent volume)
-      use_cuda: false           # Whether to use GPU acceleration (requires onnxruntime-gpu)
 
     cosyvoice_tts: # Cosy Voice TTS connects to the gradio webui
       # Check their documentation for deployment and the meaning of the following configurations
@@ -348,12 +246,6 @@ character_config:
       speed: 1.0
       api_name: '/generate_audio'
 
-    melo_tts:
-      speaker: 'EN-Default' # ZH
-      language: 'EN' # ZH
-      device: 'auto' # You can set it manually to 'cpu' or 'cuda' or 'cuda:0' or 'mps'
-      speed: 1.0
-
     x_tts:
       api_url: 'http://127.0.0.1:8020/tts_to_audio'
       speaker_wav: 'female'
@@ -380,19 +272,6 @@ character_config:
       latency: 'balanced'
       base_url: 'https://api.fish.audio'
 
-    coqui_tts:
-      # Name of the TTS model to use. If empty, will use default model
-      # do 'tts --list_models' to list supported models for coqui-tts
-      # Some examples:
-      # - 'tts_models/en/ljspeech/tacotron2-DDC' (single speaker)
-      # - 'tts_models/zh-CN/baker/tacotron2-DDC-GST' (single speaker for chinese)
-      # - 'tts_models/multilingual/multi-dataset/your_tts' (multi-speaker)
-      # - 'tts_models/multilingual/multi-dataset/xtts_v2' (multi-speaker)
-      model_name: 'tts_models/en/ljspeech/tacotron2-DDC'
-      speaker_wav: ''
-      language: 'en'
-      device: ''
-
     siliconflow_tts:
       api_url: "https://api.siliconflow.cn/v1/audio/speech"
       api_key: "your key"
@@ -403,24 +282,6 @@ character_config:
       stream: true
       speed: 1
       gain: 0
-
-    # pip install sherpa-onnx
-    # documentation: https://k2-fsa.github.io/sherpa/onnx/index.html
-    # TTS models download: https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models
-    # see config_alts for more examples
-    sherpa_onnx_tts:
-      vits_model: '/path/to/tts-models/vits-melo-tts-zh_en/model.onnx' # Path to VITS model file
-      vits_lexicon: '/path/to/tts-models/vits-melo-tts-zh_en/lexicon.txt' # Path to lexicon file (optional)
-      vits_tokens: '/path/to/tts-models/vits-melo-tts-zh_en/tokens.txt' # Path to tokens file
-      vits_data_dir: '' # '/path/to/tts-models/vits-piper-en_GB-cori-high/espeak-ng-data'  # Path to espeak-ng data (optional)
-      vits_dict_dir: '/path/to/tts-models/vits-melo-tts-zh_en/dict' # Path to Jieba dict (optional, for Chinese)
-      tts_rule_fsts: '/path/to/tts-models/vits-melo-tts-zh_en/number.fst,/path/to/tts-models/vits-melo-tts-zh_en/phone.fst,/path/to/tts-models/vits-melo-tts-zh_en/date.fst,/path/to/tts-models/vits-melo-tts-zh_en/new_heteronym.fst' # Path to rule FSTs file (optional)
-      max_num_sentences: 2 # Max sentences per batch (or -1 for all)
-      sid: 1 # Speaker ID (for multi-speaker models)
-      provider: 'cpu' # Use 'cpu', 'cuda' (GPU), or 'coreml' (Apple)
-      num_threads: 1 # Number of computation threads
-      speed: 1.0 # Speech speed (1.0 is normal)
-      debug: false # Enable debug mode (True/False)
 
     spark_tts:
       api_url: 'http://127.0.0.1:6006/' # API URL. Uses Gradio's built-in front-end API. Repository: https://github.com/SparkAudio/Spark-TTS
@@ -468,19 +329,6 @@ character_config:
       emotion: 'neutral' # Emotional guidance
       volume: 1.0 # Voice volume (0.5 to 2.0)
       speed: 1.0 # Voice speed (0.6 to 1.5)
-
-  # =================== Voice Activity Detection ===================
-  vad_config:
-    vad_model: null
-
-    silero_vad:
-      orig_sr: 16000 # Original Audio Sample Rate
-      target_sr: 16000 # Target Audio Sample Rate
-      prob_threshold: 0.4 # Probability Threshold for VAD
-      db_threshold: 60 # Decibel Threshold for VAD
-      required_hits: 3 # Number of consecutive hits required to consider speech
-      required_misses: 24 # Number of consecutive misses required to consider silence
-      smoothing_window: 5 # Smoothing window size for VAD
 
   tts_preprocessor_config:
     # settings regarding preprocessing for text that goes into TTS

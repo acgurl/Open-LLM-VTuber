@@ -56,19 +56,14 @@ logs/*
 cache/*
 src/open_llm_vtuber/tts/asset
 src/open_llm_vtuber/tts/config
-src/open_llm_vtuber/asr/models*
-!src/open_llm_vtuber/asr/models/silero_vad.onnx
 asset
-models/*
-!models/piper_voice
-models/piper_voice/*
+models/
 
 
 # Legacy and specific directories
 legacy/
 chat_history/
 knowledge_base/
-submodules/MeloTTS
 openapi_assistants.json
 openapi_memgpt.json
 

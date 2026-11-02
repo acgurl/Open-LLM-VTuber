@@ -103,7 +103,6 @@ class WebSocketHandler:
             "interrupt-signal": self._handle_interrupt,
             "mic-audio-data": self._handle_audio_data,
             "mic-audio-end": self._handle_conversation_trigger,
-            "raw-audio-data": self._handle_raw_audio_data,
             "text-input": self._handle_conversation_trigger,
             "ai-speak-signal": self._handle_conversation_trigger,
             "fetch-configs": self._handle_fetch_configs,
@@ -355,7 +354,6 @@ class WebSocketHandler:
             live2d_model=self.default_context_cache.live2d_model,
             asr_engine=self.default_context_cache.asr_engine,
             tts_engine=self.default_context_cache.tts_engine,
-            vad_engine=self.default_context_cache.vad_engine,
             agent_engine=self.default_context_cache.agent_engine,
             translate_engine=self.default_context_cache.translate_engine,
             mcp_server_registry=self.default_context_cache.mcp_server_registry,
@@ -722,42 +720,6 @@ class WebSocketHandler:
                 "message": "Audio input is too long; the recording was discarded",
             },
         )
-
-    async def _handle_raw_audio_data(
-        self, websocket: WebSocket, client_uid: str, data: WSMessage
-    ) -> None:
-        """Handle incoming raw audio data for VAD processing"""
-        context = self.client_contexts[client_uid]
-        if context.vad_engine is None:
-            return
-
-        chunk = data.get("audio", [])
-        if chunk:
-            for audio_bytes in context.vad_engine.detect_speech(chunk):
-                if audio_bytes == b"<|PAUSE|>":
-                    await self._send_json(
-                        websocket, {"type": "control", "text": "interrupt"}
-                    )
-                elif audio_bytes == b"<|RESUME|>":
-                    pass
-                elif len(audio_bytes) > 1024:
-                    # Detected audio activity (voice)
-                    buffer = self.received_data_buffers.get(client_uid)
-                    if buffer is None:
-                        return
-                    if len(buffer) + len(audio_bytes) // 2 > MAX_AUDIO_SAMPLES:
-                        await self._reject_oversized_audio(websocket, client_uid)
-                        return
-                    self.received_data_buffers[client_uid] = np.append(
-                        buffer,
-                        # VAD yields int16 PCM bytes; ASR engines and the
-                        # mic-audio-data path both expect [-1, 1] floats.
-                        np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
-                        / 32768.0,
-                    )
-                    await self._send_json(
-                        websocket, {"type": "control", "text": "mic-audio-end"}
-                    )
 
     def _validate_conversation_input(
         self, msg_type: str, data: WSMessage

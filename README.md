@@ -30,8 +30,8 @@ or text, it replies with streaming text and synthesized speech, and its avatar r
 expressions and motions. It also supports visual input (camera, screen capture or uploaded images)
 and MCP tools such as search, time or a private knowledge base.
 
-Everything can be self-hosted. The LLM, ASR and TTS layers can run against local engines or cloud
-APIs, and authentication, conversation history and generated audio stay on your server.
+The server is self-hosted. The LLM can be Ollama/LM Studio or a cloud API, ASR uses cloud APIs, and
+TTS uses cloud APIs or a self-hosted TTS server; authentication, conversation history and generated audio stay on your server.
 
 This fork is **web only**. The upstream Electron desktop client and transparent desktop-pet mode
 are not part of this repository.
@@ -71,9 +71,9 @@ are not part of this repository.
   accounts with `allowed_users` (see `characters/README.md`). The default is a single-user,
   no-login mode.
 - **Model coverage** — OpenAI-compatible APIs, Ollama, Gemini, Claude, DeepSeek, Zhipu, Groq,
-  Mistral, LM Studio, llama.cpp; ASR via sherpa-onnx, FunASR, Faster-Whisper, Whisper, Groq and
-  Azure; TTS via Azure, Edge, MeloTTS, GPT-SoVITS, CosyVoice, Fish Audio, Bark, pyttsx3 and
-  sherpa-onnx.
+  Mistral and LM Studio; ASR via Groq Whisper and Azure; TTS via Azure, Edge, OpenAI-compatible,
+  ElevenLabs, Cartesia, Fish Audio, MiniMax, SiliconFlow, pyttsx3, and self-hosted GPT-SoVITS,
+  CosyVoice, XTTS and Spark servers. The backend no longer runs ASR/TTS/VAD models in-process.
 
 ## Architecture
 
@@ -401,7 +401,8 @@ tests/                        unittest suite
   file.
 - `conf.yaml`, `mcp_servers.json`, `model_dict.json`, `data/` and most model/character assets are
   ignored by Git and `.dockerignore`. Never put API keys or MCP tokens in tracked files.
-- Cloud ASR/TTS providers receive audio or text. Use local engines when that is not acceptable.
+- Cloud ASR/TTS providers receive audio or text. ASR is cloud-only; for TTS, point at a self-hosted
+  server (GPT-SoVITS, CosyVoice, XTTS, Spark) when that is not acceptable.
 - The default single-user mode has no authentication. Do not expose it publicly without a reverse
   proxy and access control or OIDC.
 

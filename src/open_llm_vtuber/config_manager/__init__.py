@@ -15,34 +15,20 @@ from .live import LiveConfig, BiliBiliLiveConfig
 from .stateless_llm import (
     OpenAICompatibleConfig,
     ClaudeConfig,
-    LlamaCppConfig,
 )
 from .asr import (
     ASRConfig,
     AzureASRConfig,
-    FasterWhisperConfig,
-    WhisperCPPConfig,
-    WhisperConfig,
-    FunASRConfig,
-    SherpaOnnxASRConfig,
     GroqWhisperASRConfig,
 )
 from .tts import (
     TTSConfig,
     AzureTTSConfig,
-    BarkTTSConfig,
     EdgeTTSConfig,
     CosyvoiceTTSConfig,
-    MeloTTSConfig,
-    CoquiTTSConfig,
     XTTSConfig,
     GPTSoVITSConfig,
     FishAPITTSConfig,
-    SherpaOnnxTTSConfig,
-)
-from .vad import (
-    VADConfig,
-    SileroVADConfig,
 )
 from .tts_preprocessor import TTSPreprocessorConfig, TranslatorConfig, DeepLXConfig
 from .i18n import I18nMixin, Description, MultiLingualString
@@ -75,7 +61,6 @@ __all__ = [
     # LLM related classes
     "OpenAICompatibleConfig",
     "ClaudeConfig",
-    "LlamaCppConfig",
     # Agent related classes
     "AgentConfig",
     "AgentSettings",
@@ -84,27 +69,15 @@ __all__ = [
     # ASR related classes
     "ASRConfig",
     "AzureASRConfig",
-    "FasterWhisperConfig",
-    "WhisperCPPConfig",
-    "WhisperConfig",
-    "FunASRConfig",
-    "SherpaOnnxASRConfig",
     "GroqWhisperASRConfig",
     # TTS related classes
     "TTSConfig",
     "AzureTTSConfig",
-    "BarkTTSConfig",
     "EdgeTTSConfig",
     "CosyvoiceTTSConfig",
-    "MeloTTSConfig",
-    "CoquiTTSConfig",
     "XTTSConfig",
     "GPTSoVITSConfig",
     "FishAPITTSConfig",
-    "SherpaOnnxTTSConfig",
-    # VAD related classes
-    "VADConfig",
-    "SileroVADConfig",
     # TTS preprocessor related classes
     "TTSPreprocessorConfig",
     "TranslatorConfig",

@@ -78,9 +78,9 @@
 
   - 🧠 **広範なモデルサポート**:
 
-      - 🤖 Large Language Models (LLM): Ollama, OpenAI (およびOpenAI互換API), Gemini, Claude, Mistral, DeepSeek, Zhipu AI, GGUF, LM Studio, vLLM, etc.
-      - 🎙️ Automatic Speech Recognition (ASR): sherpa-onnx, FunASR, Faster-Whisper, Whisper.cpp, Whisper, Groq Whisper, Azure ASR, etc.
-      - 🔊 Text-to-Speech (TTS): sherpa-onnx, pyttsx3, MeloTTS, Coqui-TTS, GPTSoVITS, Bark, CosyVoice, Edge TTS, Fish Audio, Azure TTS, etc.
+      - 🤖 Large Language Models (LLM): Ollama, OpenAI (およびOpenAI互換API), Gemini, Claude, Mistral, DeepSeek, Zhipu AI, LM Studio, vLLM, etc.
+      - 🎙️ Automatic Speech Recognition (ASR): Groq Whisper, Azure ASR
+      - 🔊 Text-to-Speech (TTS): pyttsx3, GPTSoVITS, CosyVoice, XTTS, Spark, Edge TTS, Fish Audio, Azure TTS, OpenAI, ElevenLabs, Cartesia, MiniMax, SiliconFlow
 
   - 🔧 **高いカスタマイズの自由度**:
 
@@ -109,9 +109,7 @@
 
 ## 😢 アンインストール (Uninstall)
 
-ほとんどのファイルは、Pythonの依存関係とモデルを含め、プロジェクトフォルダに保存されます。
-
-ただし、ModelScopeやHugging Faceを通じてダウンロードしたモデルは `MODELSCOPE_CACHE` または `HF_HOME` に保存されている可能性があります。プロジェクトの `models` ディレクトリに保管することが目標ですが、一度確認してみることをお勧めします。
+ほとんどのファイルは、Pythonの依存関係を含め、プロジェクトフォルダに保存されます。
 
 また、インストールガイドを参照して、不要になった追加ツール（`uv`、`ffmpeg`、`deeplx` など）がないか確認してください。
 

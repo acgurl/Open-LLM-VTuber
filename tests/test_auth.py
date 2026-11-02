@@ -344,7 +344,6 @@ class SessionUserPropagationTests(unittest.IsolatedAsyncioTestCase):
             live2d_model=None,
             asr_engine=None,
             tts_engine=None,
-            vad_engine=None,
             agent_engine=None,
             translate_engine=None,
             mcp_server_registry=None,
