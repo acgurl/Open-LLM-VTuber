@@ -88,7 +88,7 @@ class TTSEngine(TTSInterface):
         except Exception as e:
             logger.critical(f"Failed to initialize Cartesia client: {e}")
             self.client = None
-            raise e
+            raise
 
     def generate_audio(
         self, text: str, file_name_no_ext: str | None = None
@@ -133,8 +133,7 @@ class TTSEngine(TTSInterface):
             )
 
             with open(speech_file_path, "wb") as f:
-                for chunk in audio:
-                    f.write(chunk)
+                f.writelines(audio)
 
             logger.info(
                 f"Successfully generated audio file via Cartesia: {speech_file_path}"
@@ -142,7 +141,7 @@ class TTSEngine(TTSInterface):
         except Exception as e:
             logger.critical(f"Error: Cartesia TTS unable to generate audio: {e}")
             self.remove_partial_file(speech_file_path)
-            raise e
+            raise
 
         return str(speech_file_path)
 

@@ -59,20 +59,26 @@ from .config_manager import (
 )
 from .config_manager.access import is_user_allowed
 
+# Tool prompts that are injected per turn (or, for MCP, by the agent from the
+# live tool list) rather than baked into the persona system prompt.
+_PROMPTS_NOT_IN_SYSTEM_PROMPT = frozenset(
+    {"group_conversation_prompt", "proactive_speak_prompt", "mcp_prompt"}
+)
+
 
 class ServiceContext:
     """Initializes, stores, and updates the asr, tts, and llm instances and other
     configurations for a connected client."""
 
     def __init__(self):
-        self.config: Config = None
-        self.system_config: SystemConfig = None
-        self.character_config: CharacterConfig = None
+        self.config: Config | None = None
+        self.system_config: SystemConfig | None = None
+        self.character_config: CharacterConfig | None = None
 
-        self.live2d_model: Live2dModel = None
-        self.asr_engine: ASRInterface = None
-        self.tts_engine: TTSInterface = None
-        self.agent_engine: AgentInterface = None
+        self.live2d_model: Live2dModel | None = None
+        self.asr_engine: ASRInterface | None = None
+        self.tts_engine: TTSInterface | None = None
+        self.agent_engine: AgentInterface | None = None
         # translate_engine can be none if translation is disabled
         self.vad_engine: VADInterface | None = None
         self.translate_engine: TranslateInterface | None = None
@@ -97,12 +103,13 @@ class ServiceContext:
         self.mcp_active: bool = False
 
         # the system prompt is a combination of the persona prompt and live2d expression prompt
-        self.system_prompt: str = None
+        self.system_prompt: str | None = None
 
         # Store the generated MCP prompt string (if MCP enabled)
         self.mcp_prompt: str = ""
 
-        self.history_uid: str = ""  # Add history_uid field
+        # Empty/None means no history is open and turns are not persisted.
+        self.history_uid: str | None = ""
         self.history_repository: HistoryRepository | None = None
         self.history: UserHistoryStore | None = None
         self.user_id: str | None = DEFAULT_USER_ID
@@ -120,7 +127,7 @@ class ServiceContext:
         self._owns_tts_engine = False
 
         self.channels: OutboundChannels | None = None
-        self.client_uid: str = None
+        self.client_uid: str | None = None
 
     def __str__(self):
         if not self.character_config:
@@ -203,10 +210,14 @@ class ServiceContext:
         self.mcp_client = self._build_mcp_client()
         logger.info("MCPClient initialized for this session.")
 
+    def _ensure_server_registry(self) -> ServerRegistry:
+        if self.mcp_server_registry is None:
+            self.mcp_server_registry = ServerRegistry.from_servers({})
+        return self.mcp_server_registry
+
     def _ensure_mcp_client(self) -> None:
         if self.mcp_client is None:
-            if self.mcp_server_registry is None:
-                self.mcp_server_registry = ServerRegistry.from_servers({})
+            self._ensure_server_registry()
             self._init_mcp_client()
 
     def _build_mcp_client(self) -> MCPClient:
@@ -246,9 +257,9 @@ class ServiceContext:
 
     def _ensure_tool_adapter(self) -> ToolAdapter:
         if self.tool_adapter is None:
-            if self.mcp_server_registry is None:
-                self.mcp_server_registry = ServerRegistry.from_servers({})
-            self.tool_adapter = ToolAdapter(server_registry=self.mcp_server_registry)
+            self.tool_adapter = ToolAdapter(
+                server_registry=self._ensure_server_registry()
+            )
         return self.tool_adapter
 
     async def _init_mcp_components(self, use_mcpp, enabled_servers):
@@ -865,10 +876,7 @@ class ServiceContext:
         logger.debug(f"constructing persona_prompt: '''{persona_prompt}'''")
 
         for prompt_name, prompt_file in self.system_config.tool_prompts.items():
-            if (
-                prompt_name == "group_conversation_prompt"
-                or prompt_name == "proactive_speak_prompt"
-            ):
+            if prompt_name in _PROMPTS_NOT_IN_SYSTEM_PROMPT:
                 continue
 
             if prompt_name == "live2d_expression_prompt" and self.live2d_model is None:
@@ -886,9 +894,6 @@ class ServiceContext:
                 prompt_content = prompt_content.replace(
                     "[<insert_motionmap_keys>]", self.live2d_model.motion_str
                 )
-
-            if prompt_name == "mcp_prompt":
-                continue
 
             persona_prompt += prompt_content
 

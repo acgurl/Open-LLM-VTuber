@@ -36,6 +36,8 @@ MAX_IMAGES_PER_MESSAGE = 4
 MAX_IMAGE_DATA_CHARS = 8 * 1024 * 1024
 IMAGE_SOURCES = {"camera", "screen", "shared", "clipboard", "upload"}
 MAX_LOCAL_MCP_PAYLOAD_CHARS = 256 * 1024
+# Consumed by message_handler.wait_for_response before routing; not an error.
+_RESPONSE_ONLY_MESSAGE_TYPES = {"frontend-playback-complete", "local-tool-result"}
 
 
 class WSMessage(TypedDict, total=False):
@@ -112,9 +114,6 @@ class WebSocketHandler:
             "heartbeat": self._handle_heartbeat,
             "register-local-mcp": self._handle_register_local_mcp,
             "unregister-local-mcp": self._handle_unregister_local_mcp,
-            # Resolved by message_handler before routing; kept out of the
-            # unknown-message warning path.
-            "local-tool-result": self._handle_local_tool_result,
         }
 
     def try_reserve_connection(
@@ -150,6 +149,10 @@ class WebSocketHandler:
         if user_id is None:
             return True
         return self.client_users.get(client_uid) == user_id
+
+    @staticmethod
+    async def _send_json(websocket: WebSocket, payload: dict, **dumps_kwargs) -> None:
+        await websocket.send_text(json.dumps(payload, **dumps_kwargs))
 
     @staticmethod
     def _install_serialized_send(websocket: WebSocket) -> None:
@@ -271,8 +274,7 @@ class WebSocketHandler:
     ):
         """Store client data and initialize group status"""
         # The reservation only protects the expensive initialization window.
-        self._pending_connections.discard(client_uid)
-        self._pending_user_ids.pop(client_uid, None)
+        self.release_connection_reservation(client_uid)
         self.client_connections[client_uid] = websocket
         self.client_contexts[client_uid] = session_service_context
         self.client_users[client_uid] = session_service_context.user_id
@@ -288,24 +290,23 @@ class WebSocketHandler:
         session_service_context: ServiceContext,
     ):
         """Send initial connection messages to the client"""
-        await websocket.send_text(
-            json.dumps({"type": "full-text", "text": "Connection established"})
+        await self._send_json(
+            websocket, {"type": "full-text", "text": "Connection established"}
         )
 
-        await websocket.send_text(
-            json.dumps(session_service_context.model_conf_payload(client_uid))
+        await self._send_json(
+            websocket, session_service_context.model_conf_payload(client_uid)
         )
 
         # The backend decides which user MCP entries are local; the browser
         # connects to those and registers their tools over WebSocket.
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "local-mcp-config",
-                    "servers": session_service_context.get_local_mcp_config(),
-                },
-                ensure_ascii=False,
-            )
+        await self._send_json(
+            websocket,
+            {
+                "type": "local-mcp-config",
+                "servers": session_service_context.get_local_mcp_config(),
+            },
+            ensure_ascii=False,
         )
 
         # Send initial group status
@@ -396,8 +397,8 @@ class WebSocketHandler:
                     continue
                 except Exception:
                     logger.exception("Error processing message")
-                    await websocket.send_text(
-                        json.dumps({"type": "error", "message": "Invalid request"})
+                    await self._send_json(
+                        websocket, {"type": "error", "message": "Invalid request"}
                     )
                     continue
 
@@ -427,9 +428,8 @@ class WebSocketHandler:
         handler = self._message_handlers.get(msg_type)
         if handler:
             await handler(websocket, client_uid, data)
-        else:
-            if msg_type != "frontend-playback-complete":
-                logger.warning(f"Unknown message type: {msg_type}")
+        elif msg_type not in _RESPONSE_ONLY_MESSAGE_TYPES:
+            logger.warning(f"Unknown message type: {msg_type}")
 
     async def _handle_group_operation(
         self, websocket: WebSocket, client_uid: str, data: dict
@@ -518,27 +518,14 @@ class WebSocketHandler:
     async def send_group_update(self, websocket: WebSocket, client_uid: str):
         """Sends group information to a client"""
         group = self.chat_group_manager.get_client_group(client_uid)
-        if group:
-            current_members = self.chat_group_manager.get_group_members(client_uid)
-            await websocket.send_text(
-                json.dumps(
-                    {
-                        "type": "group-update",
-                        "members": current_members,
-                        "is_owner": group.owner_uid == client_uid,
-                    }
-                )
-            )
-        else:
-            await websocket.send_text(
-                json.dumps(
-                    {
-                        "type": "group-update",
-                        "members": [],
-                        "is_owner": False,
-                    }
-                )
-            )
+        await self._send_json(
+            websocket,
+            {
+                "type": "group-update",
+                "members": self.chat_group_manager.get_group_members(client_uid),
+                "is_owner": bool(group) and group.owner_uid == client_uid,
+            },
+        )
 
     async def _handle_interrupt(
         self, websocket: WebSocket, client_uid: str, data: WSMessage
@@ -580,8 +567,8 @@ class WebSocketHandler:
             logger.exception("Failed to list chat histories")
             histories = []
         histories = [_history_summary_for_wire(item) for item in histories]
-        await websocket.send_text(
-            json.dumps({"type": "history-list", "histories": histories})
+        await self._send_json(
+            websocket, {"type": "history-list", "histories": histories}
         )
 
     async def _handle_fetch_history(
@@ -626,27 +613,25 @@ class WebSocketHandler:
             except Exception:
                 logger.exception("Failed to load tool calls for history")
 
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "history-data",
-                    "messages": [
-                        with_wire_timestamp(msg)
-                        for msg in messages
-                        if msg["role"] != "system"
-                    ],
-                    "tool_calls": [with_wire_timestamp(call) for call in tool_calls],
-                }
-            )
+        await self._send_json(
+            websocket,
+            {
+                "type": "history-data",
+                "messages": [
+                    with_wire_timestamp(msg)
+                    for msg in messages
+                    if msg["role"] != "system"
+                ],
+                "tool_calls": [with_wire_timestamp(call) for call in tool_calls],
+            },
         )
         if created_uid:
-            await websocket.send_text(
-                json.dumps(
-                    {
-                        "type": "new-history-created",
-                        "history_uid": created_uid,
-                    }
-                )
+            await self._send_json(
+                websocket,
+                {
+                    "type": "new-history-created",
+                    "history_uid": created_uid,
+                },
             )
 
     async def _handle_create_history(
@@ -665,13 +650,12 @@ class WebSocketHandler:
             await context.load_history(history_uid)
         except Exception:
             logger.exception("Failed to reset memory for a new history")
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "new-history-created",
-                    "history_uid": history_uid,
-                }
-            )
+        await self._send_json(
+            websocket,
+            {
+                "type": "new-history-created",
+                "history_uid": history_uid,
+            },
         )
 
     async def _handle_delete_history(
@@ -691,14 +675,13 @@ class WebSocketHandler:
             if context.history is not None
             else False
         )
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "history-deleted",
-                    "success": success,
-                    "history_uid": history_uid,
-                }
-            )
+        await self._send_json(
+            websocket,
+            {
+                "type": "history-deleted",
+                "success": success,
+                "history_uid": history_uid,
+            },
         )
         if success and history_uid == context.history_uid:
             context.history_uid = None
@@ -732,13 +715,12 @@ class WebSocketHandler:
     ) -> None:
         self.received_data_buffers[client_uid] = np.array([])
         logger.warning(f"Audio input from {client_uid} exceeded the size limit")
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "error",
-                    "message": "Audio input is too long; the recording was discarded",
-                }
-            )
+        await self._send_json(
+            websocket,
+            {
+                "type": "error",
+                "message": "Audio input is too long; the recording was discarded",
+            },
         )
 
     async def _handle_raw_audio_data(
@@ -753,8 +735,8 @@ class WebSocketHandler:
         if chunk:
             for audio_bytes in context.vad_engine.detect_speech(chunk):
                 if audio_bytes == b"<|PAUSE|>":
-                    await websocket.send_text(
-                        json.dumps({"type": "control", "text": "interrupt"})
+                    await self._send_json(
+                        websocket, {"type": "control", "text": "interrupt"}
                     )
                 elif audio_bytes == b"<|RESUME|>":
                     pass
@@ -773,8 +755,8 @@ class WebSocketHandler:
                         np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32)
                         / 32768.0,
                     )
-                    await websocket.send_text(
-                        json.dumps({"type": "control", "text": "mic-audio-end"})
+                    await self._send_json(
+                        websocket, {"type": "control", "text": "mic-audio-end"}
                     )
 
     def _validate_conversation_input(
@@ -814,7 +796,7 @@ class WebSocketHandler:
         """Handle triggers that start a conversation"""
         error = self._validate_conversation_input(data.get("type", ""), data)
         if error:
-            await websocket.send_text(json.dumps({"type": "error", "message": error}))
+            await self._send_json(websocket, {"type": "error", "message": error})
             return
 
         await handle_conversation_trigger(
@@ -840,8 +822,8 @@ class WebSocketHandler:
             context.system_config.config_alts_dir,
             is_allowed=context.character_allowed,
         )
-        await websocket.send_text(
-            json.dumps({"type": "config-files", "configs": config_files})
+        await self._send_json(
+            websocket, {"type": "config-files", "configs": config_files}
         )
 
     async def _handle_config_switch(
@@ -858,8 +840,8 @@ class WebSocketHandler:
     ) -> None:
         """Handle fetching available background images"""
         bg_files = scan_bg_directory()
-        await websocket.send_text(
-            json.dumps({"type": "background-files", "files": bg_files})
+        await self._send_json(
+            websocket, {"type": "background-files", "files": bg_files}
         )
 
     async def _handle_audio_play_start(
@@ -896,20 +878,19 @@ class WebSocketHandler:
         if not context:
             context = self.default_context_cache
 
-        await websocket.send_text(json.dumps(context.model_conf_payload(client_uid)))
+        await self._send_json(websocket, context.model_conf_payload(client_uid))
 
     async def _send_local_mcp_error(
         self, websocket: WebSocket, server_id, message: str
     ) -> None:
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "local-mcp-error",
-                    "server_id": server_id if isinstance(server_id, str) else "",
-                    "message": message,
-                },
-                ensure_ascii=False,
-            )
+        await self._send_json(
+            websocket,
+            {
+                "type": "local-mcp-error",
+                "server_id": server_id if isinstance(server_id, str) else "",
+                "message": message,
+            },
+            ensure_ascii=False,
         )
 
     async def _handle_register_local_mcp(
@@ -922,14 +903,14 @@ class WebSocketHandler:
 
         raw_server_id = data.get("server_id")
         try:
+            if len(json.dumps(data, ensure_ascii=False)) > MAX_LOCAL_MCP_PAYLOAD_CHARS:
+                raise ValueError("Local MCP registration payload is too large")
             server_id = validate_server_id(raw_server_id)
             title = data.get("name")
             name = title if isinstance(title, str) else server_id
             tools = data.get("tools")
             if not isinstance(tools, list):
                 raise ValueError("tools must be a list")
-            if len(json.dumps(data, ensure_ascii=False)) > MAX_LOCAL_MCP_PAYLOAD_CHARS:
-                raise ValueError("Local MCP registration payload is too large")
             exposed_tools = context.register_local_mcp_server(
                 server_id=server_id,
                 tools=tools,
@@ -946,16 +927,15 @@ class WebSocketHandler:
             await self._send_local_mcp_error(websocket, raw_server_id, message)
             return
 
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "local-mcp-registered",
-                    "server_id": server_id,
-                    "server_name": name,
-                    "tools": exposed_tools,
-                },
-                ensure_ascii=False,
-            )
+        await self._send_json(
+            websocket,
+            {
+                "type": "local-mcp-registered",
+                "server_id": server_id,
+                "server_name": name,
+                "tools": exposed_tools,
+            },
+            ensure_ascii=False,
         )
         logger.info(
             f"Local MCP server '{server_id}' registered "
@@ -975,28 +955,21 @@ class WebSocketHandler:
             return
 
         removed = context.unregister_local_mcp_server(server_id)
-        await websocket.send_text(
-            json.dumps(
-                {
-                    "type": "local-mcp-unregistered",
-                    "server_id": server_id,
-                    "success": removed,
-                },
-                ensure_ascii=False,
-            )
+        await self._send_json(
+            websocket,
+            {
+                "type": "local-mcp-unregistered",
+                "server_id": server_id,
+                "success": removed,
+            },
+            ensure_ascii=False,
         )
-
-    async def _handle_local_tool_result(
-        self, websocket: WebSocket, client_uid: str, data: WSMessage
-    ) -> None:
-        # message_handler.wait_for_response already consumed the payload.
-        return
 
     async def _handle_heartbeat(
         self, websocket: WebSocket, client_uid: str, data: WSMessage
     ) -> None:
         """Handle heartbeat messages from clients"""
         try:
-            await websocket.send_text(json.dumps({"type": "heartbeat-ack"}))
+            await self._send_json(websocket, {"type": "heartbeat-ack"})
         except Exception as e:
             logger.error(f"Error sending heartbeat acknowledgment: {e}")

@@ -51,7 +51,7 @@ def read_yaml(config_path: str) -> dict[str, Any]:
         return yaml.safe_load(content)
     except yaml.YAMLError as e:
         logger.critical(f"Error parsing YAML file: {e}")
-        raise e
+        raise
 
 
 def validate_config(config_data: dict) -> Config:
@@ -81,7 +81,7 @@ def validate_config(config_data: dict) -> Config:
         logger.error(
             f"Configuration data (secrets redacted): {redact_secrets(config_data)}"
         )
-        raise e
+        raise
 
 
 def load_text_file_with_guess_encoding(file_path: str) -> str | None:

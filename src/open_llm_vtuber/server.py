@@ -49,7 +49,7 @@ def _cache_control_for(path: str) -> str | None:
     # Entry HTML may be cached briefly at the edge; browsers always revalidate.
     # Auth middleware handles unauthenticated requests before this handler, so
     # 302/401 responses never receive the shared-cache directive.
-    if path == "/" or path == "/index.html":
+    if path in {"/", "/index.html"}:
         return "public, max-age=0, must-revalidate, s-maxage=60"
     if path.endswith(".html"):
         return "no-cache"

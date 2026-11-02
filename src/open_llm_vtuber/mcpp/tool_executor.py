@@ -400,7 +400,7 @@ class ToolExecutor:
             item_type = item.get("type", "unknown")
             logger.info(f"  Type: {item_type}")
             for key, value in item.items():
-                if key != "type" and key != "data":  # Avoid logging large data
+                if key not in {"type", "data"}:  # Avoid logging large data
                     log_value = (
                         f"(length: {len(value)})"
                         if isinstance(value, str) and len(value) > 100

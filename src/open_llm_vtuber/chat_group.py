@@ -81,7 +81,7 @@ class ChatGroupManager:
         group = self.groups[target_group_id]
 
         # Only group owner or self can remove
-        if remover_uid != group.owner_uid and remover_uid != target_uid:
+        if remover_uid not in (group.owner_uid, target_uid):
             return False, "Only group owner or self can remove members"
 
         # Remove target from group
