@@ -12,7 +12,7 @@ from .conversation_utils import (
     finalize_conversation_turn,
     cleanup_conversation,
     should_store_history,
-    EMOJI_LIST,
+    new_session_emoji,
 )
 from .types import (
     BroadcastFunc,
@@ -34,7 +34,7 @@ async def process_group_conversation(
     group_id: str,
     user_input: str | np.ndarray,
     images: list[dict[str, Any]] | None = None,
-    session_emoji: str = np.random.choice(EMOJI_LIST),
+    session_emoji: str | None = None,
     metadata: dict[str, Any] | None = None,
 ) -> None:
     """Process group conversation
@@ -50,6 +50,7 @@ async def process_group_conversation(
         session_emoji: Emoji identifier for the conversation
         metadata: Optional metadata for special processing flags
     """
+    session_emoji = session_emoji or new_session_emoji()
     # Create TTSTaskManager for each member
     tts_managers = {
         uid: TTSTaskManager(

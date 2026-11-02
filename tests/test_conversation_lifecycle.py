@@ -334,6 +334,30 @@ class GroupInterruptMissingGroupTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("group", tasks)
         broadcast.assert_not_awaited()
 
+    async def test_task_failing_on_cancel_does_not_escape(self):
+        async def fails_when_cancelled():
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                raise RuntimeError("cleanup failed") from None
+
+        task = asyncio.create_task(fails_when_cancelled())
+        await asyncio.sleep(0)
+        tasks = {"group": task}
+        manager = Mock()
+        manager.get_group_by_id.return_value = None
+
+        await conversation_handler.handle_group_interrupt(
+            group_id="group",
+            heard_response="",
+            current_conversation_tasks=tasks,
+            chat_group_manager=manager,
+            client_contexts={},
+            broadcast_to_group=AsyncMock(),
+        )
+
+        self.assertNotIn("group", tasks)
+
 
 class ConnectionCleanupTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
