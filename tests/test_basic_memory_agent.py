@@ -1,6 +1,10 @@
 import unittest
 
-from open_llm_vtuber.agent.agents.basic_memory_agent import BasicMemoryAgent
+from open_llm_vtuber.agent.agents.basic_memory_agent import (
+    MAX_TOOL_ROUNDS,
+    TOOL_ROUND_LIMIT_NOTICE,
+    BasicMemoryAgent,
+)
 from open_llm_vtuber.mcpp.json_detector import StreamJSONDetector
 from open_llm_vtuber.mcpp.types import ToolCallFunctionObject, ToolCallObject
 
@@ -213,6 +217,57 @@ class _UnsupportedToolsLLM:
             yield "hello"
 
         return text_round()
+
+
+class _AlwaysToolLLM:
+    """Native tool calls on every round, as a misbehaving model would."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def chat_completion(self, _messages, _system, tools=None):
+        self.calls += 1
+
+        async def tool_round():
+            yield [
+                ToolCallObject(
+                    id=f"call-{self.calls}",
+                    function=ToolCallFunctionObject(name="tool", arguments="{}"),
+                )
+            ]
+
+        return tool_round()
+
+
+class ToolLoopTerminationTests(unittest.IsolatedAsyncioTestCase):
+    def _agent(self, llm, tool_executor):
+        agent = BasicMemoryAgent.__new__(BasicMemoryAgent)
+        agent._system = "system"
+        agent.prompt_mode_flag = False
+        agent._mcp_prompt_string = ""
+        agent._json_detector = StreamJSONDetector()
+        agent._tool_executor = tool_executor
+        agent._llm = llm
+        agent._add_message = lambda _content, _role: None
+        return agent
+
+    async def test_openai_loop_stops_without_tool_executor(self):
+        llm = _AlwaysToolLLM()
+        agent = self._agent(llm, None)
+
+        items = [item async for item in agent._openai_tool_interaction_loop([], [])]
+
+        self.assertEqual(llm.calls, 1)
+        self.assertIn("not configured", items[-1])
+
+    async def test_openai_loop_is_bounded(self):
+        llm = _AlwaysToolLLM()
+        agent = self._agent(llm, _ToolExecutor())
+
+        items = [item async for item in agent._openai_tool_interaction_loop([], [])]
+
+        self.assertEqual(llm.calls, MAX_TOOL_ROUNDS)
+        self.assertEqual(items[-1], TOOL_ROUND_LIMIT_NOTICE)
 
 
 if __name__ == "__main__":
