@@ -1,5 +1,6 @@
 """MCP Client for Open-LLM-Vtuber."""
 
+import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 from typing import Any
 from collections.abc import AsyncIterator, Callable
@@ -37,6 +38,7 @@ class MCPClient:
         """Initialize the MCP Client."""
         self.exit_stack: AsyncExitStack = AsyncExitStack()
         self.active_sessions: dict[str, ClientSession] = {}
+        self._stdio_locks: dict[str, asyncio.Lock] = {}
         self._list_tools_cache: dict[str, list[Tool]] = {}  # Cache for list_tools
         self._send_text: Callable = send_text
         self._client_uid: str = client_uid
@@ -69,6 +71,15 @@ class MCPClient:
         if server_name in self.active_sessions:
             return self.active_sessions[server_name]
 
+        # Parallel tool calls can reach here together; without the lock each
+        # would spawn its own server process and all but one would leak.
+        lock = self._stdio_locks.setdefault(server_name, asyncio.Lock())
+        async with lock:
+            if server_name in self.active_sessions:
+                return self.active_sessions[server_name]
+            return await self._start_stdio_session(server_name)
+
+    async def _start_stdio_session(self, server_name: str) -> ClientSession:
         server = self._get_server(server_name)
         timeout = self._get_timeout(server)
 
