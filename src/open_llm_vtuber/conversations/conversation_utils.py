@@ -110,6 +110,21 @@ def should_store_history(context: Any, skip_history: bool = False) -> bool:
     return bool(context.history_uid) and not skip_history
 
 
+def bind_turn_history(context: Any, metadata: dict[str, Any] | None) -> str | None:
+    """Bind the whole turn to the history that was active when it started.
+
+    Opening another history mid-turn must not reroute the turn's writes.
+    Returns the bound history id, or None when the turn is not persisted.
+    """
+    skip_history = bool(metadata and metadata.get("skip_history", False))
+    turn_history_uid = (
+        context.history_uid if should_store_history(context, skip_history) else None
+    )
+    context.turn_history_uid = turn_history_uid
+    context.turn_response_persisted = False
+    return turn_history_uid
+
+
 def _to_image_data(img: dict[str, Any]) -> ImageData:
     """Wire payload -> ImageData.
 
@@ -149,11 +164,15 @@ async def consume_agent_stream(
     *,
     context: Any,
     channels: OutboundChannels,
-    tts_manager: TTSTaskManager,
+    tts_manager: TTSTaskManager | None,
     send_text_delta: Callable[[dict[str, Any]], Awaitable[None]],
     error_prefix: str = "Error processing response",
 ) -> str:
-    """Consume an agent stream, forwarding text deltas and TTS output."""
+    """Consume an agent stream, forwarding text deltas and TTS output.
+
+    ``tts_manager=None`` runs the turn text-only (message connectors): no
+    speech is synthesized and no audio payload is sent.
+    """
     full_response = ""
     text_streamed = False
     text_delta_buffer = TextDeltaBuffer(
@@ -220,13 +239,81 @@ async def consume_agent_stream(
     return full_response
 
 
+async def run_agent_turn(
+    context: Any,
+    *,
+    channels: OutboundChannels,
+    tts_manager: TTSTaskManager | None,
+    input_text: str,
+    turn_history_uid: str | None,
+    images: list[dict[str, Any]] | None = None,
+    metadata: dict[str, Any] | None = None,
+    send_text_delta: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+) -> str:
+    """Run one agent turn for a single user and persist both sides of it.
+
+    Shared by the browser conversation and the message connectors; callers
+    own the transport-specific start and finish signals.
+    """
+    batch_input = create_batch_input(
+        input_text=input_text,
+        images=images,
+        from_name=context.character_config.human_name,
+        metadata=metadata,
+    )
+
+    if turn_history_uid:
+        await context.store_history_message(
+            role="human",
+            content=input_text,
+            name=context.character_config.human_name,
+            history_uid=turn_history_uid,
+        )
+    elif metadata and metadata.get("skip_history", False):
+        logger.debug("Skipping storing user input to history (proactive speak)")
+
+    logger.info(f"User input: {input_text}")
+    if images:
+        logger.info(f"With {len(images)} images")
+
+    if send_text_delta is None:
+
+        async def send_text_delta(message: dict[str, Any]) -> None:
+            await channels.text(json.dumps(message))
+
+    full_response = await consume_agent_stream(
+        context.agent_engine.chat(batch_input),
+        context=context,
+        channels=channels,
+        tts_manager=tts_manager,
+        send_text_delta=send_text_delta,
+        error_prefix="Error processing agent response",
+    )
+
+    # Persist the reply as soon as it is generated. Waiting for playback
+    # completion would leave the turn vulnerable to a concurrent history
+    # switch (the reply could be written to the wrong history or lost).
+    if full_response and turn_history_uid:
+        await context.store_history_message(
+            role="ai",
+            content=full_response,
+            name=context.character_config.character_name,
+            avatar=context.character_config.avatar,
+            history_uid=turn_history_uid,
+        )
+        context.turn_response_persisted = True
+        logger.info(f"AI response: {full_response}")
+
+    return full_response
+
+
 async def process_agent_output(
     output: AudioOutput | SentenceOutput,
     character_config: Any,
     live2d_model: Live2dModel,
     tts_engine: TTSInterface,
     channels: OutboundChannels,
-    tts_manager: TTSTaskManager,
+    tts_manager: TTSTaskManager | None,
     translate_engine: Any | None = None,
     streamed: bool = False,
 ) -> str:
@@ -247,7 +334,9 @@ async def process_agent_output(
                 streamed,
             )
         elif isinstance(output, AudioOutput):
-            full_response = await handle_audio_output(output, channels)
+            full_response = await handle_audio_output(
+                output, channels, send_audio=tts_manager is not None
+            )
         else:
             logger.warning(f"Unknown output type: {type(output)}")
     except Exception as e:
@@ -266,13 +355,18 @@ async def handle_sentence_output(
     live2d_model: Live2dModel,
     tts_engine: TTSInterface,
     channels: OutboundChannels,
-    tts_manager: TTSTaskManager,
+    tts_manager: TTSTaskManager | None,
     translate_engine: Any | None = None,
     streamed: bool = False,
 ) -> str:
     """Handle sentence output type with optional translation support"""
     full_response = ""
     async for display_text, tts_text, actions in output:
+        if tts_manager is None:
+            # Text-only turn: translation only feeds TTS, so skip both.
+            full_response += display_text.text
+            continue
+
         logger.debug(f"🏃 Processing output: '''{tts_text}'''...")
 
         if translate_engine:
@@ -298,11 +392,14 @@ async def handle_sentence_output(
 async def handle_audio_output(
     output: AudioOutput,
     channels: OutboundChannels,
+    send_audio: bool = True,
 ) -> str:
     """Process and send AudioOutput directly to the client"""
     full_response = ""
     async for audio_path, display_text, transcript, actions in output:
         full_response += transcript
+        if not send_audio:
+            continue
         audio_payload = await asyncio.to_thread(
             prepare_audio_payload,
             audio_path=audio_path,

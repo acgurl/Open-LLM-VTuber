@@ -131,6 +131,14 @@ class HistoryRepository(ABC):
         """
 
     @abstractmethod
+    async def get_user_profile(self, *, user_id: str) -> dict | None:
+        """Return ``{"id", "display_name", "emails"}`` or None for unknown users.
+
+        ``emails`` are the addresses the identity provider reported at login,
+        never values supplied by a connector or the browser.
+        """
+
+    @abstractmethod
     async def list_conf_uids(self, *, user_id: str) -> list[str]:
         """Return every character config that has histories for this user."""
 
@@ -338,3 +346,64 @@ class HistoryRepository(ABC):
         Rows whose names are unchanged keep their ids (so local tool
         namespaces stay stable); removed names are deleted.
         """
+
+    # Message connectors (QQ, WeChat, ...) map a platform account to an
+    # existing user. A binding is only created after the user proved control
+    # of both sides (a one-time code issued to the logged-in web session).
+
+    @abstractmethod
+    async def bind_connector_identity(
+        self,
+        *,
+        connector_id: str,
+        external_id: str,
+        user_id: str,
+        display_name: str | None = None,
+    ) -> None:
+        """Bind a platform account to a user, replacing any previous binding."""
+
+    @abstractmethod
+    async def resolve_connector_identity(
+        self,
+        *,
+        connector_id: str,
+        external_id: str,
+    ) -> str | None:
+        """Return the bound user id, or None. Never creates a user."""
+
+    @abstractmethod
+    async def list_connector_identities(self, *, user_id: str) -> list[dict]:
+        """Return this user's bindings (connector_id, external_id, ...)."""
+
+    @abstractmethod
+    async def delete_connector_identity(
+        self,
+        *,
+        user_id: str,
+        connector_id: str,
+        external_id: str,
+    ) -> bool:
+        """Remove one of this user's bindings; False when not owned."""
+
+    @abstractmethod
+    async def get_connector_conversation(
+        self,
+        *,
+        connector_id: str,
+        chat_key: str,
+        user_id: str,
+        conf_uid: str,
+    ) -> str | None:
+        """Return the history a connector chat continues, or None."""
+
+    @abstractmethod
+    async def set_connector_conversation(
+        self,
+        *,
+        connector_id: str,
+        chat_key: str,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+    ) -> None:
+        """Point a connector chat at one of the user's histories."""

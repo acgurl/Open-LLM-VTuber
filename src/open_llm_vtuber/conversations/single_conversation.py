@@ -5,13 +5,12 @@ from loguru import logger
 import numpy as np
 
 from .conversation_utils import (
-    consume_agent_stream,
-    create_batch_input,
+    bind_turn_history,
+    run_agent_turn,
     send_conversation_start_signals,
     process_user_input,
     finalize_conversation_turn,
     cleanup_conversation,
-    should_store_history,
     new_session_emoji,
 )
 from .types import OutboundChannels
@@ -48,14 +47,7 @@ async def process_single_conversation(
     full_response = ""
 
     try:
-        # Bind the whole turn to the history that was active when it started.
-        # Opening another history mid-turn must not reroute these writes.
-        skip_history = bool(metadata and metadata.get("skip_history", False))
-        turn_history_uid = (
-            context.history_uid if should_store_history(context, skip_history) else None
-        )
-        context.turn_history_uid = turn_history_uid
-        context.turn_response_persisted = False
+        turn_history_uid = bind_turn_history(context, metadata)
 
         # Send initial signals
         await send_conversation_start_signals(channels.text)
@@ -66,51 +58,15 @@ async def process_single_conversation(
             user_input, context.asr_engine, channels.text
         )
 
-        # Create batch input
-        batch_input = create_batch_input(
-            input_text=input_text,
-            images=images,
-            from_name=context.character_config.human_name,
-            metadata=metadata,
-        )
-
-        # Store user message (check if we should skip storing to history)
-        if turn_history_uid:
-            await context.store_history_message(
-                role="human",
-                content=input_text,
-                name=context.character_config.human_name,
-                history_uid=turn_history_uid,
-            )
-        elif skip_history:
-            logger.debug("Skipping storing user input to history (proactive speak)")
-
-        logger.info(f"User input: {input_text}")
-        if images:
-            logger.info(f"With {len(images)} images")
-
-        full_response = await consume_agent_stream(
-            context.agent_engine.chat(batch_input),
-            context=context,
+        full_response = await run_agent_turn(
+            context,
             channels=channels,
             tts_manager=tts_manager,
-            send_text_delta=lambda message: channels.text(json.dumps(message)),
-            error_prefix="Error processing agent response",
+            input_text=input_text,
+            turn_history_uid=turn_history_uid,
+            images=images,
+            metadata=metadata,
         )
-
-        # Persist the reply as soon as it is generated. Waiting for playback
-        # completion would leave the turn vulnerable to a concurrent history
-        # switch (the reply could be written to the wrong history or lost).
-        if full_response and turn_history_uid:
-            await context.store_history_message(
-                role="ai",
-                content=full_response,
-                name=context.character_config.character_name,
-                avatar=context.character_config.avatar,
-                history_uid=turn_history_uid,
-            )
-            context.turn_response_persisted = True
-            logger.info(f"AI response: {full_response}")
 
         # finalize_conversation_turn waits for TTS tasks and sends the single
         # backend-synth-complete signal.

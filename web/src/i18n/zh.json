@@ -109,6 +109,40 @@
       "localConnecting": "浏览器连接中…",
       "localConnected": "已连接 · {{count}} 个工具",
       "localError": "浏览器连接失败"
+    },
+    "connectors": {
+      "title": "消息平台绑定",
+      "loading": "加载中…",
+      "retry": "重试",
+      "bots": "可用机器人",
+      "state": {
+        "running": "在线",
+        "connecting": "连接中",
+        "error": "异常",
+        "stopped": "已停止"
+      },
+      "ineligible": "全局机器人仅向使用校园邮箱（{{domains}}）登录的账号开放。请用校园邮箱账号登录后再来绑定。",
+      "hint": "生成一次性绑定码，然后在 QQ 里私聊机器人发送，即可把 QQ 账号绑定到当前网页账号，之后可以直接和角色聊天。",
+      "expired": "绑定码已过期，请重新生成。",
+      "generate": "生成绑定码",
+      "issuing": "生成中…",
+      "regenerate": "重新生成",
+      "cancel": "收起",
+      "codeLabel": "绑定码",
+      "copyCode": "复制绑定指令",
+      "copied": "已复制",
+      "copyFailed": "复制失败，请手动输入",
+      "expiresIn": "{{time}} 后过期",
+      "waiting": "等待机器人确认…",
+      "step1": "在 QQ 里打开与机器人的私聊（频道私信或单聊，不要发在频道或群里）",
+      "step2Prefix": "发送 ",
+      "bound": "已绑定到 {{name}}",
+      "bindings": "已绑定的账号",
+      "noBindings": "还没有绑定任何平台账号",
+      "unbind": "解除",
+      "confirmUnbind": "确认解除？",
+      "unbound": "已解除绑定",
+      "commandsHint": "机器人指令：/new 开始新对话，/whoami 查看绑定，/unbind 解除绑定。机器人里的对话会出现在当前角色的历史记录中。"
     }
   },
   "group": {

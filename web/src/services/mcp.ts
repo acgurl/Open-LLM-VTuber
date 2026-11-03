@@ -1,4 +1,4 @@
-import { redirectToLogin } from './session';
+import { request } from './api';
 
 export type MCPServerMode = 'local' | 'remote';
 
@@ -30,35 +30,6 @@ export interface MCPConfigResponse {
 export interface MCPToolSummary {
   name: string;
   description?: string;
-}
-
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    credentials: 'include',
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
-  });
-  const text = await response.text();
-  let data: unknown = null;
-  if (text) {
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = null;
-    }
-  }
-  if (!response.ok) {
-    if (response.status === 401) redirectToLogin();
-    const message =
-      data && typeof data === 'object' && typeof (data as { error?: unknown }).error === 'string'
-        ? (data as { error: string }).error
-        : `请求失败（${response.status}）`;
-    throw new Error(message);
-  }
-  return data as T;
 }
 
 export async function fetchUserMcpConfig(): Promise<MCPConfigResponse> {

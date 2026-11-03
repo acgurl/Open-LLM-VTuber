@@ -123,6 +123,37 @@ class StreamErrorTests(unittest.IsolatedAsyncioTestCase):
         )
 
 
+class TextOnlyStreamTests(unittest.IsolatedAsyncioTestCase):
+    async def test_without_tts_manager_no_speech_or_audio_is_produced(self):
+        channels = OutboundChannels(text=AsyncMock(), audio=AsyncMock())
+        translate_engine = Mock()
+        context = SimpleNamespace(
+            character_config=SimpleNamespace(character_name="AI", avatar=None),
+            agent_engine=None,
+            live2d_model=None,
+            tts_engine=Mock(),
+            translate_engine=translate_engine,
+        )
+
+        async def stream():
+            yield {"type": "text_delta", "text": "你"}
+            yield _sentence("你好。")
+            yield _sentence("再见。")
+
+        full_response = await conversation_utils.consume_agent_stream(
+            stream(),
+            context=context,
+            channels=channels,
+            tts_manager=None,
+            send_text_delta=AsyncMock(),
+        )
+
+        self.assertEqual(full_response, "你好。再见。")
+        channels.audio.assert_not_awaited()
+        translate_engine.translate.assert_not_called()
+        context.tts_engine.async_generate_audio.assert_not_called()
+
+
 class SingleStreamTests(unittest.IsolatedAsyncioTestCase):
     async def test_dispatches_text_deltas_and_returns_full_response(self):
         text_sent = []

@@ -9,6 +9,7 @@ and utility functions for loading/saving configurations.
 from .main import Config
 from .auth import AuthConfig, OIDCConfig
 from .storage import StorageConfig
+from .connectors import BindingConfig, ConnectorsConfig, QQConnectorConfig
 from .system import SystemConfig
 from .character import CharacterConfig
 from .live import LiveConfig, BiliBiliLiveConfig
@@ -54,6 +55,9 @@ __all__ = [
     "AuthConfig",
     "OIDCConfig",
     "StorageConfig",
+    "BindingConfig",
+    "ConnectorsConfig",
+    "QQConnectorConfig",
     "SystemConfig",
     "CharacterConfig",
     "LiveConfig",

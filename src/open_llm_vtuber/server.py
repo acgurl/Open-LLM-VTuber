@@ -19,8 +19,11 @@ from .auth import AuthManager, AuthRedirectMiddleware, init_auth_routes
 from .auth.middleware import IDENTITY_SCOPE_KEY
 from .routes import init_client_ws_route, init_webtool_routes, init_proxy_route
 from .mcp_routes import init_user_mcp_routes
+from .connector_routes import init_connector_routes
+from .connectors import ConnectorManager
 from .service_context import ServiceContext
 from .config_manager.auth import AuthConfig
+from .config_manager.connectors import ConnectorsConfig
 from .config_manager.storage import StorageConfig
 from .config_manager.utils import Config
 from .storage import (
@@ -151,6 +154,12 @@ class WebSocketServer:
         )
         self.auth_config = getattr(config.system_config, "auth", None) or AuthConfig()
         self.auth = AuthManager(self.auth_config, self.storage_config.default_user_id)
+        self.connectors_config = (
+            getattr(config.system_config, "connectors", None) or ConnectorsConfig()
+        )
+        # Created on the server's event loop at startup: initialize() runs in
+        # a separate loop, so connector tasks started there would not survive.
+        self.connector_manager: ConnectorManager | None = None
 
         # Authentication cookies are same-origin; wildcard CORS stays
         # credential-less.
@@ -162,6 +171,7 @@ class WebSocketServer:
             allow_headers=["*"],
         )
         self.app.add_middleware(AuthRedirectMiddleware, auth=self.auth)
+        self.app.add_event_handler("startup", self.start_connectors)
         self.app.add_event_handler("shutdown", self.close)
 
         @self.app.get("/healthz", include_in_schema=False)
@@ -192,6 +202,13 @@ class WebSocketServer:
         self.app.include_router(
             init_user_mcp_routes(
                 default_context_cache=self.default_context_cache,
+                auth=self.auth,
+            ),
+        )
+        self.app.include_router(
+            init_connector_routes(
+                default_context_cache=self.default_context_cache,
+                get_manager=lambda: self.connector_manager,
                 auth=self.auth,
             ),
         )
@@ -303,8 +320,27 @@ class WebSocketServer:
             self.default_context_cache.set_history_storage(None, None)
             raise
 
+    async def start_connectors(self) -> None:
+        """Start the configured message connectors on the server's loop."""
+        if not self.connectors_config.enabled or self.connector_manager is not None:
+            return
+        if self.default_context_cache.history_repository is None:
+            logger.error("Connectors need history storage; not starting them")
+            return
+        manager = ConnectorManager(self.default_context_cache, self.connectors_config)
+        try:
+            await manager.start()
+        except Exception:
+            logger.exception("Failed to start message connectors")
+            await manager.stop()
+            return
+        self.connector_manager = manager
+
     async def close(self):
         """Close shared resources."""
+        if self.connector_manager is not None:
+            await self.connector_manager.stop()
+            self.connector_manager = None
         await self.default_context_cache.close()
         await self.auth.close()
         if self.history_repository is not None:

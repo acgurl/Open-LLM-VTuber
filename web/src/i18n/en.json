@@ -109,6 +109,40 @@
       "localConnecting": "Browser connecting…",
       "localConnected": "Connected · {{count}} tools",
       "localError": "Browser connection failed"
+    },
+    "connectors": {
+      "title": "Messaging accounts",
+      "loading": "Loading…",
+      "retry": "Retry",
+      "bots": "Available bots",
+      "state": {
+        "running": "Online",
+        "connecting": "Connecting",
+        "error": "Error",
+        "stopped": "Stopped"
+      },
+      "ineligible": "Global bots are only open to accounts that sign in with a campus email ({{domains}}). Sign in with your campus account to link one.",
+      "hint": "Generate a one-time code and send it to the bot in a private QQ chat to link that QQ account to this web account. Then you can chat with the character there.",
+      "expired": "The code has expired. Generate a new one.",
+      "generate": "Generate code",
+      "issuing": "Generating…",
+      "regenerate": "New code",
+      "cancel": "Hide",
+      "codeLabel": "Binding code",
+      "copyCode": "Copy bind command",
+      "copied": "Copied",
+      "copyFailed": "Copy failed; type it instead",
+      "expiresIn": "Expires in {{time}}",
+      "waiting": "Waiting for the bot…",
+      "step1": "Open a private chat with the bot in QQ (a direct message, not a channel or group)",
+      "step2Prefix": "Send ",
+      "bound": "Linked to {{name}}",
+      "bindings": "Linked accounts",
+      "noBindings": "No messaging accounts linked yet",
+      "unbind": "Unlink",
+      "confirmUnbind": "Confirm?",
+      "unbound": "Account unlinked",
+      "commandsHint": "Bot commands: /new starts a new chat, /whoami shows the link, /unbind removes it. Bot chats appear in this character's history."
     }
   },
   "group": {

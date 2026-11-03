@@ -30,6 +30,7 @@
 20. [新前端实现清单](#20-新前端实现清单)
 21. [最小可用客户端伪代码](#21-最小可用客户端伪代码)
 22. [用户 MCP 与浏览器本地 MCP（2026-10-25）](#22-用户-mcp-与浏览器本地-mcp2026-10-25)
+23. [消息平台连接器（全局 QQ 机器人，2026-11-03）](#23-消息平台连接器全局-qq-机器人2026-11-03)
 - [附录 A：常量索引](#附录-a常量索引)
 - [附录 B：消息类型总索引](#附录-b消息类型总索引)
 
@@ -155,6 +156,9 @@ Cookie（`auth/manager.py`）：
 | GET | `/api/mcp/config` | oidc 下需会话 | 当前用户的统一 MCP 配置：`{"config":{"mcp_servers":{...}},"servers":[{id,name,url,headers,mode,enabled}]}`；headers 脱敏 | `mcp_routes.py` |
 | PUT | `/api/mcp/config` | oidc 下需会话 | 全量保存 `{"config":{"mcp_servers":{...}}}`；后端按 URL 分类 local/remote；见 22.2 | `mcp_routes.py` |
 | POST | `/api/mcp/config/test` | oidc 下需会话 | `{server_id}`；remote 返回 `{"mode":"remote","tools":[...]}`，local 返回 `{"mode":"local","tools":[]}` | `mcp_routes.py` |
+| GET | `/api/connectors` | oidc 下需会话 | 连接器状态、当前用户能否绑定、已有绑定；见 23.3 | `connector_routes.py` |
+| POST | `/api/connectors/bind-code` | oidc 下需会话 | 生成一次性绑定码；邮箱域不符返回 403 | `connector_routes.py` |
+| DELETE | `/api/connectors/bindings/{connector_id}/{external_id}` | oidc 下需会话 | 解除自己的绑定 | `connector_routes.py` |
 | GET | `/web-tool`、`/web_tool` | 公开 | 302 → `/web-tool/index.html` | `routes.py:289-297` |
 | WS | `/client-ws` | 见 3.4 | — | `routes.py:182` |
 | WS | `/audio-ws?client_uid=` | 见 3.4 | — | `routes.py:225` |
@@ -1375,6 +1379,74 @@ remote 服务器失败（DNS、TLS、超时、401）只影响该服务器：会�
 - [ ] 本地工具调用能完成 `local-tool-call → tools/call → local-tool-result → tool_call_status → 最终文本`；
 - [ ] 页面关闭后调用在 30s 内以工具错误结束，不挂起会话；
 - [ ] 用户服务器离线时只丢该服务器的工具，会话仍可正常聊天。
+
+---
+
+## 23. 消息平台连接器（全局 QQ 机器人，2026-11-03）
+
+后端可以直接连接消息平台（当前实现：QQ 官方机器人 API v2，WebSocket 网关）。连接器跑在后端进程内，**不经过 `/client-ws`**，也不改动任何 WS 消息；前端只需要一个"绑定"入口（23.3）。
+
+### 23.1 边界与不变量
+
+- **全局侧**（`system_config.connectors.instances`）是部署方配置的机器人。平台账号必须先**绑定**到网页账号，而且该网页账号的登录邮箱（OIDC 回传、存在 `user_identities.email`）必须属于 `binding.allowed_email_domains`（默认 `cuc.edu.cn`，含子域）。每条消息都会重新校验，域名收紧后对已有绑定立即生效。
+- 绑定码只能**在私聊里**兑换（QQ 频道私信 `direct` / 单聊 `c2c`）；在频道或群里发 `/bind` 会被拒绝，避免码被旁人抢先兑换。
+- 连接器会话用的是绑定用户的真实 `user_id`：历史、用户 remote MCP、角色 `allowed_users` 和网页端完全一致。**不加载浏览器本地 MCP**（没有页面可以桥接），也**不做 TTS**（纯文本轮次，`tts_manager=None`）。
+- 回复会去掉 `<think>` 块和当前 Live2D 模型的 `[表情]`/`[动作]` 标签，再按平台长度切分（QQ：每段 1500 字、每条消息最多回复 4 段）。
+- 用户侧连接器（例如每个用户自己的微信）尚未实现；它不走 23.3 的绑定流程。
+
+### 23.2 会话与历史
+
+- 会话键是 `(connector_id, chat_key, sender_id)`，其中 `chat_key = "<chat_type>:<chat_id>"`。同一频道里每个绑定用户各有独立上下文；同一会话的消息严格串行，排队超过 2 条会回"上一条还在处理中"。
+- 每个 `(connector_id, chat_key, user_id, conf_uid)` 映射到一条历史（`connector_conversations` 表，schema v7）。会话被回收或服务重启后会续用同一条历史；`/new` 新建一条。网页上删除这条历史后，映射随外键级联删除，下一条消息会自动开新历史。
+- 这些历史与网页历史同属该用户与角色，会出现在 `fetch-history-list` 里。
+- 平台身份存在 `connector_identities(connector_id, external_id, user_id, ...)`。QQ 的 `external_id` 有两个命名空间：频道/频道私信用 `u:<用户 id>`，群/单聊用 `o:<openid>`；在其中一个命名空间里绑定，不会覆盖另一个。
+
+### 23.3 HTTP 接口（`connector_routes.py`，前缀 `/api/connectors`，oidc 下需会话）
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/connectors` | `{"eligible":bool,"allowed_email_domains":[...],"connectors":[{id,name,platform,state}],"bindings":[{connector_id,connector_name,external_id,display_name,created_at}]}`；连接器未启用返回 404 |
+| POST | `/api/connectors/bind-code` | 返回 `{"code":"ABCD-EFGH","expires_in":600}`；邮箱不符合返回 403。重新生成会作废旧码；码只能用一次 |
+| DELETE | `/api/connectors/bindings/{connector_id}/{external_id}` | 解除自己的绑定，并关闭对应会话；不属于自己的返回 404；成功返回 204 |
+
+`state` 的取值：`connecting` / `running` / `error` / `stopped`。`created_at` 已带时区偏移（同历史时间戳规则），前端直接 `Date.parse`。
+
+前端实现：`web/src/components/ConnectorPanel.tsx`（设置抽屉「消息平台绑定」）、`web/src/services/connectors.ts`。生成码后每 4 秒轮询一次 `GET /api/connectors`，发现新绑定就收起绑定码；连接器未启用时（404）整块面板隐藏。
+
+### 23.4 机器人指令
+
+`/bind 绑定码`（`/绑定`）、`/unbind`（`/解绑`）、`/new`（`/新对话`）、`/whoami`（`/我是谁`）、`/help`（`/帮助`）。不认识的 `/xxx` 按普通消息处理。
+
+### 23.5 配置与限额
+
+```yaml
+system_config:
+  connectors:
+    enabled: false
+    binding:
+      allowed_email_domains: ['cuc.edu.cn']
+      code_ttl_seconds: 600
+      web_url: ''          # 提示未绑定用户去哪里生成码；QQ 可能拦截未报备的链接
+    reply_timeout_seconds: 180
+    max_concurrent_turns: 4
+    max_sessions: 64
+    session_idle_seconds: 1800
+    max_input_chars: 2000
+    rate_limit_per_minute: 10
+    instances:
+      - type: qq
+        id: qq-main
+        enabled: false
+        name: 'QQ 机器人'
+        app_id: '${QQ_BOT_APP_ID}'
+        app_secret: '${QQ_BOT_APP_SECRET}'
+        sandbox: false
+        intents: ['public_guild_messages', 'direct_message']   # 另有 guild_messages、group_and_c2c
+```
+
+- 绑定码：8 位、无易混字符；每个平台账号 10 分钟内最多失败 5 次。码只存在内存里，重启后作废（服务端是单 worker）。
+- 连接器在 uvicorn 的 startup 事件里启动（`initialize()` 跑在另一个事件循环里，不能在那里建任务），断线后指数退避重连（1s → 300s），能续上的会话用 op 6 Resume 续上。
+- 回复超时后会重置 agent 本轮的记忆，并回复"回复超时"。
 
 ---
 

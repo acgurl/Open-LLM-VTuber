@@ -20,6 +20,7 @@ import i18n from '../i18n';
 import { usePresence } from '../hooks/usePresence';
 import { useDialog } from '../hooks/useDialog';
 import { McpPanel } from './McpPanel';
+import { ConnectorPanel } from './ConnectorPanel';
 
 // 预设色相：默认蓝紫，其余覆盖常见角色主题色
 const HUE_PRESETS = [220.44, 265, 320, 12, 150, 190];
@@ -212,6 +213,8 @@ export function SettingsDrawer() {
           </section>
 
           <McpPanel />
+
+          <ConnectorPanel open={open} />
 
           <GroupPanel />
 

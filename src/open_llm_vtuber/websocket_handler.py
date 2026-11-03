@@ -20,8 +20,9 @@ from .utils.stream_audio import prepare_audio_payload
 from .utils.audio import MAX_AUDIO_SAMPLES
 from .utils.timestamps import with_wire_timestamp
 from .config_manager.utils import scan_config_alts_directory, scan_bg_directory
-from .storage import HistoryNotFoundError, HistoryRepository
-from .mcpp.user_servers import split_user_mcp_servers, validate_server_id
+from .storage import HistoryNotFoundError
+from .mcpp.user_servers import validate_server_id
+from .session_factory import build_session_context
 from .conversations.conversation_handler import (
     handle_conversation_trigger,
     handle_group_interrupt,
@@ -311,22 +312,6 @@ class WebSocketHandler:
         # Send initial group status
         await self.send_group_update(websocket, client_uid)
 
-    async def _load_user_mcp_servers(
-        self,
-        repository: HistoryRepository | None,
-        user_id: str,
-    ) -> tuple[list[dict], list[dict]]:
-        """Split this user's enabled MCP rows into remote and browser-local."""
-        if repository is None:
-            return [], []
-        try:
-            return split_user_mcp_servers(
-                await repository.list_user_mcp_servers(user_id=user_id)
-            )
-        except Exception:
-            logger.exception("Failed to load per-user MCP servers")
-            return [], []
-
     async def _init_service_context(
         self,
         channels: OutboundChannels,
@@ -334,43 +319,12 @@ class WebSocketHandler:
         identity: Identity,
     ) -> ServiceContext:
         """Initialize service context for a new session by cloning the default context"""
-        repository = self.default_context_cache.history_repository
-        if repository is not None:
-            await repository.ensure_user(identity.user_id, identity.display_name)
-
-        remote_mcp_servers, local_mcp_servers = await self._load_user_mcp_servers(
-            repository, identity.user_id
-        )
-
-        session_service_context = ServiceContext()
-        await session_service_context.load_cache(
-            config=self.default_context_cache.config.model_copy(deep=True),
-            system_config=self.default_context_cache.system_config.model_copy(
-                deep=True
-            ),
-            character_config=self.default_context_cache.character_config.model_copy(
-                deep=True
-            ),
-            live2d_model=self.default_context_cache.live2d_model,
-            asr_engine=self.default_context_cache.asr_engine,
-            tts_engine=self.default_context_cache.tts_engine,
-            agent_engine=self.default_context_cache.agent_engine,
-            translate_engine=self.default_context_cache.translate_engine,
-            mcp_server_registry=self.default_context_cache.mcp_server_registry,
-            tool_adapter=self.default_context_cache.tool_adapter,
+        return await build_session_context(
+            self.default_context_cache,
             channels=channels,
             client_uid=client_uid,
-            history_repository=self.default_context_cache.history_repository,
-            user_id=identity.user_id,
-            user_display_name=identity.display_name,
-            user_mcp_servers=remote_mcp_servers,
-            local_mcp_servers=local_mcp_servers,
+            identity=identity,
         )
-        # Each connection needs its own agent state; the LLM client stays shared.
-        await session_service_context.init_session_agent(
-            self.default_context_cache.agent_engine
-        )
-        return session_service_context
 
     async def handle_websocket_communication(
         self, websocket: WebSocket, client_uid: str
