@@ -5,6 +5,7 @@ import unittest
 import httpx
 
 from open_llm_vtuber.config_manager.connectors import QQConnectorConfig
+from open_llm_vtuber.connectors.base import InboundMessage
 from open_llm_vtuber.connectors.qq import (
     API_BASE,
     INTENT_BITS,
@@ -13,6 +14,7 @@ from open_llm_vtuber.connectors.qq import (
     OP_IDENTIFY,
     OP_RECONNECT,
     OP_RESUME,
+    QQAPIError,
     QQConnector,
     QQGatewayError,
     parse_event,
@@ -195,6 +197,62 @@ class QQRestTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([json.loads(p.content)["msg_seq"] for p in posts[1:]], [1, 2])
         # The access token is cached between calls.
         self.assertEqual(self.api.token_calls, 1)
+
+
+class QQRetryTests(unittest.IsolatedAsyncioTestCase):
+    def _connector(self, outcomes, **overrides):
+        calls = []
+
+        def handler(request):
+            if request.url.host == "bots.qq.com":
+                return httpx.Response(200, json={"access_token": "tok"})
+            calls.append(request)
+            outcome = outcomes[min(len(calls), len(outcomes)) - 1]
+            if isinstance(outcome, Exception):
+                raise outcome
+            return httpx.Response(outcome, json={"id": "sent"})
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        config = _config(retry_backoff_seconds=0, **overrides)
+        return QQConnector(config, http_client=client), calls
+
+    @staticmethod
+    def _message():
+        return InboundMessage(
+            connector_id="qq",
+            chat_type="c2c",
+            chat_id="U1",
+            message_id="M1",
+            sender_id="U1",
+            text="hi",
+            reply_context={"msg_id": "M1"},
+        )
+
+    async def test_timeouts_and_gateway_errors_are_retried(self):
+        connector, calls = self._connector([httpx.ReadTimeout("slow"), 502, 200])
+        await connector.send_text(self._message(), "hello", 0)
+        self.assertEqual(len(calls), 3)
+        await connector.close()
+
+    async def test_gives_up_after_the_configured_retries(self):
+        connector, calls = self._connector([httpx.ReadTimeout("slow")], http_retries=2)
+        with self.assertRaises(httpx.ReadTimeout):
+            await connector.send_text(self._message(), "hello", 0)
+        self.assertEqual(len(calls), 3)
+        await connector.close()
+
+    async def test_zero_retries_and_client_errors_are_not_retried(self):
+        connector, calls = self._connector([httpx.ReadTimeout("x")], http_retries=0)
+        with self.assertRaises(httpx.ReadTimeout):
+            await connector.send_text(self._message(), "hello", 0)
+        self.assertEqual(len(calls), 1)
+        await connector.close()
+
+        connector, calls = self._connector([400])
+        with self.assertRaises(QQAPIError):
+            await connector.send_text(self._message(), "hello", 0)
+        self.assertEqual(len(calls), 1)
+        await connector.close()
 
 
 class QQGatewayTests(unittest.IsolatedAsyncioTestCase):

@@ -63,6 +63,12 @@ class QQConnectorConfig(BaseModel):
     app_id: str = Field("", alias="app_id")
     app_secret: str = Field("", alias="app_secret")
     sandbox: bool = Field(False, alias="sandbox")
+    # REST calls (token + sending replies) are retried on timeouts, connection
+    # errors and 502/503/504. http_retries counts extra attempts after the
+    # first; the wait before retry n is retry_backoff_seconds * 2 ** (n - 1).
+    request_timeout_seconds: float = Field(8.0, alias="request_timeout_seconds", gt=0)
+    http_retries: int = Field(3, alias="http_retries", ge=0, le=10)
+    retry_backoff_seconds: float = Field(0.5, alias="retry_backoff_seconds", ge=0)
     intents: list[QQIntent] = Field(
         default_factory=lambda: ["public_guild_messages", "direct_message"],
         alias="intents",
