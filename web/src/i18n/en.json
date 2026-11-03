@@ -142,7 +142,7 @@
       "unbind": "Unlink",
       "confirmUnbind": "Confirm?",
       "unbound": "Account unlinked",
-      "commandsHint": "Bot commands: /new starts a new chat, /whoami shows the link, /unbind removes it. Bot chats appear in this character's history."
+      "commandsHint": "Bot commands: /new starts a new chat, /whoami shows the link, /unbind removes it."
     }
   },
   "group": {

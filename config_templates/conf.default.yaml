@@ -66,6 +66,18 @@ system_config:
         # public_guild_messages, guild_messages, direct_message, group_and_c2c
         # QQ single chats (the usual private chat) and groups need group_and_c2c
         intents: ['public_guild_messages', 'direct_message']
+        # Bots never show an avatar or speak. `character` is merged over the
+        # character_config below (give it its own conf_uid so bot histories
+        # stay apart); `tool_prompts` replaces system_config.tool_prompts
+        # (unset = the same prompts minus live2d_expression_prompt).
+        character:
+          conf_uid: 'qq_bot_001'
+          conf_name: 'QQ Bot'
+          character_name: 'Assistant'
+          persona_prompt: 'You are a friendly campus assistant chatting in QQ.'
+        tool_prompts:
+          mcp_prompt: 'mcp_prompt'
+          chat_platform_prompt: 'chat_platform_prompt'
 
 # configuration for the default character
 character_config:

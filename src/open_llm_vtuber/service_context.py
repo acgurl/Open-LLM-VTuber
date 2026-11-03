@@ -689,6 +689,25 @@ class ServiceContext:
         self.system_config = config.system_config or self.system_config
         self.character_config = config.character_config
 
+    async def load_headless(self, config: Config) -> None:
+        """Load a text-only context for message connectors.
+
+        Only MCP and the agent are created. There is no Live2D model, ASR,
+        TTS or translation, so the system prompt carries no expression
+        keywords and turns must run with ``tts_manager=None``.
+        """
+        self.config = config
+        self.system_config = config.system_config
+        self.character_config = config.character_config
+        self.live2d_model = None
+        settings = config.character_config.agent_config.agent_settings
+        basic = settings.basic_memory_agent
+        await self._init_mcp_components(basic.use_mcpp, basic.mcp_enabled_servers)
+        await self.init_agent(
+            config.character_config.agent_config,
+            config.character_config.persona_prompt,
+        )
+
     def init_live2d(self, live2d_model_name: str) -> None:
         logger.info(f"Initializing Live2D: {live2d_model_name}")
         try:

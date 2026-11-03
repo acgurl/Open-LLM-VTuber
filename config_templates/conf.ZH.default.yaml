@@ -65,6 +65,17 @@ system_config:
         # 可选：public_guild_messages、guild_messages、direct_message、group_and_c2c
         # QQ 单聊（最常用的私聊）和群需要 group_and_c2c
         intents: ['public_guild_messages', 'direct_message']
+        # 机器人没有形象也不说话。character 会合并到下面的 character_config 上（建议给它单独的
+        # conf_uid，机器人的历史就和网页角色分开）；tool_prompts 整体替换 system_config.tool_prompts
+        # （不写则沿用系统提示词，只去掉 live2d_expression_prompt）。
+        character:
+          conf_uid: 'qq_bot_001'
+          conf_name: 'QQ 机器人'
+          character_name: '小助手'
+          persona_prompt: '你是在 QQ 里陪大家聊天的校园小助手。'
+        tool_prompts:
+          mcp_prompt: 'mcp_prompt'
+          chat_platform_prompt: 'chat_platform_prompt'
 
 # 默认角色的配置
 character_config:

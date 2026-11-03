@@ -27,7 +27,7 @@ from ..session_factory import build_session_context
 from . import commands
 from .base import Connector, InboundMessage
 from .binding import BindCodeStore, user_eligible
-from .formatting import clean_reply, live2d_tags, split_reply
+from .formatting import clean_reply, live2d_tags, split_reply, strip_markdown
 
 # Messages of one sender in one chat run in order; more than this many
 # waiting turns get a "still busy" reply instead of piling up.
@@ -77,6 +77,9 @@ class ConnectorDispatcher:
         self._rate: dict[tuple[str, str], deque[float]] = {}
         self._tasks: set[asyncio.Task] = set()
         self._sweeper: asyncio.Task | None = None
+        # Text-only base context per connector (its own character and
+        # prompts); sessions are cloned from it. Falls back to the default.
+        self.base_contexts: dict[str, ServiceContext] = {}
 
     @property
     def repository(self):
@@ -318,7 +321,7 @@ class ConnectorDispatcher:
 
         errors: list[str] = []
         context = await self._session_builder(
-            self.default_context_cache,
+            self.base_contexts.get(message.connector_id, self.default_context_cache),
             channels=_headless_channels(errors),
             client_uid=f"connector-{uuid.uuid4().hex}",
             identity=Identity(
@@ -411,6 +414,7 @@ class ConnectorDispatcher:
         context = session.context
         session.errors.clear()
         turn_history_uid = bind_turn_history(context, None)
+        streamed = _StreamedText()
         try:
             reply = await asyncio.wait_for(
                 run_agent_turn(
@@ -419,7 +423,7 @@ class ConnectorDispatcher:
                     tts_manager=None,
                     input_text=text,
                     turn_history_uid=turn_history_uid,
-                    send_text_delta=_ignore_event,
+                    send_text_delta=streamed.collect,
                 ),
                 timeout=self.config.reply_timeout_seconds,
             )
@@ -433,7 +437,11 @@ class ConnectorDispatcher:
         finally:
             session.last_used = self._clock()
 
-        cleaned = clean_reply(reply, live2d_tags(context.live2d_model))
+        # Chat apps show raw text; markup only adds noise.
+        # The streamed text keeps the model's line breaks; the sentence-split
+        # reply does not, and line breaks carry the structure in plain text.
+        raw = streamed.text or reply
+        cleaned = strip_markdown(clean_reply(raw, live2d_tags(context.live2d_model)))
         if cleaned:
             return cleaned
         return commands.ERROR_TEXT if session.errors else commands.EMPTY_REPLY_TEXT
@@ -477,5 +485,14 @@ def _headless_channels(errors: list[str]) -> OutboundChannels:
     return OutboundChannels(text=send_text, audio=send_audio)
 
 
-async def _ignore_event(_message: dict[str, Any]) -> None:
-    return None
+class _StreamedText:
+    """Keeps the latest accumulated text of a turn's ``text-delta`` events."""
+
+    def __init__(self) -> None:
+        self.text = ""
+
+    async def collect(self, message: dict[str, Any]) -> None:
+        if message.get("type") == "text-delta":
+            full_text = message.get("full_text")
+            if isinstance(full_text, str):
+                self.text = full_text

@@ -8,6 +8,7 @@ from loguru import logger
 
 from ..config_manager.connectors import ConnectorsConfig, QQConnectorConfig
 from ..service_context import ServiceContext
+from ..session_factory import build_connector_base_context
 from ..utils.security import redact_secrets
 from .base import Connector
 from .binding import BindCodeStore
@@ -46,6 +47,8 @@ class ConnectorManager:
             default_context_cache, config, self.bind_codes
         )
         self._factory = factory
+        self._default_context_cache = default_context_cache
+        self._base_builder = build_connector_base_context
         self.connectors: dict[str, Connector] = {}
         self._tasks: dict[str, asyncio.Task] = {}
 
@@ -61,6 +64,13 @@ class ConnectorManager:
                 continue
             try:
                 connector = self._factory(instance)
+                # Connectors never show an avatar or speak, so each gets a
+                # text-only base context with its own character and prompts.
+                self.dispatcher.base_contexts[instance.id] = await self._base_builder(
+                    self._default_context_cache,
+                    character=instance.character,
+                    tool_prompts=instance.tool_prompts,
+                )
             except Exception:
                 logger.exception(f"Connector {instance.id}: failed to create")
                 continue
@@ -86,6 +96,12 @@ class ConnectorManager:
                 logger.exception(f"Connector {connector.connector_id}: close failed")
             connector.state = "stopped"
         await self.dispatcher.close()
+        for context in self.dispatcher.base_contexts.values():
+            try:
+                await context.close()
+            except Exception:
+                logger.exception("Failed to close a connector base context")
+        self.dispatcher.base_contexts.clear()
 
     def statuses(self) -> list[dict]:
         return [connector.status() for connector in self.connectors.values()]

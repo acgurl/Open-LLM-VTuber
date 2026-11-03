@@ -142,7 +142,7 @@
       "unbind": "解除",
       "confirmUnbind": "确认解除？",
       "unbound": "已解除绑定",
-      "commandsHint": "机器人指令：/new 开始新对话，/whoami 查看绑定，/unbind 解除绑定。机器人里的对话会出现在当前角色的历史记录中。"
+      "commandsHint": "机器人指令：/new 开始新对话，/whoami 查看绑定，/unbind 解除绑定。"
     }
   },
   "group": {

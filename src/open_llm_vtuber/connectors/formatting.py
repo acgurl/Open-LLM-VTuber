@@ -44,6 +44,34 @@ def clean_reply(text: str, tags: list[str] | None = None) -> str:
     return _BLANK_LINES.sub("\n\n", text).strip()
 
 
+# Line-level markup consumes its own line break so no blank line is left.
+_FENCE = re.compile(r"^[ \t]*```[\w-]*[ \t]*(?:\n|$)", re.MULTILINE)
+_HEADING = re.compile(r"^\s{0,3}#{1,6}\s+", re.MULTILINE)
+_QUOTE = re.compile(r"^\s{0,3}>\s?", re.MULTILINE)
+_BULLET = re.compile(r"^(\s*)[*+]\s+", re.MULTILINE)
+_EMPHASIS = re.compile(r"(\*\*|__)(.+?)\1", re.DOTALL)
+_INLINE_CODE = re.compile(r"`([^`\n]+)`")
+_LINK = re.compile(r"\[([^\]\n]+)\]\((\S+?)\)")
+_RULE = re.compile(r"^[ \t]*([-*_])([ \t]*\1){2,}[ \t]*(?:\n|$)", re.MULTILINE)
+
+
+def strip_markdown(text: str) -> str:
+    """Render common Markdown as plain text for apps that do not parse it.
+
+    Only unambiguous markup is touched: a single ``*`` or ``_`` inside a
+    sentence (math, file names) is left alone.
+    """
+    text = _FENCE.sub("", text)
+    text = _RULE.sub("", text)
+    text = _HEADING.sub("", text)
+    text = _QUOTE.sub("", text)
+    text = _BULLET.sub(r"\1- ", text)
+    text = _EMPHASIS.sub(r"\2", text)
+    text = _INLINE_CODE.sub(r"\1", text)
+    text = _LINK.sub(r"\1 \2", text)
+    return _BLANK_LINES.sub("\n\n", text).strip()
+
+
 def _split_point(text: str, limit: int) -> int:
     window = text[:limit]
     for marker in _SPLIT_POINTS:

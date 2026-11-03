@@ -1391,7 +1391,8 @@ remote 服务器失败（DNS、TLS、超时、401）只影响该服务器：会�
 - **全局侧**（`system_config.connectors.instances`）是部署方配置的机器人。平台账号必须先**绑定**到网页账号，而且该网页账号的登录邮箱（OIDC 回传、存在 `user_identities.email`）必须属于 `binding.allowed_email_domains`（默认 `cuc.edu.cn`，含子域）。每条消息都会重新校验，域名收紧后对已有绑定立即生效。
 - 绑定码只能**在私聊里**兑换（QQ 频道私信 `direct` / 单聊 `c2c`）；在频道或群里发 `/bind` 会被拒绝，避免码被旁人抢先兑换。
 - 连接器会话用的是绑定用户的真实 `user_id`：历史、用户 remote MCP、角色 `allowed_users` 和网页端完全一致。**不加载浏览器本地 MCP**（没有页面可以桥接），也**不做 TTS**（纯文本轮次，`tts_manager=None`）。
-- 回复会去掉 `<think>` 块和当前 Live2D 模型的 `[表情]`/`[动作]` 标签，再按平台长度切分（QQ：每段 1500 字、每条消息最多回复 4 段）。
+- **每个机器人有自己的角色和提示词**：启动时用 `ServiceContext.load_headless` 建一个纯文本的基础上下文（只有 MCP 和 agent，没有 Live2D、ASR、TTS、翻译），会话从它克隆。实例的 `character` 合并到默认角色上（建议单独设 `conf_uid`，机器人历史就不会出现在网页角色的历史列表里）；`tool_prompts` 整体替换系统的附加提示词，不写则沿用系统提示词、只去掉 `live2d_expression_prompt`。仓库自带 `prompts/utils/chat_platform_prompt.txt`（纯文本、简短）。
+- 回复以流式 `text-delta` 的累积文本为准（保留模型原有的换行；按句切分后的 `full_response` 会丢换行），去掉 `<think>` 块、Live2D 标签和常见 Markdown（标题、粗体、行内代码、引用、代码围栏、`* ` 列表改为 `- `、链接改成"文字 网址"），再按平台长度切分（QQ：每段 1500 字、每条消息最多回复 4 段）。历史里存的仍是模型原文。
 - QQ 的「单聊」（普通好友私聊机器人）和群消息只在订阅 `group_and_c2c` 时推送；只订阅 `direct_message` 收到的是**频道私信**。漏订阅时网关照样 READY，但收不到消息、也没有报错。
 - 用户侧连接器（例如每个用户自己的微信）尚未实现；它不走 23.3 的绑定流程。
 
@@ -1399,7 +1400,7 @@ remote 服务器失败（DNS、TLS、超时、401）只影响该服务器：会�
 
 - 会话键是 `(connector_id, chat_key, sender_id)`，其中 `chat_key = "<chat_type>:<chat_id>"`。同一频道里每个绑定用户各有独立上下文；同一会话的消息严格串行，排队超过 2 条会回"上一条还在处理中"。
 - 每个 `(connector_id, chat_key, user_id, conf_uid)` 映射到一条历史（`connector_conversations` 表，schema v7）。会话被回收或服务重启后会续用同一条历史；`/new` 新建一条。网页上删除这条历史后，映射随外键级联删除，下一条消息会自动开新历史。
-- 这些历史与网页历史同属该用户与角色，会出现在 `fetch-history-list` 里。
+- 这些历史属于该用户和机器人角色的 `conf_uid`。只有和网页角色共用同一个 `conf_uid` 时，才会出现在网页的 `fetch-history-list` 里。
 - 平台身份存在 `connector_identities(connector_id, external_id, user_id, ...)`。QQ 的 `external_id` 有两个命名空间：频道/频道私信用 `u:<用户 id>`，群/单聊用 `o:<openid>`；在其中一个命名空间里绑定，不会覆盖另一个。
 
 ### 23.3 HTTP 接口（`connector_routes.py`，前缀 `/api/connectors`，oidc 下需会话）

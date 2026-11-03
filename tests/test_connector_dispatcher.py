@@ -110,9 +110,11 @@ class ConnectorDispatcherTests(unittest.IsolatedAsyncioTestCase):
         )
         self.contexts: list[_FakeContext] = []
         self.builder_calls: list[dict] = []
+        self.builder_bases: list = []
 
         async def builder(default_context_cache, **kwargs):
             self.builder_calls.append(kwargs)
+            self.builder_bases.append(default_context_cache)
             context = _FakeContext(
                 self.repository, kwargs["identity"], kwargs["channels"]
             )
@@ -180,6 +182,36 @@ class ConnectorDispatcherTests(unittest.IsolatedAsyncioTestCase):
             ),
             history_uid,
         )
+
+    async def test_sessions_clone_the_connectors_own_base_context(self):
+        bot_base = SimpleNamespace(history_repository=self.repository)
+        self.dispatcher.base_contexts["qq"] = bot_base
+        await self.bind_alice()
+        await self.send(_message("你好"))
+        self.assertIs(self.builder_bases[0], bot_base)
+
+    async def test_reply_uses_streamed_text_and_drops_markdown(self):
+        await self.bind_alice()
+
+        async def streaming_turn(context, *, send_text_delta, **_kwargs):
+            await send_text_delta(
+                {"type": "text-delta", "text": "x", "full_text": "## 标题\n**要点**"}
+            )
+            await send_text_delta({"type": "tool_call_status", "status": "running"})
+            await send_text_delta(
+                {
+                    "type": "text-delta",
+                    "text": "y",
+                    "full_text": "## 标题\n**要点**。\n* 第一\n* 第二",
+                }
+            )
+            # The sentence-split reply has lost the line breaks.
+            return "## 标题**要点**。* 第一* 第二"
+
+        with patch.object(dispatcher_module, "run_agent_turn", new=streaming_turn):
+            await self.send(_message("你好"))
+
+        self.assertEqual(self.connector.texts()[-1], "标题\n要点。\n- 第一\n- 第二")
 
     async def test_bind_is_refused_in_shared_channels(self):
         code, _ = self.codes.issue(self.alice)

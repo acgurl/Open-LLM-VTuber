@@ -12,7 +12,8 @@ from loguru import logger
 from .auth import Identity
 from .conversations.types import OutboundChannels
 from .mcpp.user_servers import split_user_mcp_servers
-from .service_context import ServiceContext
+from .config_manager import validate_config
+from .service_context import ServiceContext, deep_merge
 from .storage import HistoryRepository
 
 
@@ -30,6 +31,51 @@ async def load_user_mcp_servers(
     except Exception:
         logger.exception("Failed to load per-user MCP servers")
         return [], []
+
+
+LIVE2D_PROMPT = "live2d_expression_prompt"
+
+
+async def build_connector_base_context(
+    default_context_cache: ServiceContext,
+    *,
+    character: dict,
+    tool_prompts: dict[str, str] | None,
+) -> ServiceContext:
+    """Create the shared, text-only base context of one connector.
+
+    ``character`` is a partial character_config merged over the default
+    character; ``tool_prompts`` replaces the system tool prompts (None keeps
+    them minus the Live2D expression prompt). Sessions of the connector are
+    then cloned from this context with ``build_session_context``.
+    """
+    system_config = default_context_cache.system_config
+    if tool_prompts is None:
+        tool_prompts = {
+            name: path
+            for name, path in system_config.tool_prompts.items()
+            if name != LIVE2D_PROMPT
+        }
+    character_data = deep_merge(
+        default_context_cache.character_config.model_dump(by_alias=True),
+        character or {},
+    )
+    config = validate_config(
+        {
+            "system_config": {
+                **system_config.model_dump(by_alias=True),
+                "tool_prompts": dict(tool_prompts),
+            },
+            "character_config": character_data,
+        }
+    )
+
+    context = ServiceContext()
+    # The repository is shared; the base context itself is never bound to a
+    # user and never stores history.
+    context.set_history_storage(default_context_cache.history_repository, None)
+    await context.load_headless(config)
+    return context
 
 
 async def build_session_context(

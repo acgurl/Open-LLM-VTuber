@@ -8,7 +8,7 @@ before the bot answers them. Credentials belong in environment variables
 """
 
 import re
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -67,6 +67,14 @@ class QQConnectorConfig(BaseModel):
         default_factory=lambda: ["public_guild_messages", "direct_message"],
         alias="intents",
     )
+    # Partial character_config deep-merged over the base character in
+    # conf.yaml: the bot can have its own name, persona and conf_uid (its
+    # histories are kept under that conf_uid). Live2D, ASR and TTS settings
+    # are ignored; connector sessions are text-only.
+    character: dict[str, Any] = Field(default_factory=dict, alias="character")
+    # Replaces system_config.tool_prompts for this bot. None keeps the
+    # system prompts except the Live2D expression prompt.
+    tool_prompts: dict[str, str] | None = Field(None, alias="tool_prompts")
 
     @field_validator("id")
     @classmethod
