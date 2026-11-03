@@ -17,6 +17,11 @@ from starlette.staticfiles import StaticFiles as StarletteStaticFiles
 
 from .auth import AuthManager, AuthRedirectMiddleware, init_auth_routes
 from .auth.middleware import IDENTITY_SCOPE_KEY
+from .config_manager.asset_access import (
+    AVATAR_MOUNT,
+    LIVE2D_MOUNT,
+    CharacterAssetAccess,
+)
 from .routes import init_client_ws_route, init_webtool_routes, init_proxy_route
 from .mcp_routes import init_user_mcp_routes
 from .connector_routes import init_connector_routes
@@ -93,7 +98,53 @@ class CORSStaticFiles(StarletteStaticFiles):
         return response
 
 
-class AvatarStaticFiles(CORSStaticFiles):
+# Private assets may be stored by the browser but never by Caddy, Cloudflare or
+# EdgeOne; denials are not cached either so a later login is not served a 404.
+_PRIVATE_ASSET_CACHE = "private, no-cache"
+_DENIED_ASSET_CACHE = "private, no-store"
+
+
+class CharacterAssetStaticFiles(CORSStaticFiles):
+    """Serve character assets, hiding restricted ones from other users.
+
+    Assets of presets with ``allowed_users`` (see ``CharacterAssetAccess``)
+    answer 404 to anyone outside the allowlist, as if they did not exist.
+    Without OIDC (single-user mode) everything stays readable.
+    """
+
+    def __init__(
+        self,
+        *args,
+        mount: str,
+        asset_access: CharacterAssetAccess | None = None,
+        auth: AuthManager | None = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.mount = mount
+        self.asset_access = asset_access
+        self.auth = auth
+
+    async def get_response(self, path: str, scope):
+        access = self.asset_access
+        restricted = access is not None and access.is_restricted(self.mount, path)
+        if restricted and self.auth is not None and self.auth.enabled:
+            identity = scope.get(IDENTITY_SCOPE_KEY)
+            if identity is None or not access.is_allowed(
+                self.mount, path, identity.user_id, identity.display_name
+            ):
+                return Response(
+                    "Not Found",
+                    status_code=404,
+                    headers={"Cache-Control": _DENIED_ASSET_CACHE},
+                )
+        response = await super().get_response(path, scope)
+        if restricted:
+            response.headers["Cache-Control"] = _PRIVATE_ASSET_CACHE
+        return response
+
+
+class AvatarStaticFiles(CharacterAssetStaticFiles):
     """
     Avatar files handler with security restrictions and CORS headers
     """
@@ -232,9 +283,17 @@ class WebSocketServer:
             UserCacheStaticFiles(directory="cache"),
             name="cache",
         )
+        asset_access = CharacterAssetAccess(
+            getattr(self.config.system_config, "config_alts_dir", "characters")
+        )
         self.app.mount(
             "/live2d-models",
-            CORSStaticFiles(directory="live2d-models"),
+            CharacterAssetStaticFiles(
+                directory="live2d-models",
+                mount=LIVE2D_MOUNT,
+                asset_access=asset_access,
+                auth=self.auth,
+            ),
             name="live2d-models",
         )
         self.app.mount(
@@ -244,7 +303,12 @@ class WebSocketServer:
         )
         self.app.mount(
             "/avatars",
-            AvatarStaticFiles(directory="avatars"),
+            AvatarStaticFiles(
+                directory="avatars",
+                mount=AVATAR_MOUNT,
+                asset_access=asset_access,
+                auth=self.auth,
+            ),
             name="avatars",
         )
         self.app.mount(
