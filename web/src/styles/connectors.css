@@ -1,0 +1,252 @@
+/* ---------- 消息平台绑定 ---------- */
+.connector-bots {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.connector-bot {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--chip);
+  font-size: 0.8rem;
+  max-width: 100%;
+}
+
+.connector-bot-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connector-state {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.connector-state.running {
+  color: var(--ok);
+}
+
+.connector-state.error {
+  color: var(--danger);
+}
+
+/* 状态灯：在线时有呼吸光晕，连接中闪烁，异常/停止为静态 */
+.connector-dot {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--faint);
+  flex: none;
+}
+
+.connector-dot.running {
+  background: var(--ok);
+}
+
+.connector-dot.running::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ok);
+  opacity: 0;
+  animation: connector-ping 2.4s var(--ease-snap) infinite;
+}
+
+.connector-dot.connecting {
+  background: var(--tertiary);
+  animation: connector-blink 1.1s ease-in-out infinite;
+}
+
+.connector-dot.error {
+  background: var(--danger);
+}
+
+@keyframes connector-ping {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.7;
+  }
+  70%,
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+@keyframes connector-blink {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.connector-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 13px;
+  border: 1px solid var(--tertiary-line);
+  background: var(--tertiary-soft);
+  color: var(--ink);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.connector-notice.error {
+  border-color: var(--danger-line);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* 绑定码卡片：渐变描边 + 内凹底，码本身是视觉焦点 */
+.connector-code-card {
+  position: relative;
+  padding: 14px 14px 12px;
+  border-radius: 16px;
+  background:
+    linear-gradient(var(--inset), var(--inset)) padding-box,
+    linear-gradient(
+        135deg,
+        var(--accent-line),
+        color-mix(in oklab, var(--tertiary) 45%, transparent) 55%,
+        var(--line)
+      )
+      border-box;
+  border: 1px solid transparent;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 28px -18px var(--accent-glow);
+  animation: connector-card-in 320ms var(--ease-spring);
+}
+
+@keyframes connector-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+}
+
+.connector-code-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.connector-code {
+  font-family: var(--font-mono);
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  color: var(--accent);
+  text-shadow: 0 0 18px var(--accent-soft);
+  user-select: all;
+  overflow-wrap: anywhere;
+}
+
+.connector-countdown {
+  margin: 10px 0 6px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--chip);
+  overflow: hidden;
+}
+
+.connector-countdown > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--tertiary));
+  transform-origin: left center;
+  transition: transform 1s linear;
+}
+
+.connector-code-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.connector-waiting {
+  background: linear-gradient(90deg, var(--muted) 40%, var(--ink) 50%, var(--muted) 60%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: connector-shimmer 2.2s linear infinite;
+}
+
+@keyframes connector-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+
+.connector-steps {
+  margin: 10px 0 0;
+  padding-left: 1.2em;
+  color: var(--ink);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.connector-steps code {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--chip);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.connector-subtitle {
+  margin: 14px 0 2px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+}
+
+.connector-panel .mcp-list {
+  list-style: none;
+  padding: 0;
+}
+
+.connector-binding .mcp-item-title {
+  flex: 1;
+}
+
+.mini-btn.danger.confirming {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--accent-ink);
+  animation: connector-nudge 260ms var(--ease-snap);
+}
+
+@keyframes connector-nudge {
+  30% {
+    transform: translateX(-2px);
+  }
+  60% {
+    transform: translateX(2px);
+  }
+}

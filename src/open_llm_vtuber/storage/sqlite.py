@@ -105,6 +105,29 @@ CREATE TABLE IF NOT EXISTS user_mcp_servers (
 
 CREATE INDEX IF NOT EXISTS idx_user_mcp_servers_user
     ON user_mcp_servers(user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS connector_identities (
+    connector_id TEXT NOT NULL,
+    external_id TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    display_name TEXT,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (connector_id, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_connector_identities_user
+    ON connector_identities(user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS connector_conversations (
+    connector_id TEXT NOT NULL,
+    chat_key TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    conf_uid TEXT NOT NULL,
+    history_id TEXT NOT NULL
+        REFERENCES histories(id) ON DELETE CASCADE ON UPDATE CASCADE,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (connector_id, chat_key, user_id, conf_uid)
+);
 """
 
 
@@ -236,7 +259,8 @@ class SQLiteHistoryRepository(HistoryRepository):
             # Version 3: per-user MCP servers. Version 4: local/remote mode.
             # Version 5: transport (Streamable HTTP / legacy SSE).
             # Version 6: persisted tool calls.
-            for version in (1, 2, 3, 4, 5, 6):
+            # Version 7: message connector identities and conversations.
+            for version in (1, 2, 3, 4, 5, 6, 7):
                 conn.execute(
                     "INSERT OR IGNORE INTO schema_migrations(version, applied_at) "
                     "VALUES(?, ?)",
@@ -352,6 +376,31 @@ class SQLiteHistoryRepository(HistoryRepository):
                 (provider, subject, user_id, email, now, now),
             )
             return user_id
+
+    async def get_user_profile(self, *, user_id: str) -> dict | None:
+        validate_user_id(user_id)
+        return await self._run(self._get_user_profile_sync, user_id)
+
+    def _get_user_profile_sync(self, user_id: str) -> dict | None:
+        row = self._conn.execute(
+            "SELECT id, display_name FROM users WHERE id = ?",
+            (user_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        emails = [
+            email_row["email"]
+            for email_row in self._conn.execute(
+                "SELECT DISTINCT email FROM user_identities "
+                "WHERE user_id = ? AND email IS NOT NULL ORDER BY email",
+                (user_id,),
+            )
+        ]
+        return {
+            "id": row["id"],
+            "display_name": row["display_name"],
+            "emails": emails,
+        }
 
     async def list_conf_uids(self, *, user_id: str) -> list[str]:
         validate_user_id(user_id)
@@ -1254,3 +1303,181 @@ class SQLiteHistoryRepository(HistoryRepository):
                     )
 
         return self._list_user_mcp_servers_sync(user_id)
+
+    async def bind_connector_identity(
+        self,
+        *,
+        connector_id: str,
+        external_id: str,
+        user_id: str,
+        display_name: str | None = None,
+    ) -> None:
+        validate_key(connector_id, "connector_id")
+        validate_identity(external_id, "external_id")
+        validate_user_id(user_id)
+        await self._run(
+            self._bind_connector_identity_sync,
+            connector_id,
+            external_id,
+            user_id,
+            display_name,
+        )
+
+    def _bind_connector_identity_sync(
+        self,
+        connector_id: str,
+        external_id: str,
+        user_id: str,
+        display_name: str | None,
+    ) -> None:
+        with self._conn:
+            self._ensure_user_sync(self._conn, user_id)
+            self._conn.execute(
+                "INSERT INTO connector_identities("
+                "connector_id, external_id, user_id, display_name, created_at"
+                ") VALUES(?, ?, ?, ?, ?) "
+                "ON CONFLICT(connector_id, external_id) DO UPDATE SET "
+                "user_id = excluded.user_id, "
+                "display_name = excluded.display_name, "
+                "created_at = excluded.created_at",
+                (connector_id, external_id, user_id, display_name, _now_iso()),
+            )
+
+    async def resolve_connector_identity(
+        self,
+        *,
+        connector_id: str,
+        external_id: str,
+    ) -> str | None:
+        validate_key(connector_id, "connector_id")
+        validate_identity(external_id, "external_id")
+        return await self._run(
+            self._resolve_connector_identity_sync, connector_id, external_id
+        )
+
+    def _resolve_connector_identity_sync(
+        self, connector_id: str, external_id: str
+    ) -> str | None:
+        row = self._conn.execute(
+            "SELECT user_id FROM connector_identities "
+            "WHERE connector_id = ? AND external_id = ?",
+            (connector_id, external_id),
+        ).fetchone()
+        return row["user_id"] if row is not None else None
+
+    async def list_connector_identities(self, *, user_id: str) -> list[dict]:
+        validate_user_id(user_id)
+        return await self._run(self._list_connector_identities_sync, user_id)
+
+    def _list_connector_identities_sync(self, user_id: str) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT connector_id, external_id, display_name, created_at "
+            "FROM connector_identities WHERE user_id = ? "
+            "ORDER BY created_at, connector_id",
+            (user_id,),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    async def delete_connector_identity(
+        self,
+        *,
+        user_id: str,
+        connector_id: str,
+        external_id: str,
+    ) -> bool:
+        validate_user_id(user_id)
+        validate_key(connector_id, "connector_id")
+        validate_identity(external_id, "external_id")
+        return await self._run(
+            self._delete_connector_identity_sync, user_id, connector_id, external_id
+        )
+
+    def _delete_connector_identity_sync(
+        self, user_id: str, connector_id: str, external_id: str
+    ) -> bool:
+        with self._conn:
+            cursor = self._conn.execute(
+                "DELETE FROM connector_identities "
+                "WHERE user_id = ? AND connector_id = ? AND external_id = ?",
+                (user_id, connector_id, external_id),
+            )
+        return cursor.rowcount > 0
+
+    async def get_connector_conversation(
+        self,
+        *,
+        connector_id: str,
+        chat_key: str,
+        user_id: str,
+        conf_uid: str,
+    ) -> str | None:
+        validate_key(connector_id, "connector_id")
+        validate_identity(chat_key, "chat_key")
+        validate_user_id(user_id)
+        validate_key(conf_uid, "conf_uid")
+        return await self._run(
+            self._get_connector_conversation_sync,
+            connector_id,
+            chat_key,
+            user_id,
+            conf_uid,
+        )
+
+    def _get_connector_conversation_sync(
+        self, connector_id: str, chat_key: str, user_id: str, conf_uid: str
+    ) -> str | None:
+        # Join on the history so a mapping never hands out a history that
+        # belongs to another user or character.
+        row = self._conn.execute(
+            "SELECT c.history_id FROM connector_conversations AS c "
+            "JOIN histories AS h ON h.id = c.history_id "
+            "WHERE c.connector_id = ? AND c.chat_key = ? AND c.user_id = ? "
+            "AND c.conf_uid = ? AND h.user_id = c.user_id "
+            "AND h.conf_uid = c.conf_uid",
+            (connector_id, chat_key, user_id, conf_uid),
+        ).fetchone()
+        return row["history_id"] if row is not None else None
+
+    async def set_connector_conversation(
+        self,
+        *,
+        connector_id: str,
+        chat_key: str,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+    ) -> None:
+        validate_key(connector_id, "connector_id")
+        validate_identity(chat_key, "chat_key")
+        validate_user_id(user_id)
+        validate_key(conf_uid, "conf_uid")
+        validate_key(history_uid, "history_uid")
+        await self._run(
+            self._set_connector_conversation_sync,
+            connector_id,
+            chat_key,
+            user_id,
+            conf_uid,
+            history_uid,
+        )
+
+    def _set_connector_conversation_sync(
+        self,
+        connector_id: str,
+        chat_key: str,
+        user_id: str,
+        conf_uid: str,
+        history_uid: str,
+    ) -> None:
+        with self._conn:
+            if not self._history_exists_sync(user_id, conf_uid, history_uid):
+                raise HistoryNotFoundError(history_uid)
+            self._conn.execute(
+                "INSERT INTO connector_conversations("
+                "connector_id, chat_key, user_id, conf_uid, history_id, updated_at"
+                ") VALUES(?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(connector_id, chat_key, user_id, conf_uid) "
+                "DO UPDATE SET history_id = excluded.history_id, "
+                "updated_at = excluded.updated_at",
+                (connector_id, chat_key, user_id, conf_uid, history_uid, _now_iso()),
+            )

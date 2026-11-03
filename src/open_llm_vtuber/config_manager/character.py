@@ -19,6 +19,7 @@ class CharacterConfig(I18nMixin):
     human_name: str = Field(default="Human", alias="human_name")
     avatar: str = Field(default="", alias="avatar")
     welcome_message: str = Field(default="", alias="welcome_message")
+    starter_prompts: list[str] = Field(default_factory=list, alias="starter_prompts")
     # Empty means public. Only presets in characters/ are checked against this
     # list; the conf.yaml default character is always available.
     allowed_users: list[str] = Field(default_factory=list, alias="allowed_users")
@@ -69,6 +70,10 @@ class CharacterConfig(I18nMixin):
         "welcome_message": Description(
             en="Text-only greeting shown in chat when a new session starts (not spoken)",
             zh="新会话开始时显示在聊天中的纯文本欢迎语（不会语音朗读）",
+        ),
+        "starter_prompts": Description(
+            en="Suggested first questions shown as one-tap chips in an empty new session",
+            zh="新会话为空时显示的推荐问题（一键发送的小胶囊）",
         ),
         "allowed_users": Description(
             en=(

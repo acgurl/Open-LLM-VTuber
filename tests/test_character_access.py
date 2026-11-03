@@ -148,6 +148,7 @@ class SwitchAccessTests(unittest.IsolatedAsyncioTestCase):
             conf_uid="base",
             character_name="Private",
             welcome_message="",
+            starter_prompts=[],
         )
         self.websocket = FakeWebSocket()
 

@@ -4,6 +4,7 @@ from typing import ClassVar
 from .i18n import I18nMixin, Description
 from .auth import AuthConfig
 from .storage import StorageConfig
+from .connectors import ConnectorsConfig
 
 
 class SystemConfig(I18nMixin):
@@ -17,6 +18,9 @@ class SystemConfig(I18nMixin):
     enable_proxy: bool = Field(False, alias="enable_proxy")
     storage: StorageConfig = Field(default_factory=StorageConfig, alias="storage")
     auth: AuthConfig = Field(default_factory=AuthConfig, alias="auth")
+    connectors: ConnectorsConfig = Field(
+        default_factory=ConnectorsConfig, alias="connectors"
+    )
 
     DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "conf_version": Description(en="Configuration version", zh="配置文件版本"),
@@ -40,6 +44,10 @@ class SystemConfig(I18nMixin):
         "auth": Description(
             en="Authentication settings",
             zh="认证设置",
+        ),
+        "connectors": Description(
+            en="Message platform connectors (QQ bot, ...)",
+            zh="消息平台连接器（QQ 机器人等）",
         ),
     }
 

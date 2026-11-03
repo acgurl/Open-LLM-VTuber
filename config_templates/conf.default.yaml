@@ -38,6 +38,47 @@ system_config:
     legacy_history_dir: 'chat_history'
     legacy_backup_dir: 'data/storage/legacy_history'
 
+  # Message platform connectors. Global bots answer only users who bound the
+  # platform account to a web account that logs in with an allowed email
+  # domain (send "/bind CODE" privately; codes come from POST
+  # /api/connectors/bind-code). Keep credentials in environment variables.
+  connectors:
+    enabled: false
+    binding:
+      allowed_email_domains: ['cuc.edu.cn']
+      code_ttl_seconds: 600
+      # Where unbound users get a code. Some platforms drop unregistered links.
+      web_url: ''
+    reply_timeout_seconds: 180
+    max_concurrent_turns: 4
+    max_sessions: 64
+    session_idle_seconds: 1800
+    max_input_chars: 2000
+    rate_limit_per_minute: 10
+    instances:
+      - type: 'qq' # QQ official bot (bot.q.qq.com), WebSocket gateway
+        id: 'qq-main'
+        enabled: false
+        name: 'QQ Bot'
+        app_id: '${QQ_BOT_APP_ID}'
+        app_secret: '${QQ_BOT_APP_SECRET}'
+        sandbox: false
+        # public_guild_messages, guild_messages, direct_message, group_and_c2c
+        # QQ single chats (the usual private chat) and groups need group_and_c2c
+        intents: ['public_guild_messages', 'direct_message']
+        # Bots never show an avatar or speak. `character` is merged over the
+        # character_config below (give it its own conf_uid so bot histories
+        # stay apart); `tool_prompts` replaces system_config.tool_prompts
+        # (unset = the same prompts minus live2d_expression_prompt).
+        character:
+          conf_uid: 'qq_bot_001'
+          conf_name: 'QQ Bot'
+          character_name: 'Assistant'
+          persona_prompt: 'You are a friendly campus assistant chatting in QQ.'
+        tool_prompts:
+          mcp_prompt: 'mcp_prompt'
+          chat_platform_prompt: 'chat_platform_prompt'
+
 # configuration for the default character
 character_config:
   conf_name: 'mao_pro' # The name of character configuration file.
@@ -45,6 +86,9 @@ character_config:
   live2d_model_name: 'mao_pro' # The name of Live2D model. Must be the same as the corresponding name in model_dict.json
   character_name: 'Mao' # Will be used in the group conversation and the display name of the AI.
   avatar: 'mao.png' # Suggest using a square image for the avatar. Save it in the avatars folder. Leave blank to use the first letter of the character name as the avatar.
+  # Optional: suggested first questions shown as one-tap chips in an empty new session
+  # starter_prompts:
+  #   - 'What can you do?'
   human_name: 'Human' # Will be used in the group conversation and the display name of the human.
 
   # ============== Prompts ==============

@@ -43,7 +43,7 @@ class Live2DFallbackTests(unittest.IsolatedAsyncioTestCase):
         context = ServiceContext()
         context.live2d_model = None
         context.character_config = SimpleNamespace(
-            conf_name="Conf", conf_uid="uid", welcome_message=""
+            conf_name="Conf", conf_uid="uid", welcome_message="", starter_prompts=[]
         )
 
         self.assertEqual(
@@ -54,6 +54,7 @@ class Live2DFallbackTests(unittest.IsolatedAsyncioTestCase):
                 "conf_name": "Conf",
                 "conf_uid": "uid",
                 "welcome_message": "",
+                "starter_prompts": [],
             },
         )
 

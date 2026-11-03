@@ -38,6 +38,45 @@ system_config:
     legacy_history_dir: 'chat_history'
     legacy_backup_dir: 'data/storage/legacy_history'
 
+  # 消息平台连接器。全局机器人只回复已绑定的用户：平台账号需绑定到一个用允许的邮箱域登录的
+  # 网页账号（私聊机器人发送 "/bind 绑定码"，绑定码由 POST /api/connectors/bind-code 生成）。
+  # 凭据请放在环境变量里。
+  connectors:
+    enabled: false
+    binding:
+      allowed_email_domains: ['cuc.edu.cn']
+      code_ttl_seconds: 600
+      # 提示未绑定用户去哪里生成绑定码；部分平台会拦截未报备的链接
+      web_url: ''
+    reply_timeout_seconds: 180
+    max_concurrent_turns: 4
+    max_sessions: 64
+    session_idle_seconds: 1800
+    max_input_chars: 2000
+    rate_limit_per_minute: 10
+    instances:
+      - type: 'qq' # QQ 官方机器人（bot.q.qq.com），WebSocket 网关
+        id: 'qq-main'
+        enabled: false
+        name: 'QQ 机器人'
+        app_id: '${QQ_BOT_APP_ID}'
+        app_secret: '${QQ_BOT_APP_SECRET}'
+        sandbox: false
+        # 可选：public_guild_messages、guild_messages、direct_message、group_and_c2c
+        # QQ 单聊（最常用的私聊）和群需要 group_and_c2c
+        intents: ['public_guild_messages', 'direct_message']
+        # 机器人没有形象也不说话。character 会合并到下面的 character_config 上（建议给它单独的
+        # conf_uid，机器人的历史就和网页角色分开）；tool_prompts 整体替换 system_config.tool_prompts
+        # （不写则沿用系统提示词，只去掉 live2d_expression_prompt）。
+        character:
+          conf_uid: 'qq_bot_001'
+          conf_name: 'QQ 机器人'
+          character_name: '小助手'
+          persona_prompt: '你是在 QQ 里陪大家聊天的校园小助手。'
+        tool_prompts:
+          mcp_prompt: 'mcp_prompt'
+          chat_platform_prompt: 'chat_platform_prompt'
+
 # 默认角色的配置
 character_config:
   conf_name: 'mao_pro' # 角色配置文件的名称
@@ -45,6 +84,9 @@ character_config:
   live2d_model_name: 'mao_pro' # Live2D 模型名称
   character_name: 'Mao' # 将在群聊中使用，并显示为 AI 的名称。
   avatar: 'mao.png' # 建议使用正方形图像作为头像。将其保存到 avatars 文件夹中。留空则使用角色名称的首字母作为头像。
+  # 可选：新会话为空时显示的推荐问题，点一下直接发送
+  # starter_prompts:
+  #   - '你能做什么？'
   human_name: 'Human' # 将在群聊中使用，并显示为人类的名称。
 
   # ============== 提示词 ==============

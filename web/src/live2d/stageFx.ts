@@ -7,6 +7,18 @@ let last = -1;
 export function bindVoiceHalo(node: HTMLElement | null) {
   halo = node;
   last = -1;
+  lastX = NaN;
+}
+
+// 背光跟着人物的取景中心走（聊天列让位、拖拽都会移动人物），按整像素写，不变不写
+let lastX = NaN;
+
+export function setStageCenter(x: number) {
+  if (!halo) return;
+  const px = Math.round(x);
+  if (px === lastX) return;
+  lastX = px;
+  halo.style.setProperty('--stage-x', `${px}px`);
 }
 
 export function setVoiceLevel(v: number) {

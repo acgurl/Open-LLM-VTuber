@@ -142,3 +142,88 @@
     transform: translateY(2px);
   }
 }
+
+/* ---------- 推荐问题 ----------
+   空会话里挂在欢迎语下面的一排胶囊：逐个浮起，悬停时受光点亮主色，点下去即发送。 */
+.starter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: -6px;
+}
+
+.starter-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 14px 7px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, var(--sheen), transparent 70%),
+    var(--bubble-ai);
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  box-shadow: var(--shadow-soft), var(--shadow-inset);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+  animation: starter-in 460ms var(--ease-spring) backwards;
+  transition:
+    color 180ms var(--ease-snap),
+    border-color 180ms var(--ease-snap),
+    background-color 180ms var(--ease-snap),
+    transform 260ms var(--ease-spring);
+}
+
+@keyframes starter-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 一颗随主色的小星点：平时安静，悬停时亮起并转半圈 */
+.starter-spark {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  background: var(--accent);
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  opacity: 0.7;
+  transition:
+    opacity 180ms var(--ease-snap),
+    transform 420ms var(--ease-spring),
+    filter 180ms var(--ease-snap);
+}
+
+.starter-chip:focus-visible {
+  outline: 2px solid var(--accent-line);
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .starter-chip:hover {
+    color: var(--ink);
+    border-color: var(--accent-line);
+    background-color: var(--accent-soft);
+    transform: translateY(-1px);
+  }
+
+  .starter-chip:hover .starter-spark {
+    opacity: 1;
+    transform: rotate(90deg) scale(1.15);
+    filter: drop-shadow(0 0 4px var(--accent-glow));
+  }
+}
+
+.starter-chip:active {
+  transform: scale(0.97);
+}
