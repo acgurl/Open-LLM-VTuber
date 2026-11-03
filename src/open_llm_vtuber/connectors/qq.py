@@ -344,9 +344,11 @@ class QQConnector(Connector):
         if message is None:
             logger.debug(f"Connector {self.connector_id}: ignored {event_type}")
             return
-        # Content stays out of the log; the type tells which intent delivered it.
+        # Content stays out of the log; the type tells which intent delivered it
+        # and the sender tail tells accounts apart.
         logger.info(
-            f"Connector {self.connector_id}: {event_type} ({message.chat_type})"
+            f"Connector {self.connector_id}: {event_type} ({message.chat_type}) "
+            f"from ...{message.sender_id[-6:]}"
         )
         await on_message(self, message)
 

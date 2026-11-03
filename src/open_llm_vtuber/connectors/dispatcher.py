@@ -188,6 +188,7 @@ class ConnectorDispatcher:
             )
             return
         if user_id is None:
+            logger.info(f"{self._bind_tag(message)}: not bound, sent bind hint")
             await self._reply(
                 connector,
                 message,
@@ -229,10 +230,15 @@ class ConnectorDispatcher:
 
     # ==== commands
 
+    @staticmethod
+    def _bind_tag(message: InboundMessage) -> str:
+        return f"Connector {message.connector_id} (...{message.sender_id[-6:]})"
+
     async def _bind(
         self, connector: Connector, message: InboundMessage, code: str
     ) -> None:
         if message.chat_type not in PRIVATE_CHAT_TYPES:
+            logger.info(f"{self._bind_tag(message)}: /bind refused, not a private chat")
             await self._reply(connector, message, "请私聊我发送 /bind 绑定码。")
             return
         if not code:
@@ -241,20 +247,27 @@ class ConnectorDispatcher:
 
         attempt_key = f"{message.connector_id}:{message.sender_id}"
         if self.bind_codes.is_locked(attempt_key):
+            logger.info(f"{self._bind_tag(message)}: /bind refused, locked")
             await self._reply(connector, message, commands.BIND_LOCKED_TEXT)
             return
         user_id = self.bind_codes.redeem(code, attempt_key)
         if user_id is None:
-            text = (
-                commands.BIND_LOCKED_TEXT
-                if self.bind_codes.is_locked(attempt_key)
-                else commands.BIND_FAILED_TEXT
+            locked = self.bind_codes.is_locked(attempt_key)
+            logger.info(
+                f"{self._bind_tag(message)}: /bind code rejected "
+                f"(unknown, expired or already used)"
+                f"{'; account now locked' if locked else ''}"
             )
+            text = commands.BIND_LOCKED_TEXT if locked else commands.BIND_FAILED_TEXT
             await self._reply(connector, message, text)
             return
 
         profile = await self.repository.get_user_profile(user_id=user_id)
         if not user_eligible(profile, self.config.binding.allowed_email_domains):
+            logger.info(
+                f"{self._bind_tag(message)}: /bind refused, web user {user_id} "
+                f"has no email in the allowed domains"
+            )
             await self._reply(connector, message, commands.INELIGIBLE_TEXT)
             return
 
@@ -267,8 +280,7 @@ class ConnectorDispatcher:
         # Sessions of a previous binding must not keep the old user's memory.
         await self.close_sender_sessions(message.connector_id, message.sender_id)
         logger.info(
-            f"Connector {message.connector_id}: bound a platform account to "
-            f"user {user_id}"
+            f"{self._bind_tag(message)}: bound a platform account to user {user_id}"
         )
         await self._reply(connector, message, commands.BIND_OK_TEXT)
 
