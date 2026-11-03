@@ -64,6 +64,7 @@ system_config:
         app_secret: '${QQ_BOT_APP_SECRET}'
         sandbox: false
         # public_guild_messages, guild_messages, direct_message, group_and_c2c
+        # QQ single chats (the usual private chat) and groups need group_and_c2c
         intents: ['public_guild_messages', 'direct_message']
 
 # configuration for the default character

@@ -341,8 +341,14 @@ class QQConnector(Connector):
         if not isinstance(event_type, str):
             return
         message = parse_event(self.connector_id, event_type, data)
-        if message is not None:
-            await on_message(self, message)
+        if message is None:
+            logger.debug(f"Connector {self.connector_id}: ignored {event_type}")
+            return
+        # Content stays out of the log; the type tells which intent delivered it.
+        logger.info(
+            f"Connector {self.connector_id}: {event_type} ({message.chat_type})"
+        )
+        await on_message(self, message)
 
     @staticmethod
     async def _receive(websocket) -> dict[str, Any]:

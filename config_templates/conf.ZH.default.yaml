@@ -63,6 +63,7 @@ system_config:
         app_secret: '${QQ_BOT_APP_SECRET}'
         sandbox: false
         # 可选：public_guild_messages、guild_messages、direct_message、group_and_c2c
+        # QQ 单聊（最常用的私聊）和群需要 group_and_c2c
         intents: ['public_guild_messages', 'direct_message']
 
 # 默认角色的配置
