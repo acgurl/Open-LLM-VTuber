@@ -97,6 +97,8 @@
 | K4 | `BACKEND_API.md` §19 的已知坑（#2/#4/#10/#17/#19） | Deliberate | 属于契约 |
 | K5 | 鉴权、Cookie、OIDC state、SQLite 事务、绑定码 | 已检查，干净 | — |
 | K6 | DNS rebinding 窗口（校验与连接之间） | Deliberate | 已知设计限制 |
+| K7 | `config_manager/auth.py` 的 `_COOKIE_NAME_PATTERN` 与用户 ID 正则写法相同 | Deliberate（C11） | 两者是互不相关的规则（cookie 名与用户 ID），合并会把它们耦合在一起 |
+| K8 | 角色切换时由 context 自己发 WS 帧 | Deliberate（C14） | 测试直接调用 `handle_config_switch(websocket, …)`；拆出去需要改调用方或测试，对可读性的收益很小 |
 | Q1 | 受限角色 ACL 按 `display_name` 匹配（用户在 IdP 改名后即可冒用） | **Approved（2026-11-04）→ C1** | 只按 user id 或已验证的 email 匹配；线上 `allowed_users` 需要迁移 |
 | Q2 | 把 barge-in 打断从 `onSpeechStart` 移到 `onSpeechRealStart` | **Rejected（2026-11-04，用户决定）** | 保持现有打断时机；C6 只修误触发后的推流 |
 
@@ -106,21 +108,21 @@
 
 | 车厢 | 内容 | 冻结侧 | 验证命令 | 依赖 | 状态 |
 |---|---|---|---|---|---|
-| C1 | 访问控制与鉴权缺陷：D-ACL1、D-ACL2、D-AUTH1、D-CACHE1、Q1，每项一个锁定测试 | 测试；Q1 允许修改 `test_character_access.py`/`test_character_assets.py` 中按名字匹配的用例 | unittest + `npm run build` 不受影响 | — | Proposed |
-| C2 | 工具调用缺陷：D-TOOL1..5、D-LLM1、D-LLM2、D-MCP1、D-MCP2 | 测试；唯一允许修改的是 `test_mcp_client.py:24` 的 fixture（`metadata`→`meta`） | unittest | **PR #10 合并或 rebase 之后**（同文件） | Proposed |
-| C3 | 会话/WS 缺陷：D-GRP1..3、D-CTX1、D-WS1、D-WS2、D-PRX1、D-PRX2、P-TR1 | 测试 | unittest | — | Proposed |
-| C4 | 历史归属：D-GRP4、D-HIST1；切换配置泄漏 D-CTX2 | 测试 | unittest | C3 | Proposed |
-| C5 | 引擎与配置（含删除 Letta：生产 `conf.yaml` 仍有 `letta_agent:` 段 → 配置类必须继续接受该键并忽略 + warning；`conversation_agent_choice: letta_agent` 给出明确报错）：D-TTS1、D-TTS2、D-TTS3（extra + 模板注释）、D-CFG1、D-ARC1、D-HUME1..3、D-LETTA1、D-TR1、W-HTTPX1、D-LIVE1、P-OLL1 | 测试 | unittest + 导入遍历探针 | — | Proposed |
-| C6 | 前端缺陷：D-WEB1..4 | — | `npm run build` + 浏览器 smoke | — | Proposed |
-| C7 | QQ 重试只针对连接阶段错误；D-CONN2 | **测试 fixture 编码了这个 bug**：`test_qq_connector.py:232/238/245` 显式允许修改 | unittest | — | Proposed |
-| C8 | 依赖瘦身：X1、X2、X3（验证不过就 Rejected）、X4、X5，附镜像守卫（CI smoke 导入） | 测试 | unittest + docker build + 容器内 import smoke | — | Proposed |
-| C9 | R1 + R5 中 agent/mcpp 的部分 + R9 中 LLM 的部分 | 测试 | unittest | C2 | Proposed |
-| C10 | R2 + R9 中会话的部分 | 测试 | unittest | C3、C4 | Proposed |
-| C11 | R3 + R4 + R6 + R9 中路由/连接器的部分 | 测试 | unittest | C1、C7 | Proposed |
-| C12 | R7 + R5 中引擎的部分 | 测试 | unittest | C5 | Proposed |
-| C13 | R8（前端清理） | — | build + smoke | C6 | Proposed |
-| C14 | S1 结构拆分（逐个列出允许修改的测试 + 守卫非空洞证明） | 允许修改的测试已列出 | unittest | C4、C9、C10 | Proposed |
-| C15 | S2 controller 拆分 | — | build + smoke | C13 | Proposed |
+| C1 | 访问控制与鉴权缺陷：D-ACL1、D-ACL2、D-AUTH1、D-CACHE1、Q1，每项一个锁定测试 | 测试；Q1 允许修改 `test_character_access.py`/`test_character_assets.py` 中按名字匹配的用例 | unittest + `npm run build` 不受影响 | — | Done（#17） |
+| C2 | 工具调用缺陷：D-TOOL1..5、D-LLM1、D-LLM2、D-MCP1、D-MCP2 | 测试；唯一允许修改的是 `test_mcp_client.py:24` 的 fixture（`metadata`→`meta`） | unittest | **PR #10 合并或 rebase 之后**（同文件） | Done（#15） |
+| C3 | 会话/WS 缺陷：D-GRP1..3、D-CTX1、D-WS1、D-WS2、D-PRX1、D-PRX2、P-TR1 | 测试 | unittest | — | Done（#16） |
+| C4 | 历史归属：D-GRP4、D-HIST1；切换配置泄漏 D-CTX2 | 测试 | unittest | C3 | Done（#21） |
+| C5 | 引擎与配置（含删除 Letta：生产 `conf.yaml` 仍有 `letta_agent:` 段 → 配置类必须继续接受该键并忽略 + warning；`conversation_agent_choice: letta_agent` 给出明确报错）：D-TTS1、D-TTS2、D-TTS3（extra + 模板注释）、D-CFG1、D-ARC1、D-HUME1..3、D-LETTA1、D-TR1、W-HTTPX1、D-LIVE1、P-OLL1 | 测试 | unittest + 导入遍历探针 | — | Done（#18） |
+| C6 | 前端缺陷：D-WEB1..4 | — | `npm run build` + 浏览器 smoke | — | Done（#14） |
+| C7 | QQ 重试只针对连接阶段错误；D-CONN2 | **测试 fixture 编码了这个 bug**：`test_qq_connector.py:232/238/245` 显式允许修改 | unittest | — | Done（#13） |
+| C8 | 依赖瘦身：X1、X2、X3（验证不过就 Rejected）、X4、X5，附镜像守卫（CI smoke 导入） | 测试 | unittest + docker build + 容器内 import smoke | — | Done（#24） |
+| C9 | R1 + R4 + R5 中 agent/mcpp 的部分 + R9 中 LLM 的部分 | 测试 | unittest | C2 | Done（#23） |
+| C10 | R2 + R9 中会话的部分 | 测试 | unittest | C3、C4 | Done（#26） |
+| C11 | R3 + R6 + R9 中路由/连接器的部分（R4 移到 C9，因为 `mcpp/` 归 C9） | 测试 | unittest | C1、C7 | Done（#20） |
+| C12 | R7 + R5 中引擎的部分 | 测试 | unittest | C5 | Done（#22） |
+| C13 | R8（前端清理） | — | build + smoke | C6 | Done（#19） |
+| C14 | S1 结构拆分（目标是零测试修改；实际也是零修改） | 测试（最终没有改任何测试） | unittest | C4、C9、C10 | Done（#27） |
+| C15 | S2 controller 拆分 | — | build + smoke | C13 | Done（#25） |
 
 ## 7. 第二轮复审（新视角，覆盖第一轮扫得较浅的区域）
 
@@ -153,3 +155,26 @@
 - **假对象照抄了错误的属性名**（`SimpleNamespace(metadata=…)`）：测试通过恰恰掩盖了 SDK 漂移。今后凡是用假对象替身 SDK 返回值，都要用 `create_autospec(真实类)` 或者对照 `model_fields`。
 - **版本没设上限的依赖**（`letta-client>=0.1.100` 锁到了 1.7.6）：方法被改名后静默失效。探针手段是对锁定版本做 `dir()`/`signature` 比对，扫描器看不出这一类问题。
 - **`upgrade_codes/` 不是历史代码**：`run_server.py:10,104` 每次启动都会执行它。
+- **`git stash` 在所有 worktree 之间共享**：并行车厢用 stash 验证“没有修复时测试会失败”，结果 C1 和 C3 的 stash 被互相 pop 走。今后改用 `git diff > patch` + `git checkout` + `git apply`。
+- **`update-requirements.yml` 曾在任意分支 push 时自动提交到车厢分支上**：C8 已改为只在 main 上触发，并且从 `uv.lock` 导出。
+- **为了保住 patch 目标而保留的生产代码接缝**：`service_context.py` 里 `MCPClient`/`ToolManager`/`ToolExecutor` 带 `# noqa: F401` 的导入，以及 `ToolingField` 描述符，都是为了让 `patch.object(service_context_module, …)` 继续生效。下一次审计如果允许修改测试，可以把这些 patch 目标迁到 `session_tooling`，再删掉这几个导入。
+
+## 10. 清理列车执行结果（2026-11-04）
+
+- **结果**：C1–C15 全部合并（#13–#27），另外 PR #10（并行工具调用）按用户决定先于 C2 合并。
+- **测试数**：`PYTHONPATH=src uv run --frozen python -m unittest discover -s tests` 从 374（@`8c82c7c`）增加到 495（@`1c555a7`，全部车厢合并之后）。新增的都是锁定测试或特征测试。
+- **C901**：`uvx ruff check src --select C901 --output-format concise | grep -c C901` 从 22（@`8c82c7c`）降到 4（@`1c555a7`）。剩下的 4 个：`asset_access._build_rules`、`json_detector._extract_json`（审计时就判断不需要拆）、`legacy._read_legacy_file`、`legacy.import_legacy_histories`。状态为 Rejected：它们是旧格式导入的一次性路径，拆分没有收益。
+- **授权范围内修改过的测试**（都在各自 PR 正文里逐条列出）：
+  - C1：`test_character_access.py`、`test_character_assets.py` 中按显示名匹配的用例（Q1）。
+  - C2：`test_mcp_client.py` 的 fixture，`metadata` 改为 `meta`。
+  - C5：`test_agent_interface.py` 中关于 Letta 的断言（Letta 已删除）。
+  - C7：`test_qq_connector.py` 的重试用例。
+  - 其余车厢没有修改任何测试。
+- **尚未验证、需要人工处理**：
+  - C6/C13/C15 的浏览器 smoke：步骤写在各自 PR 正文里。前端没有测试框架；C15 已经做过数值等价对比。
+  - C8 的镜像体积前后对比：本机没有 docker，CI 的 arm64 构建和镜像内 smoke 已通过。
+  - **部署**：以上改动都还没有上线。上线前要注意：`characters/zh_yifan.yaml` 中的 `"acgurl"` 条目按显示名匹配，Q1 之后会失效（同文件的 user id 条目仍然有效）；生产 `conf.yaml` 里的 `letta_agent:` 段会被忽略，并打一次 warning。
+- **后续项（Proposed，放产品 backlog，未估点：unsized——单人项目没有估点刻度）**：
+  - `web/src/utils/capture.ts` 的一次性截图仍在 `await video.play()`，在后台标签页里可能卡住（C13 发现，未能复现）。
+  - 本地 MCP bridge 的结果路径不保留 `ResourceLink.uri`（C2 发现）。
+  - `BACKEND_API.md` 中引用的源码行号已经漂移（例如 `tool_call_status` 一节）。
