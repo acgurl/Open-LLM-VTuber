@@ -331,6 +331,7 @@ class SQLiteHistoryRepository(HistoryRepository):
         subject: str,
         display_name: str | None = None,
         email: str | None = None,
+        email_verified: bool | None = None,
     ) -> str:
         validate_identity(provider, "provider")
         validate_identity(subject, "subject")
@@ -340,6 +341,7 @@ class SQLiteHistoryRepository(HistoryRepository):
             subject,
             display_name,
             email,
+            email_verified,
         )
 
     def _resolve_user_identity_sync(
@@ -348,7 +350,10 @@ class SQLiteHistoryRepository(HistoryRepository):
         subject: str,
         display_name: str | None,
         email: str | None,
+        email_verified: bool | None = None,
     ) -> str:
+        if email_verified is False:
+            email = None
         now = _now_iso()
         with self._conn:
             row = self._conn.execute(
@@ -361,9 +366,10 @@ class SQLiteHistoryRepository(HistoryRepository):
                 user_id = row["user_id"]
                 self._ensure_user_sync(self._conn, user_id, display_name)
                 self._conn.execute(
-                    "UPDATE user_identities SET email = COALESCE(?, email), "
+                    "UPDATE user_identities SET email = "
+                    "CASE WHEN ? THEN NULL ELSE COALESCE(?, email) END, "
                     "last_login_at = ? WHERE provider = ? AND subject = ?",
-                    (email, now, provider, subject),
+                    (email_verified is False, email, now, provider, subject),
                 )
                 return user_id
 

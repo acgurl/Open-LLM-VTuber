@@ -108,12 +108,20 @@ class CharacterAssetAccessTests(unittest.TestCase):
         self.assertFalse(access.is_restricted(AVATAR_MOUNT, "relu.png"))
         self.assertFalse(access.is_restricted(LIVE2D_MOUNT, "unknown/a.json"))
 
-    def test_allowlist_matches_id_or_display_name(self) -> None:
+    def test_allowlist_matches_id_or_verified_email(self) -> None:
+        write_character(
+            self.fx.characters / "private.yaml",
+            live2d_model_name="yifan",
+            avatar="yifan.png",
+            allowed_users=["u1", "Alice", "alice@example.com"],
+        )
         access = self.fx.access()
         path = "yifan/runtime_v015/yifan.moc3"
         self.assertTrue(access.is_allowed(LIVE2D_MOUNT, path, "u1", None))
-        self.assertTrue(access.is_allowed(LIVE2D_MOUNT, path, "other", "alice"))
-        self.assertFalse(access.is_allowed(LIVE2D_MOUNT, path, "u2", "Bob"))
+        self.assertTrue(
+            access.is_allowed(LIVE2D_MOUNT, path, "other", ["ALICE@example.com"])
+        )
+        self.assertFalse(access.is_allowed(LIVE2D_MOUNT, path, "u2", ["b@x.com"]))
         self.assertFalse(access.is_allowed(AVATAR_MOUNT, "yifan.png", None, None))
 
     def test_asset_used_by_a_public_character_stays_public(self) -> None:

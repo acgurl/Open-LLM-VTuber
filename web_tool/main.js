@@ -138,7 +138,14 @@ function connectWebSocket() {
             ttsStatus.className = 'status';
 
             try {
-                const audioPath = response.audioPath.split('/').pop();
+                // audioPath is relative to the server root, e.g.
+                // cache/<user id>/<stem>.wav in OIDC mode; /cache serves it.
+                const audioPath = response.audioPath
+                    .replace(/\\/g, '/')
+                    .replace(/^\.?\/?cache\//, '')
+                    .split('/')
+                    .map(encodeURIComponent)
+                    .join('/');
                 pendingAudioPaths.add(audioPath);
 
                 if (audioContext.state === 'suspended') {

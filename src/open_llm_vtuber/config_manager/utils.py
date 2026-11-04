@@ -191,6 +191,13 @@ def scan_config_alts_directory(
                 name = _config_display_name(config, relative_path)
             except Exception as e:
                 logger.error(f"Failed to read character config {full_path}: {e}")
+                if is_allowed is not None and _may_declare_allowlist(full_path):
+                    # Access cannot be checked without the parsed allowlist.
+                    logger.warning(
+                        f"Hiding unreadable character config {full_path}: it "
+                        "may restrict access with allowed_users"
+                    )
+                    continue
                 name = relative_path
             else:
                 if is_allowed is not None:
@@ -210,6 +217,19 @@ def scan_config_alts_directory(
     config_files[1:] = sorted(config_files[1:], key=lambda item: item["filename"])
     logger.debug(f"Found config files: {config_files}")
     return config_files
+
+
+def _may_declare_allowlist(path: str) -> bool:
+    """Whether an unparseable preset might set ``allowed_users``.
+
+    A file that never mentions the key cannot restrict access, so it stays
+    listed (and fails visibly on switch); anything else is treated as private.
+    """
+    try:
+        with open(path, encoding="utf-8", errors="replace") as file:
+            return "allowed_users" in file.read()
+    except OSError:
+        return True
 
 
 def scan_bg_directory() -> list[str]:

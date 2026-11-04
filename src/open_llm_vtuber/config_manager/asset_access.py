@@ -24,7 +24,11 @@ from typing import Any
 
 from loguru import logger
 
-from .access import is_user_allowed, parse_allowed_users
+from .access import (
+    is_user_allowed,
+    parse_allowed_users,
+    warn_unmatched_allowlist_entries,
+)
 from .utils import read_yaml
 
 LIVE2D_MOUNT = "live2d-models"
@@ -95,15 +99,31 @@ class CharacterAssetAccess:
         mount: str,
         path: str,
         user_id: str | None,
-        display_name: str | None,
+        emails: str | Iterable[str] | None,
     ) -> bool:
+        """``emails`` are the user's verified login emails."""
         key = _asset_key(mount, path)
         if key is None:
             return True
         rule = self._current_rules().get(key)
         if rule is None or rule is _PUBLIC:
             return True
-        return any(is_user_allowed(allowed, user_id, display_name) for allowed in rule)
+        if not isinstance(emails, str) and emails is not None:
+            emails = tuple(emails)
+        return any(is_user_allowed(allowed, user_id, emails) for allowed in rule)
+
+    def warn_unmatched_allowlists(self) -> None:
+        """Warn about preset allowlist entries that cannot match anyone now."""
+        for path in self._preset_files():
+            try:
+                config = read_yaml(path) or {}
+            except Exception:
+                continue
+            character = (
+                config.get("character_config") if isinstance(config, dict) else None
+            )
+            if isinstance(character, dict):
+                warn_unmatched_allowlist_entries(character.get("allowed_users"), path)
 
     # ---- rule loading
 
