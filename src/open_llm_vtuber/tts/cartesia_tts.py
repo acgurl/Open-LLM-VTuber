@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 from loguru import logger
-from open_llm_vtuber.config_manager.tts import CartesiaEmotions, CartesiaLanguages
+from ..config_manager.tts import CartesiaEmotions, CartesiaLanguages
 from .tts_interface import TTSInterface
 
 try:

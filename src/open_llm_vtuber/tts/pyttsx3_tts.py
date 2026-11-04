@@ -6,7 +6,7 @@ from loguru import logger
 from .tts_interface import TTSInterface
 
 
-# using https://github.com/thevickypedia/py3-tts because pyttsx3 is unmaintained and not working
+# Offline system TTS via the `pyttsx3` package (SAPI5 / NSSpeechSynthesizer / eSpeak).
 
 
 class TTSEngine(TTSInterface):
