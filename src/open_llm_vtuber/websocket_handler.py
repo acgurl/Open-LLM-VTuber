@@ -392,6 +392,22 @@ class WebSocketHandler:
             "invitee_uid" if operation == "add-client-to-group" else "target_uid"
         )
 
+        if operation == "remove-client-from-group" and target_uid:
+            group = self.chat_group_manager.get_client_group(target_uid)
+            # Same permission rule as ChatGroupManager.remove_client_from_group.
+            # Like a disconnect, stop the running group conversation first:
+            # the task keeps its own member snapshot and would otherwise keep
+            # the AIs talking after the group changed or dissolved.
+            if group and client_uid in (group.owner_uid, target_uid):
+                await handle_group_interrupt(
+                    group_id=group.group_id,
+                    heard_response="",
+                    current_conversation_tasks=self.current_conversation_tasks,
+                    chat_group_manager=self.chat_group_manager,
+                    client_contexts=self.client_contexts,
+                    broadcast_to_group=self.broadcast_to_group,
+                )
+
         await handle_group_operation(
             operation=operation,
             client_uid=client_uid,

@@ -51,6 +51,8 @@ async def process_group_conversation(
         metadata: Optional metadata for special processing flags
     """
     session_emoji = session_emoji or new_session_emoji()
+    # Work on a snapshot so membership changes cannot mutate it across awaits.
+    group_members = list(group_members)
     # Create TTSTaskManager for each member
     tts_managers = {
         uid: TTSTaskManager(
@@ -266,19 +268,23 @@ async def handle_group_member_turn(
         group_members=group_members,
     )
 
-    if tts_manager.task_list:
-        broadcast_ctx = BroadcastContext(
-            broadcast_func=broadcast_func,
-            group_members=group_members,
-            current_client_uid=current_member_uid,
-        )
+    # Always close the turn, as the single-user path does: a text-only reply
+    # still needs force-new-message and conversation-chain-end.
+    broadcast_ctx = BroadcastContext(
+        broadcast_func=broadcast_func,
+        group_members=group_members,
+        current_client_uid=current_member_uid,
+    )
 
-        await finalize_conversation_turn(
-            tts_manager=tts_manager,
-            channels=channels,
-            client_uid=current_member_uid,
-            broadcast_ctx=broadcast_ctx,
-        )
+    await finalize_conversation_turn(
+        tts_manager=tts_manager,
+        channels=channels,
+        client_uid=current_member_uid,
+        broadcast_ctx=broadcast_ctx,
+    )
+    # The manager is reused for this member's next turn; drop the finished
+    # tasks so the list does not grow for the whole conversation.
+    tts_manager.task_list.clear()
 
     if full_response:
         ai_message = f"{context.character_config.character_name}: {full_response}"

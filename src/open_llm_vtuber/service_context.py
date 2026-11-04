@@ -803,6 +803,8 @@ class ServiceContext:
 
         if not translator_config.translate_audio:
             logger.debug("Translation is disabled.")
+            # Drop an engine left over from a previous character config.
+            self.translate_engine = None
             return
 
         if (

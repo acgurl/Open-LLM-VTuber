@@ -371,7 +371,9 @@ async def handle_sentence_output(
 
         if translate_engine:
             if not is_silent_text(tts_text):
-                tts_text = translate_engine.translate(tts_text)
+                # Translators are synchronous HTTP clients; keep them off
+                # the event loop.
+                tts_text = await asyncio.to_thread(translate_engine.translate, tts_text)
             logger.info(f"🏃 Text after translation: '''{tts_text}'''...")
         else:
             logger.debug("🚫 No translation engine available. Skipping translation.")
