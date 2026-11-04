@@ -285,6 +285,47 @@ class UnreadablePresetListingTests(unittest.TestCase):
         )
 
 
+class UnreadablePresetAssetTests(unittest.TestCase):
+    """D-ACL2 for static assets: an unparseable restricted preset fails closed."""
+
+    def setUp(self) -> None:
+        self.fx = AssetFixture()
+        self.addCleanup(self.fx.cleanup)
+        self.preset = self.fx.characters / "private.yaml"
+
+    def test_assets_of_unparseable_restricted_preset_are_private(self) -> None:
+        self.preset.write_text(
+            "character_config:\n"
+            "  live2d_model_name: 'yifan'\n"
+            "  avatar: yifan.png  # face\n"
+            "  allowed_users: ['u1'\n",
+            encoding="utf-8",
+        )
+        access = self.fx.access()
+
+        self.assertTrue(access.is_restricted(LIVE2D_MOUNT, "yifan/a.moc3"))
+        self.assertTrue(access.is_restricted(AVATAR_MOUNT, "yifan.png"))
+        self.assertFalse(access.is_allowed(LIVE2D_MOUNT, "yifan/a.moc3", "u1", None))
+        self.assertFalse(access.is_restricted(LIVE2D_MOUNT, "hiyori/h.moc3"))
+
+    def test_unparseable_preset_without_allowlist_stays_public(self) -> None:
+        self.preset.write_text(
+            "character_config:\n  live2d_model_name: yifan\n  avatar: [x\n",
+            encoding="utf-8",
+        )
+        self.assertFalse(self.fx.access().is_restricted(LIVE2D_MOUNT, "yifan/a"))
+
+    def test_undeterminable_assets_are_reported(self) -> None:
+        self.preset.write_text("character_config: {allowed_users: [u1\n", "utf-8")
+        messages: list[str] = []
+        sink = logger.add(messages.append, level="ERROR", format="{message}")
+        try:
+            self.fx.access().is_restricted(LIVE2D_MOUNT, "yifan/a")
+        finally:
+            logger.remove(sink)
+        self.assertTrue(any("cannot be determined" in m for m in messages))
+
+
 class FakeCacheTTSEngine:
     def __init__(self, cache_dir: Path) -> None:
         self.cache_dir = cache_dir

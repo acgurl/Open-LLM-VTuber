@@ -191,7 +191,7 @@ def scan_config_alts_directory(
                 name = _config_display_name(config, relative_path)
             except Exception as e:
                 logger.error(f"Failed to read character config {full_path}: {e}")
-                if is_allowed is not None and _may_declare_allowlist(full_path):
+                if is_allowed is not None and may_declare_allowlist(full_path):
                     # Access cannot be checked without the parsed allowlist.
                     logger.warning(
                         f"Hiding unreadable character config {full_path}: it "
@@ -219,7 +219,7 @@ def scan_config_alts_directory(
     return config_files
 
 
-def _may_declare_allowlist(path: str) -> bool:
+def may_declare_allowlist(path: str) -> bool:
     """Whether an unparseable preset might set ``allowed_users``.
 
     A file that never mentions the key cannot restrict access, so it stays
