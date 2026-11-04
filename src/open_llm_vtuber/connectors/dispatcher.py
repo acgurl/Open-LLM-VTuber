@@ -70,6 +70,9 @@ class ConnectorDispatcher:
         self._session_builder = session_builder
         self._clock = clock
         self._sessions: OrderedDict[SessionKey, _ConnectorSession] = OrderedDict()
+        # Sessions taken out of use while a turn held them; closed once the
+        # chat lock is released.
+        self._detached: dict[SessionKey, list[_ConnectorSession]] = {}
         self._chat_locks: dict[SessionKey, asyncio.Lock] = {}
         self._pending: dict[SessionKey, int] = {}
         self._turn_slots = asyncio.Semaphore(config.max_concurrent_turns)
@@ -101,6 +104,8 @@ class ConnectorDispatcher:
         await asyncio.gather(*tasks, return_exceptions=True)
         for key in list(self._sessions):
             await self._close_session(key)
+        for key in list(self._detached):
+            await self._close_detached(key)
 
     async def join(self) -> None:
         """Wait until every queued message has been handled."""
@@ -161,6 +166,7 @@ class ConnectorDispatcher:
                 self._pending.pop(key, None)
                 if not lock.locked():
                     self._chat_locks.pop(key, None)
+            await self._close_detached(key)
 
     async def _handle_message(
         self, connector: Connector, message: InboundMessage, key: SessionKey
@@ -362,16 +368,23 @@ class ConnectorDispatcher:
 
     async def _close_session(self, key: SessionKey) -> None:
         session = self._sessions.pop(key, None)
-        if session is None:
-            return
-        try:
-            await session.context.close()
-        except Exception:
-            logger.exception("Failed to close connector session")
+        if session is not None:
+            await _close_context(session)
+
+    async def _close_detached(self, key: SessionKey) -> None:
+        for session in self._detached.pop(key, []):
+            await _close_context(session)
 
     async def close_sender_sessions(self, connector_id: str, sender_id: str) -> None:
         for key in list(self._sessions):
-            if key[0] == connector_id and key[2] == sender_id:
+            if key[0] != connector_id or key[2] != sender_id:
+                continue
+            if self._busy(key):
+                # Taken out of use now so the next message starts a fresh
+                # session; the running turn finishes on it, and _process
+                # closes it when the chat lock is released.
+                self._detached.setdefault(key, []).append(self._sessions.pop(key))
+            else:
                 await self._close_session(key)
 
     async def _open_history(
@@ -473,11 +486,22 @@ class ConnectorDispatcher:
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
+                # Later parts would arrive without the failed one, so the
+                # reply stops here; say how much of it was lost.
                 logger.warning(
-                    f"Connector {message.connector_id}: reply failed: "
-                    f"{type(exc).__name__}: {exc}"
+                    f"Connector {message.connector_id}: reply part "
+                    f"{index + 1}/{len(parts)} failed "
+                    f"({type(exc).__name__}: {exc}); "
+                    f"{len(parts) - index - 1} later part(s) not sent"
                 )
                 return
+
+
+async def _close_context(session: _ConnectorSession) -> None:
+    try:
+        await session.context.close()
+    except Exception:
+        logger.exception("Failed to close connector session")
 
 
 def _headless_channels(errors: list[str]) -> OutboundChannels:

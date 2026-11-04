@@ -62,7 +62,7 @@ system_config:
         app_id: '${QQ_BOT_APP_ID}'
         app_secret: '${QQ_BOT_APP_SECRET}'
         sandbox: false
-        # REST 请求（取 token、发回复）遇到超时/连接错误/502-504 时自动重试：
+        # 取 token、拉网关地址遇到超时/连接错误/502-504 时自动重试；发回复只在连接没建立时重试（避免重复发送）：
         # 单次超时秒数、首次之外的重试次数、退避基数秒（第 n 次重试前等待 基数×2^(n-1)）
         request_timeout_seconds: 8
         http_retries: 3

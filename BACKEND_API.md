@@ -1414,7 +1414,7 @@ remote 服务器失败（DNS、TLS、超时、401）只影响该服务器：会�
 | --- | --- | --- |
 | GET | `/api/connectors` | `{"eligible":bool,"allowed_email_domains":[...],"connectors":[{id,name,platform,state}],"bindings":[{connector_id,connector_name,external_id,display_name,created_at}]}`；连接器未启用返回 404 |
 | POST | `/api/connectors/bind-code` | 返回 `{"code":"ABCD-EFGH","expires_in":600}`；邮箱不符合返回 403。重新生成会作废旧码；码只能用一次 |
-| DELETE | `/api/connectors/bindings/{connector_id}/{external_id}` | 解除自己的绑定，并关闭对应会话；不属于自己的返回 404；成功返回 204 |
+| DELETE | `/api/connectors/bindings/{connector_id}/{external_id}` | 解除自己的绑定，并关闭对应会话（正在进行的一轮先跑完再关闭，之后的消息不再使用它）；不属于自己的返回 404；成功返回 204 |
 
 `state` 的取值：`connecting` / `running` / `error` / `stopped`。`created_at` 已带时区偏移（同历史时间戳规则），前端直接 `Date.parse`。
 
@@ -1454,6 +1454,7 @@ system_config:
 - 绑定码：8 位、无易混字符；每个平台账号 10 分钟内最多失败 5 次。码只存在内存里，重启后作废（服务端是单 worker）。
 - 连接器在 uvicorn 的 startup 事件里启动（`initialize()` 跑在另一个事件循环里，不能在那里建任务），断线后指数退避重连（1s → 300s），能续上的会话用 op 6 Resume 续上。
 - 回复超时后会重置 agent 本轮的记忆，并回复"回复超时"。
+- QQ REST 重试（`request_timeout_seconds` / `http_retries` / `retry_backoff_seconds`）：取 token 和 `GET /gateway` 在超时、连接错误和 502/503/504 时重试；发送回复（`POST …/messages`，非幂等）只在请求确定没发出去时重试（`ConnectError` / `ConnectTimeout` / `PoolTimeout`），读超时、连接中断和 5xx 都不重试，以免重复发送。多段回复中某段失败时，后面的段不再发送，并在日志里记下丢了几段。
 
 ---
 

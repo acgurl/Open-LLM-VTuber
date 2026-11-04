@@ -271,6 +271,50 @@ class ConnectorDispatcherTests(unittest.IsolatedAsyncioTestCase):
         await self.send(_message("还在吗"))
         self.assertEqual(self.connector.texts()[-1], commands.unbound_text(""))
 
+    async def test_removing_a_binding_mid_turn_closes_the_session_afterwards(self):
+        await self.bind_alice()
+        started, release = asyncio.Event(), asyncio.Event()
+
+        async def long_turn(context, *, input_text, **_kwargs):
+            started.set()
+            await release.wait()
+            if context.close.await_count:
+                raise RuntimeError("session closed mid-turn")
+            return f"收到：{input_text}"
+
+        with patch.object(dispatcher_module, "run_agent_turn", new=long_turn):
+            await self.dispatcher.handle(self.connector, _message("你好"))
+            await started.wait()
+            # What DELETE /api/connectors/bindings/... does.
+            await self.dispatcher.close_sender_sessions("qq", "u:1")
+            self.contexts[0].close.assert_not_awaited()
+            release.set()
+            await self.dispatcher.join()
+
+        self.assertEqual(self.connector.texts()[-1], "收到：你好")
+        self.contexts[0].close.assert_awaited_once()
+        # The next message does not reuse the detached session.
+        await self.send(_message("还在吗"))
+        self.assertEqual(len(self.contexts), 2)
+
+    async def test_failed_reply_part_logs_how_many_parts_were_dropped(self):
+        sent = []
+
+        async def send_text(message, text, index):
+            if index == 1:
+                raise RuntimeError("rejected")
+            sent.append(text)
+
+        self.connector.send_text = send_text
+        with patch.object(dispatcher_module, "logger") as logger:
+            await self.dispatcher._reply(
+                self.connector, _message("x"), "。".join(["长" * 150] * 4)
+            )
+        self.assertEqual(len(sent), 1)
+        warning = logger.warning.call_args.args[0]
+        self.assertIn("reply part 2/3 failed", warning)
+        self.assertIn("1 later part(s) not sent", warning)
+
     async def test_duplicate_deliveries_are_handled_once(self):
         await self.bind_alice()
         await self.send(_message("你好", message_id="same"))
