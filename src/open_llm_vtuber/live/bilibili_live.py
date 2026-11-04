@@ -10,6 +10,8 @@ from collections.abc import Callable
 from loguru import logger
 import aiohttp
 import websockets
+from websockets.asyncio.client import ClientConnection
+from websockets.protocol import State
 import sys
 import os
 
@@ -57,7 +59,7 @@ class BiliBiliLivePlatform(LivePlatformInterface):
         self._sessdata = sessdata
         self._session: aiohttp.ClientSession | None = None
         self._clients: list[blivedm.BLiveClient] = []
-        self._websocket: websockets.WebSocketClientProtocol | None = None
+        self._websocket: ClientConnection | None = None
         self._connected = False
         self._running = False
         self._message_handlers: list[Callable[[dict[str, Any]], None]] = []
@@ -68,13 +70,11 @@ class BiliBiliLivePlatform(LivePlatformInterface):
     def is_connected(self) -> bool:
         """Check if connected to the proxy server."""
         try:
-            if hasattr(self._websocket, "closed"):
-                return (
-                    self._connected and self._websocket and not self._websocket.closed
-                )
-            if hasattr(self._websocket, "open"):
-                return self._connected and self._websocket and self._websocket.open
-            return self._connected and self._websocket is not None
+            return (
+                self._connected
+                and self._websocket is not None
+                and self._websocket.state is State.OPEN
+            )
         except Exception:
             return False
 
