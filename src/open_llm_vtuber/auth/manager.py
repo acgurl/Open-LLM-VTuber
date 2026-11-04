@@ -212,11 +212,16 @@ class AuthManager:
                         raise AuthError(
                             "OIDC userinfo subject does not match the ID token"
                         )
+                    if not claims.get("email") and info.get("email"):
+                        # The verification flag belongs to the email it came with.
+                        claims["email"] = info["email"]
+                        claims.pop("email_verified", None)
+                        if "email_verified" in info:
+                            claims["email_verified"] = info["email_verified"]
                     for key in (
                         "name",
                         "preferred_username",
                         "displayName",
-                        "email",
                     ):
                         if not claims.get(key) and info.get(key):
                             claims[key] = info[key]
@@ -236,19 +241,24 @@ class AuthManager:
         provider = str(discovery["issuer"])
         validate_identity(provider, "provider")
 
+        # An email the provider explicitly marks unverified is ignored: it
+        # would otherwise grant connector eligibility and character access.
+        # Providers that omit the claim keep their email.
+        email_unverified = claims.get("email_verified") in (False, "false")
+        email = None if email_unverified else _first_string(claims.get("email"))
         display_name = _first_string(
             claims.get("name"),
             claims.get("preferred_username"),
             claims.get("displayName"),
-            claims.get("email"),
+            email,
         )
-        email = _first_string(claims.get("email"))
 
         user_id = await self.repository.resolve_user_identity(
             provider=provider,
             subject=subject,
             display_name=display_name,
             email=email,
+            email_verified=False if email_unverified else None,
         )
         return Identity(
             user_id=user_id,
@@ -256,6 +266,18 @@ class AuthManager:
             email=email,
             provider=provider,
         )
+
+    async def verified_emails(self, user_id: str | None) -> tuple[str, ...]:
+        """Login emails stored for ``user_id``; only verified ones are stored."""
+        if self.repository is None or not user_id:
+            return ()
+        try:
+            profile = await self.repository.get_user_profile(user_id=user_id)
+        except ValueError:
+            return ()
+        if not isinstance(profile, dict):
+            return ()
+        return tuple(profile.get("emails") or ())
 
     async def close(self) -> None:
         if self._oidc is not None:

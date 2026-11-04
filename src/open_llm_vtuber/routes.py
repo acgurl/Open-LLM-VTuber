@@ -9,6 +9,8 @@ from starlette.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 from loguru import logger
 from .auth import AuthManager, Identity
+from .auth.middleware import IDENTITY_SCOPE_KEY
+from .config_manager.asset_access import LIVE2D_MOUNT, CharacterAssetAccess
 from .service_context import ServiceContext
 from .websocket_handler import WebSocketHandler
 from .proxy_handler import ProxyHandler
@@ -51,11 +53,14 @@ def _with_terminal_punctuation(sentence: str) -> str:
     return sentence
 
 
-async def _stream_tts_sentences(websocket: WebSocket, tts_engine, sentences) -> None:
+async def _stream_tts_sentences(
+    websocket: WebSocket, tts_engine, sentences, *, cache_scope: str | None = None
+) -> None:
     for sentence in sentences:
         sentence = _with_terminal_punctuation(sentence)
+        # In OIDC mode /cache only serves files under the caller's user id.
         audio_path = await tts_engine.async_generate_audio(
-            text=sentence, file_name_no_ext=new_audio_file_stem()
+            text=sentence, file_name_no_ext=new_audio_file_stem(cache_scope)
         )
         if not audio_path:
             logger.error("TTS engine returned no audio path")
@@ -76,7 +81,9 @@ async def _stream_tts_sentences(websocket: WebSocket, tts_engine, sentences) -> 
     await websocket.send_json({"status": "complete"})
 
 
-async def _process_tts_request(websocket: WebSocket, tts_engine, text: str) -> None:
+async def _process_tts_request(
+    websocket: WebSocket, tts_engine, text: str, *, cache_scope: str | None = None
+) -> None:
     if len(text) > MAX_TTS_TEXT_CHARS:
         await websocket.send_json(
             {
@@ -99,7 +106,9 @@ async def _process_tts_request(websocket: WebSocket, tts_engine, text: str) -> N
         return
 
     try:
-        await _stream_tts_sentences(websocket, tts_engine, sentences)
+        await _stream_tts_sentences(
+            websocket, tts_engine, sentences, cache_scope=cache_scope
+        )
     except Exception:
         logger.exception("Error generating TTS")
         await websocket.send_json(
@@ -107,7 +116,9 @@ async def _process_tts_request(websocket: WebSocket, tts_engine, text: str) -> N
         )
 
 
-async def _serve_tts_connection(websocket: WebSocket, tts_engine) -> None:
+async def _serve_tts_connection(
+    websocket: WebSocket, tts_engine, *, cache_scope: str | None = None
+) -> None:
     try:
         while True:
             data = await websocket.receive_json()
@@ -115,7 +126,9 @@ async def _serve_tts_connection(websocket: WebSocket, tts_engine) -> None:
             if not isinstance(text, str) or not text.strip():
                 continue
 
-            await _process_tts_request(websocket, tts_engine, text)
+            await _process_tts_request(
+                websocket, tts_engine, text, cache_scope=cache_scope
+            )
     except WebSocketDisconnect:
         logger.info("TTS WebSocket client disconnected")
     except Exception:
@@ -320,12 +333,16 @@ def init_proxy_route(server_url: str) -> APIRouter:
 def init_webtool_routes(
     default_context_cache: ServiceContext,
     auth: AuthManager | None = None,
+    *,
+    asset_access: CharacterAssetAccess | None = None,
 ) -> APIRouter:
     """
     Create and return API routes for handling web tool interactions.
 
     Args:
         default_context_cache: Default service context cache for new sessions.
+        auth: Authentication manager; omitted only by isolated tests.
+        asset_access: Hides restricted Live2D folders from /live2d-models/info.
 
     Returns:
         APIRouter: Configured router with WebSocket endpoint.
@@ -345,8 +362,29 @@ def init_webtool_routes(
         """Redirect /web_tool to /web-tool/index.html"""
         return Response(status_code=302, headers={"Location": "/web-tool/index.html"})
 
+    async def _visible_live2d_models(request: Request, models: list[dict]):
+        """Drop folders the static mount would answer 404 to for this caller."""
+        if asset_access is None or auth is None or not auth.enabled:
+            return models
+        identity = request.scope.get(IDENTITY_SCOPE_KEY)
+        user_id = getattr(identity, "user_id", None)
+        emails = None
+        visible = []
+        for model in models:
+            if asset_access.is_restricted(LIVE2D_MOUNT, model["name"]):
+                if user_id is None:
+                    continue
+                if emails is None:
+                    emails = await auth.verified_emails(user_id)
+                if not asset_access.is_allowed(
+                    LIVE2D_MOUNT, model["name"], user_id, emails
+                ):
+                    continue
+            visible.append(model)
+        return visible
+
     @router.get("/live2d-models/info")
-    async def get_live2d_folder_info():
+    async def get_live2d_folder_info(request: Request):
         """Get information about available Live2D models"""
         live2d_dir = "live2d-models"
         if not os.path.exists(live2d_dir):
@@ -354,7 +392,9 @@ def init_webtool_routes(
                 {"error": "Live2D models directory not found"}, status_code=404
             )
 
-        valid_characters = _scan_live2d_models(live2d_dir)
+        valid_characters = await _visible_live2d_models(
+            request, _scan_live2d_models(live2d_dir)
+        )
         return JSONResponse(
             {
                 "type": "live2d-models/info",
@@ -420,7 +460,13 @@ def init_webtool_routes(
         try:
             await websocket.accept()
             logger.info("TTS WebSocket connection established")
-            await _serve_tts_connection(websocket, default_context_cache.tts_engine)
+            await _serve_tts_connection(
+                websocket,
+                default_context_cache.tts_engine,
+                cache_scope=(
+                    identity.user_id if auth is not None and auth.enabled else None
+                ),
+            )
         finally:
             tts_slots.release()
 

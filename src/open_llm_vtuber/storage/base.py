@@ -123,11 +123,14 @@ class HistoryRepository(ABC):
         subject: str,
         display_name: str | None = None,
         email: str | None = None,
+        email_verified: bool | None = None,
     ) -> str:
         """Return the internal user id for an external identity.
 
         The identity is created on first login. ``provider`` and ``subject``
         come from the OIDC issuer and ID token, never from client input.
+        A missing ``email`` keeps the stored one, unless ``email_verified`` is
+        False: the provider then disowns it and the stored email is cleared.
         """
 
     @abstractmethod

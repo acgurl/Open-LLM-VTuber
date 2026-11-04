@@ -92,8 +92,12 @@ async def build_session_context(
     servers are reached through the page, so they cannot serve such a session.
     """
     repository = default_context_cache.history_repository
+    user_emails: tuple[str, ...] = ()
     if repository is not None:
         await repository.ensure_user(identity.user_id, identity.display_name)
+        profile = await repository.get_user_profile(user_id=identity.user_id)
+        if isinstance(profile, dict):
+            user_emails = tuple(profile.get("emails") or ())
 
     remote_mcp_servers, local_mcp_servers = await load_user_mcp_servers(
         repository, identity.user_id
@@ -120,6 +124,7 @@ async def build_session_context(
         user_display_name=identity.display_name,
         user_mcp_servers=remote_mcp_servers,
         local_mcp_servers=local_mcp_servers,
+        user_emails=user_emails,
     )
     # Each session needs its own agent state; the LLM client stays shared.
     await session_service_context.init_session_agent(default_context_cache.agent_engine)

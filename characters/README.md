@@ -121,16 +121,19 @@ character_config:
     ...
   allowed_users:
     - '3f2a9c04b1de4c7e8a5f6d7c8b9a0e1f' # internal user id
-    - '刘豫森'                              # or the OIDC display name
+    - 'liu@cuc.edu.cn'                      # or a verified login email
 ```
 
 Rules:
 
   - Omitted or empty (`allowed_users: []`) means the character is public.
-  - Tokens are compared case-insensitively against both the internal user id
+  - Tokens are compared case-insensitively against the internal user id
     (shown as **User ID** in Settings → Account, also returned by
-    `/api/session`) and the OIDC display name. Prefer the user id: display
-    names can change.
+    `/api/session`) and the user's verified login emails (an email the
+    identity provider marks `email_verified: false` is ignored). Display
+    names are never matched: users can change them. At startup the server
+    logs a warning for every entry that looks like neither an id nor an
+    email.
   - Users that are not listed do not see the preset in the character list and
     cannot switch to it; the server rejects the switch even if the filename is
     sent directly.

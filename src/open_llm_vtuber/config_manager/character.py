@@ -78,14 +78,14 @@ class CharacterConfig(I18nMixin):
         "allowed_users": Description(
             en=(
                 "Users allowed to select this character (internal user id or "
-                "display name). Empty means everyone. Only applies to presets "
-                "in characters/. The preset's Live2D model folder and avatar "
+                "verified login email; display names are not matched). Empty "
+                "means everyone. Only applies to presets in characters/. The preset's Live2D model folder and avatar "
                 "are then served only to these users unless a public "
                 "character uses them too."
             ),
             zh=(
-                "允许使用该角色的用户（内部用户 ID 或显示名）。留空表示所有用户可用，"
-                "仅对 characters/ 下的角色预设生效；其 Live2D 模型目录和头像也只对这些"
+                "允许使用该角色的用户（内部用户 ID 或已验证的登录邮箱，不匹配显示名）。"
+                "留空表示所有用户可用，仅对 characters/ 下的角色预设生效；其 Live2D 模型目录和头像也只对这些"
                 "用户可见（若有公开角色共用则保持公开）。"
             ),
         ),

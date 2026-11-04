@@ -131,7 +131,10 @@ class CharacterAssetStaticFiles(CORSStaticFiles):
         if restricted and self.auth is not None and self.auth.enabled:
             identity = scope.get(IDENTITY_SCOPE_KEY)
             if identity is None or not access.is_allowed(
-                self.mount, path, identity.user_id, identity.display_name
+                self.mount,
+                path,
+                identity.user_id,
+                await self.auth.verified_emails(identity.user_id),
             ):
                 return Response(
                     "Not Found",
@@ -168,7 +171,8 @@ class UserCacheStaticFiles(CORSStaticFiles):
         identity = scope.get(IDENTITY_SCOPE_KEY)
         if identity is not None:
             user_id = getattr(identity, "user_id", None)
-            if not user_id or not path.startswith(f"{user_id}/"):
+            # StaticFiles hands over an os.path-normalized path (``\`` on Windows).
+            if not user_id or not path.replace("\\", "/").startswith(f"{user_id}/"):
                 return Response("Not Found", status_code=404)
         return await super().get_response(path, scope)
 
@@ -233,6 +237,11 @@ class WebSocketServer:
                 status_code=200 if ready else 503,
             )
 
+        # Shared by the static asset mounts and /live2d-models/info.
+        self.asset_access = CharacterAssetAccess(
+            getattr(config.system_config, "config_alts_dir", "characters")
+        )
+
         self._include_routes()
         self._mount_static_files()
 
@@ -248,6 +257,7 @@ class WebSocketServer:
             init_webtool_routes(
                 default_context_cache=self.default_context_cache,
                 auth=self.auth,
+                asset_access=self.asset_access,
             ),
         )
         self.app.include_router(
@@ -283,9 +293,7 @@ class WebSocketServer:
             UserCacheStaticFiles(directory="cache"),
             name="cache",
         )
-        asset_access = CharacterAssetAccess(
-            getattr(self.config.system_config, "config_alts_dir", "characters")
-        )
+        asset_access = self.asset_access
         self.app.mount(
             "/live2d-models",
             CharacterAssetStaticFiles(
@@ -377,6 +385,7 @@ class WebSocketServer:
                     "characters by adding allowed_users to the presets in "
                     "characters/*.yaml."
                 )
+            self.asset_access.warn_unmatched_allowlists()
         except Exception:
             await repository.close()
             self.history_repository = None
