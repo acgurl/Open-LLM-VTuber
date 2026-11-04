@@ -77,6 +77,54 @@ def _strip_mentions(content: str) -> str:
     return _MENTION.sub("", content or "").strip()
 
 
+def _guild_target(data: dict, author: dict):
+    """AT_MESSAGE_CREATE / MESSAGE_CREATE: reply in the channel."""
+    channel_id, user_id = data.get("channel_id"), author.get("id")
+    if not channel_id or not user_id:
+        return None
+    member = data.get("member") or {}
+    return (
+        "guild",
+        str(channel_id),
+        f"u:{user_id}",
+        member.get("nick") or author.get("username"),
+    )
+
+
+def _direct_target(data: dict, author: dict):
+    """DIRECT_MESSAGE_CREATE: guild DM session, keyed by its guild id."""
+    guild_id, user_id = data.get("guild_id"), author.get("id")
+    if not guild_id or not user_id:
+        return None
+    return "direct", str(guild_id), f"u:{user_id}", author.get("username")
+
+
+def _group_target(data: dict, author: dict):
+    """GROUP_AT_MESSAGE_CREATE: members are only known by openid."""
+    group_id, openid = data.get("group_openid"), author.get("member_openid")
+    if not group_id or not openid:
+        return None
+    return "group", str(group_id), f"o:{openid}", None
+
+
+def _c2c_target(data: dict, author: dict):
+    """C2C_MESSAGE_CREATE: the user's openid is both chat and sender."""
+    openid = author.get("user_openid")
+    if not openid:
+        return None
+    return "c2c", str(openid), f"o:{openid}", None
+
+
+# event type -> (data, author) -> (chat_type, chat_id, sender_id, sender_name)
+_EVENT_TARGETS = {
+    "AT_MESSAGE_CREATE": _guild_target,
+    "MESSAGE_CREATE": _guild_target,
+    "DIRECT_MESSAGE_CREATE": _direct_target,
+    "GROUP_AT_MESSAGE_CREATE": _group_target,
+    "C2C_MESSAGE_CREATE": _c2c_target,
+}
+
+
 def parse_event(
     connector_id: str, event_type: str, data: dict[str, Any]
 ) -> InboundMessage | None:
@@ -91,62 +139,21 @@ def parse_event(
         return None
     content = _strip_mentions(str(data.get("content") or ""))
 
-    if event_type in {"AT_MESSAGE_CREATE", "MESSAGE_CREATE"}:
-        channel_id, user_id = data.get("channel_id"), author.get("id")
-        if not channel_id or not user_id:
-            return None
-        member = data.get("member") or {}
-        return InboundMessage(
-            connector_id=connector_id,
-            message_id=message_id,
-            chat_type="guild",
-            chat_id=str(channel_id),
-            sender_id=f"u:{user_id}",
-            sender_name=member.get("nick") or author.get("username"),
-            text=content,
-            reply_context={"msg_id": message_id},
-        )
-    if event_type == "DIRECT_MESSAGE_CREATE":
-        guild_id, user_id = data.get("guild_id"), author.get("id")
-        if not guild_id or not user_id:
-            return None
-        return InboundMessage(
-            connector_id=connector_id,
-            message_id=message_id,
-            chat_type="direct",
-            chat_id=str(guild_id),
-            sender_id=f"u:{user_id}",
-            sender_name=author.get("username"),
-            text=content,
-            reply_context={"msg_id": message_id},
-        )
-    if event_type == "GROUP_AT_MESSAGE_CREATE":
-        group_id, openid = data.get("group_openid"), author.get("member_openid")
-        if not group_id or not openid:
-            return None
-        return InboundMessage(
-            connector_id=connector_id,
-            message_id=message_id,
-            chat_type="group",
-            chat_id=str(group_id),
-            sender_id=f"o:{openid}",
-            text=content,
-            reply_context={"msg_id": message_id},
-        )
-    if event_type == "C2C_MESSAGE_CREATE":
-        openid = author.get("user_openid")
-        if not openid:
-            return None
-        return InboundMessage(
-            connector_id=connector_id,
-            message_id=message_id,
-            chat_type="c2c",
-            chat_id=str(openid),
-            sender_id=f"o:{openid}",
-            text=content,
-            reply_context={"msg_id": message_id},
-        )
-    return None
+    resolve_target = _EVENT_TARGETS.get(event_type)
+    target = resolve_target(data, author) if resolve_target is not None else None
+    if target is None:
+        return None
+    chat_type, chat_id, sender_id, sender_name = target
+    return InboundMessage(
+        connector_id=connector_id,
+        message_id=message_id,
+        chat_type=chat_type,
+        chat_id=chat_id,
+        sender_id=sender_id,
+        sender_name=sender_name,
+        text=content,
+        reply_context={"msg_id": message_id},
+    )
 
 
 class QQConnector(Connector):

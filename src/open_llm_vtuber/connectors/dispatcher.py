@@ -174,8 +174,7 @@ class ConnectorDispatcher:
         text = message.text.strip()
         if not text:
             return
-        repository = self.repository
-        if repository is None:
+        if self.repository is None:
             await self._reply(connector, message, commands.ERROR_TEXT)
             return
 
@@ -184,6 +183,28 @@ class ConnectorDispatcher:
             await self._bind(connector, message, command.argument)
             return
 
+        sender = await self._authorize_sender(connector, message, command)
+        if sender is None:
+            return
+        user_id, profile = sender
+
+        if command is not None:
+            await self._run_command(connector, message, key, command, user_id, profile)
+            return
+        await self._chat_turn(connector, message, key, text, user_id, profile)
+
+    async def _authorize_sender(
+        self,
+        connector: Connector,
+        message: InboundMessage,
+        command: commands.Command | None,
+    ) -> tuple[str, dict | None] | None:
+        """Return (user_id, profile) for a bound, eligible sender.
+
+        Otherwise answer the sender (help, bind hint or ineligible) and return
+        None.
+        """
+        repository = self.repository
         user_id = await repository.resolve_connector_identity(
             connector_id=message.connector_id,
             external_id=message.sender_id,
@@ -192,7 +213,7 @@ class ConnectorDispatcher:
             await self._reply(
                 connector, message, commands.help_text(bound=user_id is not None)
             )
-            return
+            return None
         if user_id is None:
             logger.info(f"{self._bind_tag(message)}: not bound, sent bind hint")
             await self._reply(
@@ -200,19 +221,26 @@ class ConnectorDispatcher:
                 message,
                 commands.unbound_text(self.config.binding.web_url),
             )
-            return
+            return None
 
         # Checked on every message, not only at bind time, so narrowing the
         # allowed domains takes effect for existing bindings.
         profile = await repository.get_user_profile(user_id=user_id)
         if not user_eligible(profile, self.config.binding.allowed_email_domains):
             await self._reply(connector, message, commands.INELIGIBLE_TEXT)
-            return
+            return None
+        return user_id, profile
 
-        if command is not None:
-            await self._run_command(connector, message, key, command, user_id, profile)
-            return
-
+    async def _chat_turn(
+        self,
+        connector: Connector,
+        message: InboundMessage,
+        key: SessionKey,
+        text: str,
+        user_id: str,
+        profile: dict | None,
+    ) -> None:
+        """Run one agent turn for a plain chat message and send the reply."""
         if len(text) > self.config.max_input_chars:
             await self._reply(connector, message, commands.TOO_LONG_TEXT)
             return
