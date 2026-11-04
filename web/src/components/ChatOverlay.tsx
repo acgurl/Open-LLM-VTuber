@@ -6,6 +6,7 @@ import { live2d } from '../live2d/controller';
 import { sendText } from '../services/actions';
 import { MessageBubble } from './MessageBubble';
 import { ToolCallCard } from './ToolCallCard';
+import { ArrowDownIcon } from './icons';
 
 const NEAR_BOTTOM_PX = 72;
 
@@ -199,14 +200,5 @@ export function ChatOverlay() {
         </button>
       )}
     </div>
-  );
-}
-
-function ArrowDownIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 5v14" />
-      <path d="m6 13 6 6 6-6" />
-    </svg>
   );
 }

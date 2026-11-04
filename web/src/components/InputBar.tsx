@@ -11,6 +11,7 @@ import { fileToBase64 } from '../utils/base64';
 import { captureCamera, captureScreen } from '../utils/capture';
 import { LIMITS, type ImagePayload, type ImageSource } from '../protocol/types';
 import { usePresence } from '../hooks/usePresence';
+import { ImageIcon, MicIcon, StopIcon, SendIcon } from './icons';
 
 interface PendingImage {
   id: number;
@@ -282,43 +283,5 @@ export function InputBar() {
         )}
       </div>
     </div>
-  );
-}
-
-function ImageIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <circle cx="8.5" cy="8.5" r="1.5" />
-      <path d="M21 15l-5-5L5 21" />
-    </svg>
-  );
-}
-
-function MicIcon({ on }: { on: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="9" y="2" width="6" height="12" rx="3" />
-      <path d="M5 10a7 7 0 0 0 14 0" />
-      <path d="M12 19v3" />
-      {!on && <line x1="4" y1="4" x2="20" y2="20" />}
-    </svg>
-  );
-}
-
-function StopIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-      <rect x="6" y="6" width="12" height="12" rx="2" />
-    </svg>
-  );
-}
-
-function SendIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 2L11 13" />
-      <path d="M22 2l-7 20-4-9-9-4 20-7z" />
-    </svg>
   );
 }

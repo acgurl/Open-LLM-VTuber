@@ -749,23 +749,6 @@ class Live2DController {
       /* 模型结构异常时忽略 */
     }
   };
-
-  destroy() {
-    window.removeEventListener('resize', this.resizeHandler);
-    window.removeEventListener('pointermove', this.onPointerMove);
-    window.removeEventListener('pointerup', this.onPointerUp);
-    window.removeEventListener('pointercancel', this.onPointerCancel);
-    this.canvas?.removeEventListener('wheel', this.onWheel);
-    this.canvas?.removeEventListener('pointerdown', this.onPointerDown);
-    this.canvas = null;
-    this.dragArmed = false;
-    this.dragging = false;
-    this.pointers.clear();
-    this.pinch = null;
-    this.app?.destroy(true);
-    this.app = null;
-    this.model = null;
-  }
 }
 
 export const live2d = new Live2DController();

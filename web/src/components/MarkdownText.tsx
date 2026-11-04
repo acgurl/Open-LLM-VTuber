@@ -1,7 +1,8 @@
-import { isValidElement, memo, useRef, useState, type ReactNode } from 'react';
+import { isValidElement, memo, useRef, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useTranslation } from 'react-i18next';
+import { useCopied } from '../hooks/useCopied';
 
 // 模型输出的链接一律新标签页打开，避免整页被打断。
 const markdownComponents: Components = {
@@ -18,7 +19,7 @@ const markdownComponents: Components = {
 function CodeBlock({ children }: { children?: ReactNode }) {
   const { t } = useTranslation();
   const preRef = useRef<HTMLPreElement>(null);
-  const [copied, setCopied] = useState(false);
+  const { copied, copy: copyText } = useCopied();
   const className = isValidElement<{ className?: string }>(children)
     ? (children.props.className ?? '')
     : '';
@@ -26,14 +27,7 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 
   const copy = () => {
     const text = preRef.current?.textContent ?? '';
-    if (!text || !navigator.clipboard) return;
-    void navigator.clipboard.writeText(text.replace(/\n$/, '')).then(
-      () => {
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1400);
-      },
-      () => setCopied(false),
-    );
+    if (text) copyText(text.replace(/\n$/, ''));
   };
 
   return (

@@ -1,9 +1,11 @@
-import { lazy, memo, Suspense, useMemo, useState } from 'react';
+import { lazy, memo, Suspense, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConnection } from '../stores/connection';
 import { buildTagSet, splitByTags, splitThink, stripTags } from '../utils/text';
 import type { ChatTextEntry } from '../stores/chat';
 import { ThinkBlock } from './ThinkBlock';
+import { useCopied } from '../hooks/useCopied';
+import { CopyIcon, CheckIcon } from './icons';
 
 const MarkdownText = lazy(() => import('./MarkdownText'));
 
@@ -12,7 +14,7 @@ const MarkdownText = lazy(() => import('./MarkdownText'));
 export const MessageBubble = memo(function MessageBubble({ entry }: { entry: ChatTextEntry }) {
   const { t, i18n } = useTranslation();
   const modelInfo = useConnection((s) => s.modelInfo);
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopied();
   const tagSet = useMemo(() => buildTagSet(modelInfo), [modelInfo]);
   const isAi = entry.role === 'ai';
 
@@ -22,14 +24,7 @@ export const MessageBubble = memo(function MessageBubble({ entry }: { entry: Cha
       .map((b) => b.text)
       .join('');
     const clean = stripTags(visible, tagSet);
-    if (!clean || !navigator.clipboard) return;
-    void navigator.clipboard.writeText(clean).then(
-      () => {
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1400);
-      },
-      () => setCopied(false),
-    );
+    if (clean) copy(clean);
   };
 
   return (
@@ -128,22 +123,5 @@ function LazyMarkdown({ text }: { text: string }) {
     <Suspense fallback={<span className="md-pending">{text}</span>}>
       <MarkdownText text={text} />
     </Suspense>
-  );
-}
-
-function CopyIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="9" y="9" width="11" height="11" rx="2" />
-      <path d="M5 15V5a2 2 0 0 1 2-2h10" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m5 12 4 4L19 6" />
-    </svg>
   );
 }

@@ -22,16 +22,26 @@ async function grabFrame(stream: MediaStream, warmupMs: number): Promise<Blob | 
   video.muted = true;
   await video.play();
   await sleep(warmupMs);
+  return drawToJpeg(video, Infinity, 0.85);
+}
+
+/** Draw the current video frame to a JPEG, downscaled to at most `maxWidth` px wide. */
+export function drawToJpeg(
+  video: HTMLVideoElement,
+  maxWidth: number,
+  quality: number,
+): Promise<Blob | null> {
   const w = video.videoWidth;
   const h = video.videoHeight;
-  if (!w || !h) return null;
+  if (!w || !h) return Promise.resolve(null);
+  const scale = Math.min(1, maxWidth / w);
   const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
+  canvas.width = Math.round(w * scale);
+  canvas.height = Math.round(h * scale);
   const ctx = canvas.getContext('2d');
-  if (!ctx) return null;
-  ctx.drawImage(video, 0, 0);
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.85));
+  if (!ctx) return Promise.resolve(null);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
 }
 
 function sleep(ms: number): Promise<void> {

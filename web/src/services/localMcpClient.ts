@@ -67,12 +67,30 @@ export function takeSseFrames(buffer: string): { frames: string[]; rest: string 
   return { frames, rest };
 }
 
+export interface SseEvent {
+  event: string;
+  data: string;
+}
+
+/** Parse one SSE frame: skips `:` comment lines, honours `event:`, joins `data:` lines. */
+export function parseSseEvent(chunk: string): SseEvent | null {
+  let event = 'message';
+  const dataLines: string[] = [];
+  for (const line of chunk.split(/\r?\n/)) {
+    if (line.startsWith(':')) continue;
+    if (line.startsWith('event:')) {
+      event = line.slice(6).trim();
+    } else if (line.startsWith('data:')) {
+      dataLines.push(line.slice(5).trimStart());
+    }
+  }
+  if (!dataLines.length) return null;
+  return { event, data: dataLines.join('\n') };
+}
+
+// Streamable HTTP responses carry JSON-RPC in the data; the event name is ignored.
 function parseSseMessage(chunk: string): JsonRpcMessage | null {
-  const data = chunk
-    .split(/\r?\n/)
-    .filter((line) => line.startsWith('data:'))
-    .map((line) => line.slice(5).trimStart())
-    .join('\n');
+  const data = parseSseEvent(chunk)?.data;
   if (!data) return null;
   try {
     const parsed = JSON.parse(data);
