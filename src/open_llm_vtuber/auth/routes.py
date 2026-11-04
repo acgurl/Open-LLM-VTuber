@@ -8,23 +8,25 @@ from .manager import UID_COOKIE_NAME, AuthError, AuthManager, safe_next_path
 from .oidc import OIDCError
 
 
-def init_auth_routes(auth: AuthManager) -> APIRouter:
-    router = APIRouter()
+class _AuthRoutes:
+    """Handlers for the OAuth endpoints; ``init_auth_routes`` mounts them."""
 
-    @router.get("/auth/login")
-    async def login(request: Request):
+    def __init__(self, auth: AuthManager) -> None:
+        self.auth = auth
+
+    async def login(self, request: Request):
         next_path = safe_next_path(request.query_params.get("next"))
-        if not auth.enabled:
+        if not self.auth.enabled:
             return RedirectResponse(next_path, status_code=302)
 
-        if auth.resolve_identity(request.cookies) is not None:
+        if self.auth.resolve_identity(request.cookies) is not None:
             return RedirectResponse(next_path, status_code=302)
 
-        state = auth.new_state()
-        nonce = auth.new_nonce()
-        redirect_uri = auth.redirect_uri_for(request.headers.get("host"))
+        state = self.auth.new_state()
+        nonce = self.auth.new_nonce()
+        redirect_uri = self.auth.redirect_uri_for(request.headers.get("host"))
         try:
-            authorization_url = await auth.oidc.authorization_url(
+            authorization_url = await self.auth.oidc.authorization_url(
                 state=state, nonce=nonce, redirect_uri=redirect_uri
             )
         except OIDCError as exc:
@@ -36,8 +38,8 @@ def init_auth_routes(auth: AuthManager) -> APIRouter:
 
         response = RedirectResponse(authorization_url, status_code=302)
         response.set_cookie(
-            **auth.state_cookie_kwargs(
-                auth.issue_state(
+            **self.auth.state_cookie_kwargs(
+                self.auth.issue_state(
                     state=state,
                     nonce=nonce,
                     next_path=next_path,
@@ -47,9 +49,8 @@ def init_auth_routes(auth: AuthManager) -> APIRouter:
         )
         return response
 
-    @router.get("/auth/callback")
-    async def callback(request: Request):
-        if not auth.enabled:
+    async def callback(self, request: Request):
+        if not self.auth.enabled:
             return RedirectResponse("/", status_code=302)
 
         provider_error = request.query_params.get("error")
@@ -64,8 +65,8 @@ def init_auth_routes(auth: AuthManager) -> APIRouter:
                 {"error": "Missing OAuth callback parameters"}, status_code=400
             )
 
-        state_payload = auth.verify_state(
-            request.cookies.get(auth.config.state_cookie_name), state
+        state_payload = self.auth.verify_state(
+            request.cookies.get(self.auth.config.state_cookie_name), state
         )
         if state_payload is None:
             logger.warning("OIDC state validation failed")
@@ -74,7 +75,7 @@ def init_auth_routes(auth: AuthManager) -> APIRouter:
             )
 
         try:
-            identity = await auth.authenticate_code(
+            identity = await self.auth.authenticate_code(
                 code,
                 nonce=state_payload["nonce"],
                 redirect_uri=state_payload.get("redirect_uri"),
@@ -86,26 +87,27 @@ def init_auth_routes(auth: AuthManager) -> APIRouter:
         response = RedirectResponse(
             safe_next_path(state_payload.get("next")), status_code=302
         )
-        response.delete_cookie(**auth.state_cookie_delete_kwargs())
-        response.set_cookie(**auth.session_cookie_kwargs(auth.issue_session(identity)))
-        response.set_cookie(**auth.uid_cookie_kwargs(identity.user_id))
+        response.delete_cookie(**self.auth.state_cookie_delete_kwargs())
+        response.set_cookie(
+            **self.auth.session_cookie_kwargs(self.auth.issue_session(identity))
+        )
+        response.set_cookie(**self.auth.uid_cookie_kwargs(identity.user_id))
         logger.info(
             f"OIDC login succeeded for user {identity.user_id} "
             f"({identity.display_name or 'unnamed'})"
         )
         return response
 
-    @router.get("/auth/logout")
-    async def logout(request: Request):
+    async def logout(self, request: Request):
         response = RedirectResponse("/", status_code=302)
-        response.delete_cookie(**auth.session_cookie_delete_kwargs())
-        response.delete_cookie(**auth.uid_cookie_delete_kwargs())
-        if not auth.enabled or not auth.config.oidc.post_logout_redirect_uri:
+        response.delete_cookie(**self.auth.session_cookie_delete_kwargs())
+        response.delete_cookie(**self.auth.uid_cookie_delete_kwargs())
+        if not self.auth.enabled or not self.auth.config.oidc.post_logout_redirect_uri:
             return response
 
         try:
-            end_session_url = await auth.oidc.end_session_url(
-                post_logout_redirect_uri=auth.config.oidc.post_logout_redirect_uri
+            end_session_url = await self.auth.oidc.end_session_url(
+                post_logout_redirect_uri=self.auth.config.oidc.post_logout_redirect_uri
             )
         except OIDCError as exc:
             logger.warning(f"OIDC end-session lookup failed: {exc}")
@@ -114,30 +116,40 @@ def init_auth_routes(auth: AuthManager) -> APIRouter:
         if not end_session_url:
             return response
         provider_response = RedirectResponse(end_session_url, status_code=302)
-        provider_response.delete_cookie(**auth.session_cookie_delete_kwargs())
-        provider_response.delete_cookie(**auth.uid_cookie_delete_kwargs())
+        provider_response.delete_cookie(**self.auth.session_cookie_delete_kwargs())
+        provider_response.delete_cookie(**self.auth.uid_cookie_delete_kwargs())
         return provider_response
 
-    @router.get("/api/session")
-    async def session(request: Request):
-        identity = auth.resolve_identity(request.cookies)
+    async def session(self, request: Request):
+        identity = self.auth.resolve_identity(request.cookies)
         if identity is None:
             return JSONResponse(
-                {"authenticated": False, "mode": auth.config.mode},
+                {"authenticated": False, "mode": self.auth.config.mode},
                 status_code=401,
             )
         response = JSONResponse(
             {
                 "authenticated": True,
-                "mode": auth.config.mode,
+                "mode": self.auth.config.mode,
                 "user_id": identity.user_id,
                 "display_name": identity.display_name,
             }
         )
         # Sessions issued before the uid cookie existed keep it in sync so the
         # frontend can scope localStorage on the next load.
-        if auth.enabled and request.cookies.get(UID_COOKIE_NAME) != identity.user_id:
-            response.set_cookie(**auth.uid_cookie_kwargs(identity.user_id))
+        if (
+            self.auth.enabled
+            and request.cookies.get(UID_COOKIE_NAME) != identity.user_id
+        ):
+            response.set_cookie(**self.auth.uid_cookie_kwargs(identity.user_id))
         return response
 
+
+def init_auth_routes(auth: AuthManager) -> APIRouter:
+    router = APIRouter()
+    handlers = _AuthRoutes(auth)
+    router.add_api_route("/auth/login", handlers.login, methods=["GET"])
+    router.add_api_route("/auth/callback", handlers.callback, methods=["GET"])
+    router.add_api_route("/auth/logout", handlers.logout, methods=["GET"])
+    router.add_api_route("/api/session", handlers.session, methods=["GET"])
     return router

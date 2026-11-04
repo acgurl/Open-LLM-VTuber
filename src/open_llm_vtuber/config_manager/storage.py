@@ -1,11 +1,10 @@
 """Storage configuration for chat history."""
 
-import re
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-_USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+from ..storage.base import USER_ID_PATTERN
 
 
 class StorageConfig(BaseModel):
@@ -35,7 +34,7 @@ class StorageConfig(BaseModel):
     @field_validator("default_user_id")
     @classmethod
     def check_default_user_id(cls, value: str) -> str:
-        if not _USER_ID_PATTERN.fullmatch(value):
+        if not USER_ID_PATTERN.fullmatch(value):
             raise ValueError(
                 "default_user_id must be 1-64 characters of letters, digits, "
                 "dot, dash or underscore"

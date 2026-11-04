@@ -12,7 +12,8 @@ DEFAULT_USER_ID = "local"
 MAX_KEY_LENGTH = 128
 MAX_IDENTITY_LENGTH = 512
 
-_USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+# Also validates ``storage.default_user_id`` in config_manager/storage.py.
+USER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
 
 
 class HistoryMessage(TypedDict, total=False):
@@ -62,7 +63,7 @@ class HistoryNotFoundError(LookupError):
 
 
 def validate_user_id(user_id: str) -> str:
-    if not isinstance(user_id, str) or not _USER_ID_PATTERN.fullmatch(user_id):
+    if not isinstance(user_id, str) or not USER_ID_PATTERN.fullmatch(user_id):
         raise ValueError(
             "user_id must be 1-64 characters of letters, digits, dot, dash or underscore"
         )

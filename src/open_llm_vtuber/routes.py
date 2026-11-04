@@ -8,7 +8,7 @@ from fastapi import APIRouter, WebSocket, UploadFile, File, Request, Response
 from starlette.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 from loguru import logger
-from .auth import AuthManager, Identity
+from .auth import AuthManager, Identity, default_user_id
 from .auth.middleware import IDENTITY_SCOPE_KEY
 from .config_manager.asset_access import LIVE2D_MOUNT, CharacterAssetAccess
 from .service_context import ServiceContext
@@ -136,11 +136,6 @@ async def _serve_tts_connection(
         await websocket.close()
 
 
-def _default_user_id(default_context_cache: ServiceContext) -> str:
-    """User id for unauthenticated (single-user) deployments."""
-    return getattr(default_context_cache, "user_id", None) or "local"
-
-
 def _websocket_identity(
     websocket: WebSocket,
     auth: AuthManager | None,
@@ -253,7 +248,7 @@ def init_client_ws_route(
     async def websocket_endpoint(websocket: WebSocket):
         """WebSocket endpoint for client connections"""
         identity = await _require_websocket_identity(
-            websocket, auth, _default_user_id(default_context_cache)
+            websocket, auth, default_user_id(default_context_cache)
         )
         if identity is None:
             return
@@ -288,7 +283,7 @@ def init_client_ws_route(
     async def audio_endpoint(websocket: WebSocket):
         """Secondary WebSocket that carries only audio payloads."""
         identity = _websocket_identity(
-            websocket, auth, _default_user_id(default_context_cache)
+            websocket, auth, default_user_id(default_context_cache)
         )
         client_uid = websocket.query_params.get("client_uid")
         await websocket.accept()
@@ -330,6 +325,144 @@ def init_proxy_route(server_url: str) -> APIRouter:
     return router
 
 
+async def web_tool_redirect():
+    """Redirect /web-tool to /web-tool/index.html"""
+    return Response(status_code=302, headers={"Location": "/web-tool/index.html"})
+
+
+async def web_tool_redirect_alt():
+    """Redirect /web_tool to /web-tool/index.html"""
+    return Response(status_code=302, headers={"Location": "/web-tool/index.html"})
+
+
+async def _visible_live2d_models(
+    request: Request,
+    models: list[dict],
+    auth: AuthManager | None,
+    asset_access: CharacterAssetAccess | None,
+) -> list[dict]:
+    """Drop folders the static mount would answer 404 to for this caller."""
+    if asset_access is None or auth is None or not auth.enabled:
+        return models
+    identity = request.scope.get(IDENTITY_SCOPE_KEY)
+    user_id = getattr(identity, "user_id", None)
+    emails = None
+    visible = []
+    for model in models:
+        if asset_access.is_restricted(LIVE2D_MOUNT, model["name"]):
+            if user_id is None:
+                continue
+            if emails is None:
+                emails = await auth.verified_emails(user_id)
+            if not asset_access.is_allowed(
+                LIVE2D_MOUNT, model["name"], user_id, emails
+            ):
+                continue
+        visible.append(model)
+    return visible
+
+
+class _WebToolRoutes:
+    """Handlers for the web-tool HTTP/WS routes; mounted by the init factory."""
+
+    def __init__(
+        self,
+        default_context_cache: ServiceContext,
+        auth: AuthManager | None,
+        asset_access: CharacterAssetAccess | None,
+    ) -> None:
+        self.default_context_cache = default_context_cache
+        self.auth = auth
+        self.asset_access = asset_access
+        self.asr_semaphore = asyncio.Semaphore(MAX_CONCURRENT_ASR)
+        self.tts_slots = asyncio.Semaphore(MAX_TTS_CONNECTIONS)
+
+    async def get_live2d_folder_info(self, request: Request):
+        """Get information about available Live2D models"""
+        live2d_dir = "live2d-models"
+        if not os.path.exists(live2d_dir):
+            return JSONResponse(
+                {"error": "Live2D models directory not found"}, status_code=404
+            )
+
+        valid_characters = await _visible_live2d_models(
+            request, _scan_live2d_models(live2d_dir), self.auth, self.asset_access
+        )
+        return JSONResponse(
+            {
+                "type": "live2d-models/info",
+                "count": len(valid_characters),
+                "characters": valid_characters,
+            }
+        )
+
+    async def transcribe_audio(self, file: UploadFile = File(...)):
+        """
+        Endpoint for transcribing audio using the ASR engine
+        """
+        # Authentication is enforced by AuthRedirectMiddleware: /asr is not a
+        # public path, so in OIDC mode a request without a session never
+        # reaches this handler.
+        try:
+            contents = await file.read(MAX_ASR_UPLOAD_BYTES + 1)
+            logger.info(f"Received audio upload: {len(contents)} bytes")
+
+            if not contents:
+                raise ValueError("Empty audio file")
+            if len(contents) > MAX_ASR_UPLOAD_BYTES:
+                return _json_error(413, "Audio file is too large")
+
+            audio_array = decode_pcm_wav(
+                contents,
+                sample_rate=ASR_SAMPLE_RATE,
+                max_seconds=MAX_AUDIO_SECONDS,
+            )
+
+            if self.asr_semaphore.locked():
+                return _json_error(429, "Too many concurrent transcription requests")
+
+            async with self.asr_semaphore:
+                text = await self.default_context_cache.asr_engine.async_transcribe_np(
+                    audio_array
+                )
+            logger.info(f"Transcription result: {text}")
+            return {"text": text}
+
+        except ValueError as e:
+            logger.error(f"Audio format error: {e}")
+            return _json_error(400, str(e))
+        except Exception:
+            logger.exception("Error during transcription")
+            return _json_error(500, "Internal server error during transcription")
+
+    async def tts_endpoint(self, websocket: WebSocket):
+        """WebSocket endpoint for TTS generation"""
+        auth = self.auth
+        identity = await _require_websocket_identity(
+            websocket, auth, default_user_id(self.default_context_cache)
+        )
+        if identity is None:
+            return
+
+        if self.tts_slots.locked():
+            await _reject_websocket(websocket, 1013, "Server is at capacity")
+            return
+
+        await self.tts_slots.acquire()
+        try:
+            await websocket.accept()
+            logger.info("TTS WebSocket connection established")
+            await _serve_tts_connection(
+                websocket,
+                self.default_context_cache.tts_engine,
+                cache_scope=(
+                    identity.user_id if auth is not None and auth.enabled else None
+                ),
+            )
+        finally:
+            self.tts_slots.release()
+
+
 def init_webtool_routes(
     default_context_cache: ServiceContext,
     auth: AuthManager | None = None,
@@ -349,125 +482,12 @@ def init_webtool_routes(
     """
 
     router = APIRouter()
-    asr_semaphore = asyncio.Semaphore(MAX_CONCURRENT_ASR)
-    tts_slots = asyncio.Semaphore(MAX_TTS_CONNECTIONS)
-
-    @router.get("/web-tool")
-    async def web_tool_redirect():
-        """Redirect /web-tool to /web-tool/index.html"""
-        return Response(status_code=302, headers={"Location": "/web-tool/index.html"})
-
-    @router.get("/web_tool")
-    async def web_tool_redirect_alt():
-        """Redirect /web_tool to /web-tool/index.html"""
-        return Response(status_code=302, headers={"Location": "/web-tool/index.html"})
-
-    async def _visible_live2d_models(request: Request, models: list[dict]):
-        """Drop folders the static mount would answer 404 to for this caller."""
-        if asset_access is None or auth is None or not auth.enabled:
-            return models
-        identity = request.scope.get(IDENTITY_SCOPE_KEY)
-        user_id = getattr(identity, "user_id", None)
-        emails = None
-        visible = []
-        for model in models:
-            if asset_access.is_restricted(LIVE2D_MOUNT, model["name"]):
-                if user_id is None:
-                    continue
-                if emails is None:
-                    emails = await auth.verified_emails(user_id)
-                if not asset_access.is_allowed(
-                    LIVE2D_MOUNT, model["name"], user_id, emails
-                ):
-                    continue
-            visible.append(model)
-        return visible
-
-    @router.get("/live2d-models/info")
-    async def get_live2d_folder_info(request: Request):
-        """Get information about available Live2D models"""
-        live2d_dir = "live2d-models"
-        if not os.path.exists(live2d_dir):
-            return JSONResponse(
-                {"error": "Live2D models directory not found"}, status_code=404
-            )
-
-        valid_characters = await _visible_live2d_models(
-            request, _scan_live2d_models(live2d_dir)
-        )
-        return JSONResponse(
-            {
-                "type": "live2d-models/info",
-                "count": len(valid_characters),
-                "characters": valid_characters,
-            }
-        )
-
-    @router.post("/asr")
-    async def transcribe_audio(request: Request, file: UploadFile = File(...)):
-        """
-        Endpoint for transcribing audio using the ASR engine
-        """
-        if auth is not None and auth.enabled:
-            if auth.resolve_identity(request.cookies) is None:
-                return _json_error(401, "Authentication required")
-        try:
-            contents = await file.read(MAX_ASR_UPLOAD_BYTES + 1)
-            logger.info(f"Received audio upload: {len(contents)} bytes")
-
-            if not contents:
-                raise ValueError("Empty audio file")
-            if len(contents) > MAX_ASR_UPLOAD_BYTES:
-                return _json_error(413, "Audio file is too large")
-
-            audio_array = decode_pcm_wav(
-                contents,
-                sample_rate=ASR_SAMPLE_RATE,
-                max_seconds=MAX_AUDIO_SECONDS,
-            )
-
-            if asr_semaphore.locked():
-                return _json_error(429, "Too many concurrent transcription requests")
-
-            async with asr_semaphore:
-                text = await default_context_cache.asr_engine.async_transcribe_np(
-                    audio_array
-                )
-            logger.info(f"Transcription result: {text}")
-            return {"text": text}
-
-        except ValueError as e:
-            logger.error(f"Audio format error: {e}")
-            return _json_error(400, str(e))
-        except Exception:
-            logger.exception("Error during transcription")
-            return _json_error(500, "Internal server error during transcription")
-
-    @router.websocket("/tts-ws")
-    async def tts_endpoint(websocket: WebSocket):
-        """WebSocket endpoint for TTS generation"""
-        identity = await _require_websocket_identity(
-            websocket, auth, _default_user_id(default_context_cache)
-        )
-        if identity is None:
-            return
-
-        if tts_slots.locked():
-            await _reject_websocket(websocket, 1013, "Server is at capacity")
-            return
-
-        await tts_slots.acquire()
-        try:
-            await websocket.accept()
-            logger.info("TTS WebSocket connection established")
-            await _serve_tts_connection(
-                websocket,
-                default_context_cache.tts_engine,
-                cache_scope=(
-                    identity.user_id if auth is not None and auth.enabled else None
-                ),
-            )
-        finally:
-            tts_slots.release()
-
+    handlers = _WebToolRoutes(default_context_cache, auth, asset_access)
+    router.add_api_route("/web-tool", web_tool_redirect, methods=["GET"])
+    router.add_api_route("/web_tool", web_tool_redirect_alt, methods=["GET"])
+    router.add_api_route(
+        "/live2d-models/info", handlers.get_live2d_folder_info, methods=["GET"]
+    )
+    router.add_api_route("/asr", handlers.transcribe_audio, methods=["POST"])
+    router.add_api_websocket_route("/tts-ws", handlers.tts_endpoint)
     return router
