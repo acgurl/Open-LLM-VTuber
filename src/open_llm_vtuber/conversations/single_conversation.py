@@ -74,6 +74,7 @@ async def process_single_conversation(
             tts_manager=tts_manager,
             channels=channels,
             client_uid=client_uid,
+            session_emoji=session_emoji,
         )
 
         return full_response  # Return accumulated full_response

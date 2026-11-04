@@ -6,13 +6,19 @@ from fastapi import WebSocket
 import numpy as np
 
 from .conversation_utils import (
+    DEFAULT_SESSION_EMOJI,
     bind_turn_history,
+    bound_history_uid,
     consume_agent_stream,
+    conversation_start_frames,
     create_batch_input,
     process_user_input,
     finalize_conversation_turn,
     cleanup_conversation,
     new_session_emoji,
+    store_ai_message,
+    store_human_message,
+    turn_skips_history,
 )
 from .types import (
     BroadcastFunc,
@@ -101,19 +107,19 @@ async def process_group_conversation(
             initiator_client_uid=initiator_client_uid,
         )
 
-        # Check if we should skip storing this input to history
-        skip_history = metadata and metadata.get("skip_history", False)
+        # The bindings above already unbind a proactive conversation. The
+        # flag still goes to every member turn: a member that left and
+        # started its own turn is rebound, and must not get these replies.
+        skip_history = turn_skips_history(metadata)
 
         for member_uid in group_members:
             member_context = client_contexts[member_uid]
-            turn_history_uid = _turn_history_uid(member_context)
-            if turn_history_uid:
-                await member_context.store_history_message(
-                    role="human",
-                    content=input_text,
-                    name=human_name,
-                    history_uid=turn_history_uid,
-                )
+            await store_human_message(
+                member_context,
+                input_text,
+                human_name,
+                bound_history_uid(member_context),
+            )
         if skip_history:
             logger.debug("Skipping storing proactive speak input to group history")
 
@@ -141,7 +147,7 @@ async def process_group_conversation(
                     images=images,
                     tts_manager=tts_managers[current_member_uid],
                     metadata=current_metadata,
-                    skip_history=bool(skip_history),
+                    skip_history=skip_history,
                 )
             except Exception as e:
                 logger.error(f"Error in group member turn: {e}")
@@ -166,11 +172,6 @@ async def process_group_conversation(
             cleanup_conversation(tts_manager, session_emoji)
         # Clean up
         GroupConversationState.remove_state(state.group_id)
-
-
-def _turn_history_uid(context: ServiceContext) -> str | None:
-    """The history this conversation is bound to; None means not persisted."""
-    return getattr(context, "turn_history_uid", context.history_uid)
 
 
 def init_group_conversation_contexts(
@@ -294,6 +295,7 @@ async def handle_group_member_turn(
         channels=channels,
         client_uid=current_member_uid,
         broadcast_ctx=broadcast_ctx,
+        session_emoji=state.session_emoji or DEFAULT_SESSION_EMOJI,
     )
     # The manager is reused for this member's next turn; drop the finished
     # tasks so the list does not grow for the whole conversation.
@@ -304,19 +306,14 @@ async def handle_group_member_turn(
         state.conversation_history.append(ai_message)
         logger.info(f"Appended complete response: {ai_message}")
 
-        should_skip_history = skip_history or bool(
-            metadata and metadata.get("skip_history", False)
-        )
         for member_uid in group_members:
             member_context = client_contexts[member_uid]
-            turn_history_uid = _turn_history_uid(member_context)
-            if turn_history_uid and not should_skip_history:
-                await member_context.store_history_message(
-                    role="ai",
-                    content=full_response,
-                    name=context.character_config.character_name,
-                    avatar=context.character_config.avatar,
-                    history_uid=turn_history_uid,
+            if not skip_history:
+                await store_ai_message(
+                    member_context,
+                    full_response,
+                    context.character_config,
+                    bound_history_uid(member_context),
                 )
 
     state.memory_index[current_member_uid] = len(state.conversation_history)
@@ -330,14 +327,8 @@ async def broadcast_thinking_state(
     broadcast_func: BroadcastFunc, group_members: list[str]
 ) -> None:
     """Broadcast thinking state to group"""
-    await broadcast_func(
-        group_members,
-        {"type": "control", "text": "conversation-chain-start"},
-    )
-    await broadcast_func(
-        group_members,
-        {"type": "full-text", "text": "Thinking..."},
-    )
+    for frame in conversation_start_frames():
+        await broadcast_func(group_members, frame)
 
 
 async def handle_member_error(

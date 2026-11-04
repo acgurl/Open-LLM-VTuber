@@ -105,9 +105,18 @@ class TextDeltaBuffer:
         )
 
 
+PLAYBACK_INTERRUPTED_MARKER = "[Interrupted by user]"
+DEFAULT_SESSION_EMOJI = "😊"
+
+
 def should_store_history(context: Any, skip_history: bool = False) -> bool:
     """Persist a turn only for an open history that is not a proactive turn."""
     return bool(context.history_uid) and not skip_history
+
+
+def turn_skips_history(metadata: dict[str, Any] | None) -> bool:
+    """Whether the turn opted out of history (proactive speak)."""
+    return bool(metadata and metadata.get("skip_history", False))
 
 
 def bind_turn_history(context: Any, metadata: dict[str, Any] | None) -> str | None:
@@ -116,13 +125,75 @@ def bind_turn_history(context: Any, metadata: dict[str, Any] | None) -> str | No
     Opening another history mid-turn must not reroute the turn's writes.
     Returns the bound history id, or None when the turn is not persisted.
     """
-    skip_history = bool(metadata and metadata.get("skip_history", False))
+    skip_history = turn_skips_history(metadata)
     turn_history_uid = (
         context.history_uid if should_store_history(context, skip_history) else None
     )
     context.turn_history_uid = turn_history_uid
     context.turn_response_persisted = False
     return turn_history_uid
+
+
+def bound_history_uid(context: Any) -> str | None:
+    """The history the running turn is bound to; None means not persisted.
+
+    A context that never ran ``bind_turn_history`` falls back to the open one.
+    """
+    return getattr(context, "turn_history_uid", context.history_uid)
+
+
+# Turn persistence: every conversation path writes its history rows through
+# these helpers. A falsy ``history_uid`` means the turn is not persisted.
+
+
+async def store_human_message(
+    context: Any, content: str, name: str, history_uid: str | None
+) -> None:
+    if not history_uid:
+        return
+    await context.store_history_message(
+        role="human",
+        content=content,
+        name=name,
+        history_uid=history_uid,
+    )
+
+
+async def store_ai_message(
+    context: Any, content: str, speaker: Any, history_uid: str | None
+) -> None:
+    """Store ``content`` as said by ``speaker`` (a character config)."""
+    if not history_uid:
+        return
+    await context.store_history_message(
+        role="ai",
+        content=content,
+        name=speaker.character_name,
+        avatar=speaker.avatar,
+        history_uid=history_uid,
+    )
+
+
+async def store_interrupted_reply(
+    context: Any,
+    heard_response: str,
+    history_uid: str | None,
+    speaker_context: Any = None,
+) -> None:
+    """Store the part of an interrupted reply the user heard, then the marker.
+
+    ``speaker_context`` is whoever was talking (a group member); it defaults
+    to ``context`` itself.
+    """
+    if not (history_uid and heard_response):
+        return
+    speaker = (speaker_context or context).character_config
+    await store_ai_message(context, heard_response, speaker, history_uid)
+    await context.store_history_message(
+        role="system",
+        content=PLAYBACK_INTERRUPTED_MARKER,
+        history_uid=history_uid,
+    )
 
 
 def _to_image_data(img: dict[str, Any]) -> ImageData:
@@ -263,13 +334,10 @@ async def run_agent_turn(
     )
 
     if turn_history_uid:
-        await context.store_history_message(
-            role="human",
-            content=input_text,
-            name=context.character_config.human_name,
-            history_uid=turn_history_uid,
+        await store_human_message(
+            context, input_text, context.character_config.human_name, turn_history_uid
         )
-    elif metadata and metadata.get("skip_history", False):
+    elif turn_skips_history(metadata):
         logger.debug("Skipping storing user input to history (proactive speak)")
 
     logger.info(f"User input: {input_text}")
@@ -310,12 +378,8 @@ async def _persist_reply(context: Any, full_response: str, history_uid: str) -> 
     """
 
     async def write() -> None:
-        await context.store_history_message(
-            role="ai",
-            content=full_response,
-            name=context.character_config.character_name,
-            avatar=context.character_config.avatar,
-            history_uid=history_uid,
+        await store_ai_message(
+            context, full_response, context.character_config, history_uid
         )
         context.turn_response_persisted = True
 
@@ -447,17 +511,18 @@ async def handle_audio_output(
     return full_response
 
 
+def conversation_start_frames() -> list[dict[str, Any]]:
+    """Frames that open a turn; the group path broadcasts the same ones."""
+    return [
+        {"type": "control", "text": "conversation-chain-start"},
+        {"type": "full-text", "text": "Thinking..."},
+    ]
+
+
 async def send_conversation_start_signals(websocket_send: WebSocketSend) -> None:
     """Send initial conversation signals"""
-    await websocket_send(
-        json.dumps(
-            {
-                "type": "control",
-                "text": "conversation-chain-start",
-            }
-        )
-    )
-    await websocket_send(json.dumps({"type": "full-text", "text": "Thinking..."}))
+    for frame in conversation_start_frames():
+        await websocket_send(json.dumps(frame))
 
 
 async def process_user_input(
@@ -481,6 +546,7 @@ async def finalize_conversation_turn(
     channels: OutboundChannels,
     client_uid: str,
     broadcast_ctx: BroadcastContext | None = None,
+    session_emoji: str = DEFAULT_SESSION_EMOJI,
 ) -> None:
     """Finalize a conversation turn"""
     if tts_manager.task_list:
@@ -514,13 +580,13 @@ async def finalize_conversation_turn(
             broadcast_ctx.current_client_uid,
         )
 
-    await send_conversation_end_signal(channels.text, broadcast_ctx)
+    await send_conversation_end_signal(channels.text, broadcast_ctx, session_emoji)
 
 
 async def send_conversation_end_signal(
     websocket_send: WebSocketSend,
     broadcast_ctx: BroadcastContext | None,
-    session_emoji: str = "😊",
+    session_emoji: str = DEFAULT_SESSION_EMOJI,
 ) -> None:
     """Send conversation chain end signal"""
     chain_end_msg = {
