@@ -1,5 +1,6 @@
 import sys
 import tempfile
+import threading
 import types
 import unittest
 from pathlib import Path
@@ -9,6 +10,9 @@ import requests
 
 from open_llm_vtuber.tts import edge_tts as edge_tts_module
 from open_llm_vtuber.tts import gpt_sovits_tts, x_tts
+from open_llm_vtuber.tts.cartesia_tts import TTSEngine as CartesiaTTSEngine
+from open_llm_vtuber.tts.elevenlabs_tts import TTSEngine as ElevenLabsTTSEngine
+from open_llm_vtuber.tts.pyttsx3_tts import TTSEngine as Pyttsx3TTSEngine
 
 
 class _Response:
@@ -154,6 +158,119 @@ class CosyvoicePredictTests(unittest.TestCase):
         self.client.predict.assert_called_once_with(
             **self.common("handle_file"), stream=False, speed=1.0
         )
+
+
+def _partial_then_fail():
+    yield b"partial"
+    raise RuntimeError("stream dropped")
+
+
+def _bare_engine(cls, path: Path, **attrs):
+    engine = cls.__new__(cls)
+    for name, value in attrs.items():
+        setattr(engine, name, value)
+    engine.generate_cache_file_name = lambda _name, _ext: str(path)
+    return engine
+
+
+class SDKEngineFailureTests(unittest.TestCase):
+    """SDK engines return None and drop the partial file instead of raising."""
+
+    def test_cartesia_stream_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "audio.wav"
+            client = MagicMock()
+            client.tts.bytes.return_value = _partial_then_fail()
+            engine = _bare_engine(
+                CartesiaTTSEngine,
+                path,
+                client=client,
+                output_format="wav",
+                voice_id="voice",
+                model_id="model",
+                language="en",
+                volume=1.0,
+                speed=1.0,
+                emotion="neutral",
+            )
+
+            self.assertIsNone(engine.generate_audio("hi"))
+            self.assertFalse(path.exists())
+
+    def test_elevenlabs_stream_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "audio.mp3"
+            client = MagicMock()
+            client.text_to_speech.convert.return_value = _partial_then_fail()
+            engine = _bare_engine(
+                ElevenLabsTTSEngine,
+                path,
+                client=client,
+                file_extension="mp3",
+                voice_id="voice",
+                model_id="model",
+                output_format="mp3_44100_128",
+                stability=0.5,
+                similarity_boost=0.5,
+                style=0.0,
+                use_speaker_boost=True,
+            )
+
+            self.assertIsNone(engine.generate_audio("hi"))
+            self.assertFalse(path.exists())
+
+    def test_pyttsx3_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "audio.aiff"
+            backend = MagicMock()
+            backend.save_to_file.side_effect = lambda text, filename: Path(
+                filename
+            ).write_bytes(b"partial")
+            backend.runAndWait.side_effect = RuntimeError("driver crashed")
+            engine = _bare_engine(
+                Pyttsx3TTSEngine,
+                path,
+                engine=backend,
+                file_extension="aiff",
+                lock=threading.Lock(),
+            )
+
+            self.assertIsNone(engine.generate_audio("hi"))
+            self.assertFalse(path.exists())
+
+
+class SparkTTSFailureTests(unittest.TestCase):
+    def setUp(self):
+        fake = types.ModuleType("gradio_client")
+        fake.Client = MagicMock()
+        fake.file = lambda url: url
+        patcher = patch.dict(sys.modules, {"gradio_client": fake})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        sys.modules.pop("open_llm_vtuber.tts.spark_tts", None)
+
+    def test_copy_failure_removes_partial_file(self):
+        from open_llm_vtuber.tts import spark_tts
+
+        def copy_partial(_source, target):
+            Path(target).write_bytes(b"partial")
+            raise OSError("disk full")
+
+        for api_name in ("voice_clone", "voice_creation"):
+            with self.subTest(api_name=api_name):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "audio.wav"
+                    engine = spark_tts.TTSEngine(api_name=api_name)
+                    engine.client.predict.return_value = "source.wav"
+                    engine.generate_cache_file_name = MagicMock(return_value=str(path))
+
+                    with patch.object(
+                        spark_tts.shutil, "copyfile", side_effect=copy_partial
+                    ):
+                        result = engine.generate_audio("hi")
+
+                    self.assertIsNone(result)
+                    self.assertFalse(path.exists())
 
 
 if __name__ == "__main__":
