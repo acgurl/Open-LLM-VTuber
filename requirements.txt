@@ -22,8 +22,6 @@ httpx==0.28.1
     # via open-llm-vtuber (pyproject.toml)
 langdetect==1.0.9
     # via open-llm-vtuber (pyproject.toml)
-letta-client==1.7.6
-    # via open-llm-vtuber (pyproject.toml)
 loguru==0.7.3
     # via open-llm-vtuber (pyproject.toml)
 mcp[cli]==1.26.0
