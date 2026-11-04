@@ -23,6 +23,7 @@ from open_llm_vtuber.conversations.types import (
 )
 from open_llm_vtuber.service_context import ServiceContext
 from open_llm_vtuber.storage import SQLiteHistoryRepository
+from open_llm_vtuber.websocket_handler import WebSocketHandler
 
 
 class FakeWebSocket:
@@ -311,6 +312,68 @@ class SwitchConfigLeakTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIs(context.agent_engine, replacement)
         previous.close.assert_awaited_once()
+
+
+class SwitchConfigDuringTurnTests(unittest.IsolatedAsyncioTestCase):
+    """Closing the old MCP client on switch-config must not break a live turn."""
+
+    async def test_running_turn_is_cancelled_before_the_client_closes(self):
+        events: list[str] = []
+        client_closed = asyncio.Event()
+        tool_started = asyncio.Event()
+
+        async def turn_with_tool_call():
+            tool_started.set()
+            try:
+                # A tool call in flight on the session's MCP client.
+                await client_closed.wait()
+                raise RuntimeError("tool call failed: MCP client closed")
+            except asyncio.CancelledError:
+                events.append("turn cancelled")
+                raise
+
+        async def handle_config_switch(_websocket, _file_name):
+            events.append("client aclose")
+            client_closed.set()
+            await asyncio.sleep(0)
+
+        context = SimpleNamespace(
+            agent_engine=Mock(),
+            history_uid="history",
+            turn_history_uid="history",
+            turn_response_persisted=False,
+            character_config=SimpleNamespace(character_name="AI", avatar=""),
+            store_history_message=AsyncMock(),
+            handle_config_switch=AsyncMock(side_effect=handle_config_switch),
+        )
+        handler = WebSocketHandler(default_context_cache=Mock())
+        handler.chat_group_manager = Mock()
+        handler.chat_group_manager.get_client_group.return_value = None
+        handler.client_contexts["client"] = context
+        task = asyncio.create_task(turn_with_tool_call())
+        handler.current_conversation_tasks["client"] = task
+        await tool_started.wait()
+
+        await handler._handle_config_switch(None, "client", {"file": "alt.yaml"})
+        await asyncio.sleep(0)
+
+        self.assertEqual(events, ["turn cancelled", "client aclose"])
+        self.assertTrue(task.cancelled())
+        # Same as interrupt-signal with empty text: nothing heard, nothing stored.
+        context.agent_engine.handle_interrupt.assert_called_once_with("")
+        context.store_history_message.assert_not_awaited()
+
+    async def test_idle_switch_does_not_touch_the_agent(self):
+        context = SimpleNamespace(agent_engine=Mock(), handle_config_switch=AsyncMock())
+        handler = WebSocketHandler(default_context_cache=Mock())
+        handler.chat_group_manager = Mock()
+        handler.chat_group_manager.get_client_group.return_value = None
+        handler.client_contexts["client"] = context
+
+        await handler._handle_config_switch(None, "client", {"file": "alt.yaml"})
+
+        context.handle_config_switch.assert_awaited_once_with(None, "alt.yaml")
+        context.agent_engine.handle_interrupt.assert_not_called()
 
 
 if __name__ == "__main__":

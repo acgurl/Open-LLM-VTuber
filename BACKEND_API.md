@@ -265,7 +265,7 @@ Cookie（`auth/manager.py`）：
 | type | 字段 | 服务端响应 |
 | --- | --- | --- |
 | `fetch-configs` | 无 | `config-files`（已按当前用户的角色权限过滤） |
-| `switch-config` | `file`: string（**键名是 `file`**，不是 `config`/`name`；缺失则静默无响应） | `set-model-and-conf` + `config-switched`，或 `error`（无权限时为 `Character not available`） |
+| `switch-config` | `file`: string（**键名是 `file`**，不是 `config`/`name`；缺失则静默无响应） | `set-model-and-conf` + `config-switched`，或 `error`（无权限时为 `Character not available`）。单聊中有正在进行的一轮时先按 `interrupt-signal`（`text:""`）打断，见 13.2 |
 | `request-init-config` | 无 | `set-model-and-conf`（含 `client_uid`） |
 | `fetch-backgrounds` | 无 | `background-files` |
 | `heartbeat` | 无 | `heartbeat-ack` |
@@ -741,8 +741,8 @@ LLM 被提示在句子里插入方括号关键字（提示词 `prompts/utils/liv
 | 主动说话 `ai-speak-signal` | **都不写**（`skip_history`），包括这一轮的工具调用 |
 | 打断（回复尚未生成完） | `role:"ai"` = 用户听到的部分 + `role:"system"` = `[Interrupted by user]`，写入该轮开始时的历史 |
 | 打断（回复已生成完、只是播放没结束） | **不写**：完整回复已在生成完毕时落库，打断只停播放 |
-| 切历史 / 新建历史 / 换角色前 | 客户端应先发 `interrupt-signal` 收尾进行中的一轮；否则旧一轮的音画会串到新会话，且 agent 记忆被换掉 |
-| 群聊 | 人类输入写给发起者；AI 回复写给**所有成员**各自的历史 |
+| 切历史 / 新建历史 / 换角色前 | 客户端应先发 `interrupt-signal` 收尾进行中的一轮；否则旧一轮的音画会串到新会话，且 agent 记忆被换掉。换角色（单聊）时后端也会先以 `text:""` 自行打断，但前端带上实际听到的文本更准确 |
+| 群聊 | 人类输入与 AI 回复都写给**所有成员**各自的历史（群聊开始时各自绑定的那个）；群聊打断把听到的部分 + `[Interrupted by user]` 也写给所有成员；工具调用只写给发言成员 |
 
 `role:"system"` 的消息在 `history-data` 返回时被过滤，但会进 agent 记忆。
 
@@ -825,6 +825,8 @@ character_config:
 - 失败回 `{"type":"error","message":"Failed to switch configuration"}`（文案固定，不含细节，避免泄露配置内容，`service_context.py:712-724`）
 - 切换会按需重建 Live2D / ASR / TTS / agent / 翻译引擎（子配置相同则复用），**可能耗时数秒**，UI 要有 loading 态
 - **切换后 `history_uid` 被清空**，必须重新 `create-new-history` 或 `fetch-and-set-history`，否则对话不落库
+- **单聊中若有一轮仍在运行（生成中或等待 `frontend-playback-complete`），切换前先打断它**，等同 `interrupt-signal` 且 `text:""`（`websocket_handler.py` `_interrupt_turn_before_switch`）：任务被取消并等待结束，再关闭旧的 MCP client，所以不会有工具调用撞上已关闭的 client。这一步**没有任何回执**——被取消的一轮不会再发 `conversation-chain-end`、`backend-synth-complete` 或剩余的音频，前端在发 `switch-config` 前应自己停播放、收气泡。历史写入与 `text:""` 的打断相同：回复已生成完则保持已落库的完整回复；未生成完则什么都不写（听到的部分为空），agent 记忆追加一条 `[Interrupted by user]`
+- **群聊（成员 >1）中切换不打断群聊**：群对话由全体成员共享，继续运行，该成员下次发言时用新角色。若该成员此刻正在执行工具调用，旧 client 关闭会让这次调用以 `tool_call_status: error` 结束（对话继续）
 
 ### 13.3 背景图
 
@@ -1040,6 +1042,7 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 23. **浏览器本地 MCP 只在页面打开时可用。** 页面关闭/刷新时正在执行的 `local-tool-call` 会超时（30 s）并作为工具错误返回给 LLM；本地服务必须允许本站 Origin（含 CORS/PNA/`Mcp-Session-Id` 暴露），且页面保持打开。
 24. **`local-tool-call.tool_name` 是 MCP 原始工具名。** LLM 看到的是 `l_<hash>_<name>` 这样的暴露名，但服务端回传/调用时已经还原；前端不要再做前缀处理。
 25. **不要把 local 当成"服务器侧也能连"的捷径。** local 条目只下发给浏览器，后端不拨号；remote 条目强制公网 HTTPS（保存时和每次连接前重新解析 DNS），用户 `command/args` 一律拒绝。全局 `cuc-kb` 仍由部署方在 `mcp_servers.json` 管理，不受用户配置影响。
+26. **单聊 `switch-config` 会静默取消进行中的一轮**（见 13.2），之后不会再收到该轮的 `conversation-chain-end`；要保留听到的部分，先自己发带文本的 `interrupt-signal` 再切换。
 
 ---
 

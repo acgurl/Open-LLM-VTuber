@@ -765,7 +765,29 @@ class WebSocketHandler:
         config_file_name = data.get("file")
         if config_file_name:
             context = self.client_contexts[client_uid]
+            await self._interrupt_turn_before_switch(client_uid, context)
             await context.handle_config_switch(websocket, config_file_name)
+
+    async def _interrupt_turn_before_switch(
+        self, client_uid: str, context: ServiceContext
+    ) -> None:
+        """Stop a running individual turn before the switch closes its MCP client.
+
+        Same as an ``interrupt-signal`` with empty ``text``. A group
+        conversation is shared with the other members and keeps running.
+        """
+        group = self.chat_group_manager.get_client_group(client_uid)
+        if group and len(group.members) > 1:
+            return
+        task = self.current_conversation_tasks.get(client_uid)
+        if task is None or task.done():
+            return
+        await handle_individual_interrupt(
+            client_uid=client_uid,
+            current_conversation_tasks=self.current_conversation_tasks,
+            context=context,
+            heard_response="",
+        )
 
     async def _handle_fetch_backgrounds(
         self, websocket: WebSocket, client_uid: str, data: WSMessage
