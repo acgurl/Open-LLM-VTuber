@@ -25,9 +25,14 @@ class IsUserAllowedTests(unittest.TestCase):
         self.assertTrue(is_user_allowed(["u1"], "u1", "Alice"))
         self.assertFalse(is_user_allowed(["u2"], "u1", "Alice"))
 
-    def test_matches_display_name_ignoring_case_and_spaces(self) -> None:
-        self.assertTrue(is_user_allowed([" alice "], "u1", "Alice"))
-        self.assertTrue(is_user_allowed(["刘豫森"], "u1", "刘豫森"))
+    def test_matches_verified_email_ignoring_case_and_spaces(self) -> None:
+        self.assertTrue(
+            is_user_allowed([" Alice@Example.com "], "u1", "alice@example.com")
+        )
+        self.assertTrue(
+            is_user_allowed(["b@cuc.edu.cn"], "u1", ("a@x.com", "B@cuc.edu.cn"))
+        )
+        self.assertFalse(is_user_allowed(["alice@example.com"], "u1", ()))
 
     def test_missing_identity_is_denied(self) -> None:
         self.assertFalse(is_user_allowed(["u1"], None, None))
@@ -192,9 +197,24 @@ class SwitchAccessTests(unittest.IsolatedAsyncioTestCase):
         validate_config.assert_not_called()
         load_from_config.assert_not_awaited()
 
-    async def test_allows_switch_by_display_name(self) -> None:
+    async def test_denies_switch_by_display_name_only(self) -> None:
         self.context.user_id = "someone-else"
         self.context.user_display_name = "U1"
+
+        validate_config, load_from_config = await self.run_switch()
+
+        self.assertEqual(
+            self.websocket.sent,
+            [{"type": "error", "message": "Character not available"}],
+        )
+        validate_config.assert_not_called()
+        load_from_config.assert_not_awaited()
+
+    async def test_allows_switch_by_verified_email(self) -> None:
+        self.alt_character_config["allowed_users"] = ["alice@example.com"]
+        self.context.user_id = "someone-else"
+        self.context.user_display_name = "alice@example.com"
+        self.context.user_emails = ("Alice@Example.com",)
 
         validate_config, load_from_config = await self.run_switch()
 

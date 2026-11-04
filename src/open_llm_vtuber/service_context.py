@@ -118,6 +118,8 @@ class ServiceContext:
         # Used to match character allowlists by name; the session cookie only
         # carries the display name, not the email or OIDC subject.
         self.user_display_name: str | None = None
+        # Verified login emails; matched by character allowlists.
+        self.user_emails: tuple[str, ...] = ()
         # The active turn keeps writing to the history it started in, even if
         # another history is opened while its audio is still playing.
         self.turn_history_uid: str | None = None
@@ -571,6 +573,7 @@ class ServiceContext:
         user_display_name: str | None = None,
         user_mcp_servers: list[dict] | None = None,
         local_mcp_servers: list[dict] | None = None,
+        user_emails: tuple[str, ...] = (),
     ) -> None:
         """
         Load the ServiceContext with the reference of the provided instances.
@@ -604,6 +607,7 @@ class ServiceContext:
         self._owns_tts_engine = False
         self.set_history_storage(history_repository, user_id)
         self.user_display_name = user_display_name
+        self.user_emails = tuple(user_emails)
 
         # Initialize session-specific MCP components
         await self._init_mcp_components(
@@ -847,7 +851,7 @@ class ServiceContext:
         return is_user_allowed(
             character_config.get("allowed_users"),
             self.user_id,
-            self.user_display_name,
+            self.user_emails,
         )
 
     def model_conf_payload(self, client_uid: str | None = None) -> dict:

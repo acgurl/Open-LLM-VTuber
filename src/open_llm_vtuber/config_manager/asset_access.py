@@ -17,6 +17,7 @@ the characters that use it.
 
 import json
 import os
+import re
 import threading
 import time
 from collections.abc import Iterable
@@ -24,8 +25,12 @@ from typing import Any
 
 from loguru import logger
 
-from .access import is_user_allowed, parse_allowed_users
-from .utils import read_yaml
+from .access import (
+    is_user_allowed,
+    parse_allowed_users,
+    warn_unmatched_allowlist_entries,
+)
+from .utils import may_declare_allowlist, read_yaml
 
 LIVE2D_MOUNT = "live2d-models"
 AVATAR_MOUNT = "avatars"
@@ -33,6 +38,14 @@ _LIVE2D_URL_PREFIX = "/live2d-models/"
 
 # Marks an asset used by at least one public character.
 _PUBLIC = object()
+# Allowlist of an unparseable preset that may be restricted: a malformed
+# value, so ``is_user_allowed`` denies everyone.
+_DENY_ALL = {"unreadable": True}
+# Best-effort recovery of the asset keys from a preset YAML cannot parse.
+_RAW_ASSET_KEY = re.compile(
+    r"^\s*(live2d_model_name|avatar)\s*:\s*['\"]?([^'\"#\r\n]*?)['\"]?\s*(?:#.*)?$",
+    re.MULTILINE,
+)
 
 
 def _normalize_key(path: str) -> str:
@@ -49,6 +62,15 @@ def _asset_key(mount: str, path: str) -> tuple[str, str] | None:
     if mount == AVATAR_MOUNT:
         return (mount, rel.casefold())
     return None
+
+
+def _raw_asset_keys(path: str) -> dict[str, str]:
+    try:
+        with open(path, encoding="utf-8", errors="replace") as file:
+            text = file.read()
+    except OSError:
+        return {}
+    return {key: value for key, value in _RAW_ASSET_KEY.findall(text) if value}
 
 
 def _model_folder(model_url: Any) -> str | None:
@@ -95,15 +117,31 @@ class CharacterAssetAccess:
         mount: str,
         path: str,
         user_id: str | None,
-        display_name: str | None,
+        emails: str | Iterable[str] | None,
     ) -> bool:
+        """``emails`` are the user's verified login emails."""
         key = _asset_key(mount, path)
         if key is None:
             return True
         rule = self._current_rules().get(key)
         if rule is None or rule is _PUBLIC:
             return True
-        return any(is_user_allowed(allowed, user_id, display_name) for allowed in rule)
+        if not isinstance(emails, str) and emails is not None:
+            emails = tuple(emails)
+        return any(is_user_allowed(allowed, user_id, emails) for allowed in rule)
+
+    def warn_unmatched_allowlists(self) -> None:
+        """Warn about preset allowlist entries that cannot match anyone now."""
+        for path in self._preset_files():
+            try:
+                config = read_yaml(path) or {}
+            except Exception:
+                continue
+            character = (
+                config.get("character_config") if isinstance(config, dict) else None
+            )
+            if isinstance(character, dict):
+                warn_unmatched_allowlist_entries(character.get("allowed_users"), path)
 
     # ---- rule loading
 
@@ -158,6 +196,28 @@ class CharacterAssetAccess:
                 folders[entry["name"]] = folder
         return folders
 
+    @staticmethod
+    def _add_unreadable_preset(path: str, add) -> None:
+        """Fail closed for a preset that may be restricted but cannot be parsed.
+
+        Its model folder and avatar become private to nobody (unless a public
+        character uses them too); nothing can be protected when they cannot
+        be recovered from the raw text.
+        """
+        keys = _raw_asset_keys(path)
+        if not keys:
+            logger.error(
+                f"Asset access: {path} may set allowed_users but cannot be "
+                "parsed, and its model/avatar cannot be determined; its assets "
+                "may be public until the file is fixed"
+            )
+            return
+        logger.warning(
+            f"Asset access: hiding assets of unreadable preset {path} from "
+            "everyone until the file is fixed"
+        )
+        add({**keys, "allowed_users": _DENY_ALL}, False)
+
     def _build_rules(self, presets: list[str]) -> dict[tuple[str, str], Any]:
         model_folders = self._load_model_folders()
         rules: dict[tuple[str, str], Any] = {}
@@ -188,6 +248,8 @@ class CharacterAssetAccess:
                 config = read_yaml(path) or {}
             except Exception as e:
                 logger.warning(f"Asset access: cannot read {path}: {e}")
+                if not public and may_declare_allowlist(path):
+                    self._add_unreadable_preset(path, add)
                 continue
             character = (
                 config.get("character_config") if isinstance(config, dict) else None

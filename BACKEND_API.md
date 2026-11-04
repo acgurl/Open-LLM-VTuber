@@ -166,7 +166,7 @@ Cookie（`auth/manager.py`）：
 | WS | `/tts-ws` | 见 3.4 | — | `routes.py:384` |
 | WS | `/proxy-ws` | 仅 `enable_proxy` 且非 oidc | — | `routes.py:259` |
 
-`GET /live2d-models/info` 扫描 `live2d-models/` 下形如 `<folder>/<folder>.model3.json` 的目录。注意：**本仓库自带模型用的是 `runtime/` 子目录**（例如 `live2d-models/nahida/runtime/Nahida_v2.model3.json`），所以这个接口对自带模型返回空或不一致。**权威来源是 `model_dict.json`**，见[第 11 节](#11-live2d-模型元数据)。
+`GET /live2d-models/info` 扫描 `live2d-models/` 下形如 `<folder>/<folder>.model3.json` 的目录；oidc 模式下，当前身份（含未登录）无权访问的受限模型目录（见 4.2）不出现在 `characters` 里，`count` 随之减少。注意：**本仓库自带模型用的是 `runtime/` 子目录**（例如 `live2d-models/nahida/runtime/Nahida_v2.model3.json`），所以这个接口对自带模型返回空或不一致。**权威来源是 `model_dict.json`**，见[第 11 节](#11-live2d-模型元数据)。
 
 ### 4.2 静态挂载
 
@@ -179,7 +179,7 @@ Cookie（`auth/manager.py`）：
 | `/web-tool` | `web_tool/` | 公开 | ASR/TTS 测试页 |
 | `/` | `web/dist/` | 受中间件保护 | 前端产物（`html=True`，兜底挂载，必须最后注册） |
 
-**受限角色资源**（`config_manager/asset_access.py`）：若某个模型目录（`model_dict.json` 中该模型 URL 在 `/live2d-models/` 后的第一级目录）或头像文件只被带 `allowed_users` 的角色预设使用，则它是私有资源：oidc 模式下不在名单内（含未登录）一律 **404**（`Cache-Control: private, no-store`），名单内返回 `Cache-Control: private, no-cache`，任何 CDN/反代都不应缓存。只要有一个公开角色（含 `conf.yaml` 默认角色）用到同一资源，它就保持公开。规则随 `conf.yaml`、`characters/`、`model_dict.json` 的修改在 5 秒内自动生效；single 模式不做限制。
+**受限角色资源**（`config_manager/asset_access.py`）：若某个模型目录（`model_dict.json` 中该模型 URL 在 `/live2d-models/` 后的第一级目录）或头像文件只被带 `allowed_users` 的角色预设使用，则它是私有资源：oidc 模式下不在名单内（含未登录）一律 **404**（`Cache-Control: private, no-store`），名单内返回 `Cache-Control: private, no-cache`，任何 CDN/反代都不应缓存。只要有一个公开角色（含 `conf.yaml` 默认角色）用到同一资源，它就保持公开。规则随 `conf.yaml`、`characters/`、`model_dict.json` 的修改在 5 秒内自动生效；single 模式不做限制。YAML 解析失败、但文本里出现 `allowed_users` 的预设按"对所有人私有"处理（从原文中尽量找出 `live2d_model_name`/`avatar`；找不到时记 ERROR 日志）。
 
 所有静态响应都带 `Access-Control-Allow-Origin: *`，`.js` 强制 `Content-Type: application/javascript`。
 
@@ -334,7 +334,7 @@ Cookie（`auth/manager.py`）：
 
 **`config-files`** — `{ "type":"config-files", "configs":[{"filename":"conf.yaml","name":"ReLU / AIRI (Hiyori)"}, ...] }`（`websocket_handler.py:748-750`，扫描逻辑 `config_manager/utils.py:142-192`）。
 `configs[0]` 永远是 `conf.yaml`（基础配置），其后按 `filename` 排序；`name` 取自各文件的 `character_config.conf_name`，读不到则回落为相对路径。
-角色预设可用 `character_config.allowed_users` 限定用户（内部 user_id 或显示名，大小写不敏感，空表示公开），列表会按当前会话身份过滤；`conf.yaml` 对应的默认角色不受限制。
+角色预设可用 `character_config.allowed_users` 限定用户（内部 user_id 或已验证的登录邮箱，大小写不敏感，空表示公开；**不匹配显示名**），列表会按当前会话身份过滤；`conf.yaml` 对应的默认角色不受限制。"已验证的邮箱"指 IdP 登录时给出、且 `email_verified` 不为 `false` 的邮箱（IdP 不给该声明时视为可信）；启动时会对每个既不像 user_id 也不像邮箱的条目打一条 WARNING，提示迁移。
 
 **`background-files`** — `{ "type":"background-files", "files":["bg1.png", ...] }`（`websocket_handler.py:766-768`）。只有 basename，需自己拼 `/bg/`。
 
@@ -898,8 +898,8 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 响应：
 
 ```json
-{ "status": "partial", "audioPath": "cache/20261023_101500_ab12cd34.mp3", "text": "第一句" }
-{ "status": "partial", "audioPath": "cache/20261023_101501_ef56gh78.mp3", "text": "第二句" }
+{ "status": "partial", "audioPath": "cache/<user_id>/20261023_101500_ab12cd34.mp3", "text": "第一句" }
+{ "status": "partial", "audioPath": "cache/<user_id>/20261023_101501_ef56gh78.mp3", "text": "第二句" }
 { "status": "complete" }
 ```
 
@@ -911,7 +911,7 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 
 其它 `message`：`"Text exceeds the 30-sentence limit"`、`"Failed to generate audio"`。
 
-音频**不在 socket 上传输**，`audioPath` 是服务端相对路径，用 `GET /cache/<basename>` 取（oidc 模式下该路径受会话保护）。
+音频**不在 socket 上传输**，`audioPath` 是相对服务端根目录的路径，直接 `GET /<audioPath>` 取（即 `/cache/` 后接 `cache/` 之后的整段）。oidc 模式下文件位于 `cache/<user_id>/` 下，只有本人会话能取到；single 模式没有 `<user_id>/` 这一级。
 并发上限 **16** 条连接，超出 `close(1013, "Server is at capacity")`。认证与 Origin 规则同 `/client-ws`。
 
 ---

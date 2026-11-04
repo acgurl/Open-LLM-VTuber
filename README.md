@@ -338,7 +338,8 @@ To add a character, copy a preset, change `character_name`, `conf_uid`, `live2d_
 `fetch-configs`.
 
 To keep a preset for selected people, add `allowed_users` with internal user ids (shown under
-Settings → Account) or display names; users that are not listed neither see nor can switch to it.
+Settings → Account) or verified login emails (display names are not matched); users that are
+not listed neither see nor can switch to it.
 Each preset is checked on its own, and the default character in `conf.yaml` stays available to
 everyone.
 
