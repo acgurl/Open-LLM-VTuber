@@ -89,3 +89,14 @@ dist/
 
 # Runtime MCP config (may contain auth token, mounted at runtime)
 /mcp_servers.json
+
+# Not needed in the image: VCS metadata, CI config, tests, tool caches.
+# (web/ stays in the context for the node stage; the runtime stage copies
+# only web/dist from it — see `COPY --exclude=web` in the dockerfile.)
+/.git
+/.github/
+/.claude/
+/tests/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/

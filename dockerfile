@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.19
+# (1.19+ is needed for COPY --exclude below.)
 FROM node:24-slim AS web
 WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
@@ -19,19 +21,20 @@ WORKDIR /app
 # Base dependencies
 RUN apt-get update -o Acquire::Retries=5 \
  && apt-get install -y --no-install-recommends \
-      ffmpeg git curl ca-certificates \
+      ffmpeg curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
 # Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /uvx /usr/local/bin/
 
 # Install deps (cache-friendly)
 COPY pyproject.toml uv.lock ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# Copy source & install project
-COPY . /app
+# Copy source & install project. web/ is only needed by the node stage; the
+# runtime serves web/dist, copied from that stage below.
+COPY --exclude=web . /app
 RUN uv pip install --no-deps .
 
 # Frontend build output (served from web/dist)
@@ -79,8 +82,8 @@ RUN printf '%s\n' \
   '  rm -rf /app/backgrounds && ln -s /app/conf/backgrounds /app/backgrounds' \
   'fi' \
   '' \
-  '# 7) start app' \
-  'exec uv run run_server.py' \
+  '# 7) start app (deps are synced at build time; never re-sync at start)' \
+  'exec uv run --frozen --no-sync run_server.py' \
   > /usr/local/bin/start-app && chmod +x /usr/local/bin/start-app
 
 # Volumes

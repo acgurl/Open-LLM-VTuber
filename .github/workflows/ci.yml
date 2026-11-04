@@ -88,10 +88,18 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Smoke test image
+        # Image-only breaks (missing runtime dep, start command re-syncing,
+        # context leaking into the image) are invisible to the unit tests.
         run: |
-          docker run --rm --entrypoint /app/.venv/bin/python open-llm-vtuber:ci -c "
-          import pathlib
+          docker run --rm --entrypoint uv open-llm-vtuber:ci run --frozen --no-sync python -c "
+          import importlib.util, pathlib
           import open_llm_vtuber.server
+          import run_server
           assert pathlib.Path('/app/web/dist/index.html').is_file(), 'web/dist missing'
+          assert not pathlib.Path('/app/web/src').exists(), 'web sources copied into image'
+          assert not pathlib.Path('/app/.git').exists(), '.git copied into image'
+          for dev in ('ruff', 'pre_commit'):
+              assert importlib.util.find_spec(dev) is None, dev + ' installed (dev-only)'
+          assert '--no-sync' in pathlib.Path('/usr/local/bin/start-app').read_text(), 'start-app re-syncs'
           print('image ok')
           "
