@@ -850,6 +850,7 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 - **被邀请者无需确认**，收到即入群
 - 限制：目标必须在线、必须还没在别的群里、**必须与邀请者属于同一个 user_id**（oidc 下即同一登录账号，`chat_group.py:33-38`）
 - 退出/踢人：`{"type":"remove-client-from-group","target_uid":"<uid>"}`；只有**群主或本人**能移除（`chat_group.py:82-84`）；剩 ≤1 人时群自动解散
+- 有权限的移除会先打断正在进行的群聊（与断线相同：取消群任务，向原成员群播 `interrupt-signal`），再变更成员；无权限的移除不影响对话（`websocket_handler.py` `_handle_group_operation`）
 - 断线自动移出，其余成员收到 `group-update` + `"Member <uid> disconnected"`
 
 前端需要知道其它连接的 `client_uid` 才能邀请——服务端不提供"列出同用户所有连接"的接口，需要前端自己在多个标签页间协调（例如 BroadcastChannel）。

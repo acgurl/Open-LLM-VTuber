@@ -137,7 +137,9 @@ async def handle_conversation_trigger(
                     client_contexts=client_contexts,
                     client_connections=client_connections,
                     broadcast_func=broadcast_to_group,
-                    group_members=group.members,
+                    # Snapshot: the live set changes when members join or leave
+                    # while the task awaits.
+                    group_members=list(group.members),
                     initiator_client_uid=client_uid,
                     group_id=group.group_id,
                     user_input=user_input,
@@ -179,8 +181,13 @@ async def handle_individual_interrupt(
     if client_uid in current_conversation_tasks:
         task = current_conversation_tasks[client_uid]
         if task and not task.done():
-            task.cancel()
-            logger.info("🛑 Conversation task was successfully interrupted")
+            # Wait for the task to stop before reading its persisted state, so
+            # the agent and history are not touched while it is still running.
+            await cancel_and_wait(
+                task,
+                failure_message=f"Conversation task {client_uid} failed while interrupting",
+                cancel_message="🛑 Conversation task was successfully interrupted",
+            )
 
         # Generation already finished and the full reply was persisted before
         # playback started; this interrupt only cuts the audio short. Keep the
@@ -249,7 +256,7 @@ async def handle_group_interrupt(
 
     # Store messages with speaker info
     if context and group and heard_response:
-        for member_uid in group.members:
+        for member_uid in list(group.members):
             if member_uid in client_contexts:
                 try:
                     member_ctx = client_contexts[member_uid]

@@ -9,6 +9,19 @@ from starlette.websockets import WebSocketDisconnect
 from .proxy_message_queue import ProxyMessageQueue
 
 
+def _ends_turn(data: dict) -> bool:
+    """Whether a server frame ends the turn of the queued text input.
+
+    ``conversation-chain-end`` is the normal end; an ``error`` frame (busy,
+    invalid input, conversation failure) ends the turn without it.
+    """
+    if data.get("type") == "error":
+        return True
+    return (
+        data.get("type") == "control" and data.get("text") == "conversation-chain-end"
+    )
+
+
 class ProxyHandler:
     """
     A proxy handler that allows multiple clients to connect through a single WebSocket connection to the server.
@@ -224,12 +237,8 @@ class ProxyHandler:
                             if not data:  # Check if parsed data is empty
                                 continue
 
-                            # Check for conversation end signal
-                            if (
-                                data.get("type") == "control"
-                                and data.get("text") == "conversation-chain-end"
-                            ):
-                                logger.info("Received conversation end signal")
+                            if _ends_turn(data):
+                                logger.info(f"Turn ended by server: {data.get('type')}")
                                 self.message_queue.conversation_active = False
 
                             # Broadcast the message to all clients
@@ -282,7 +291,8 @@ class ProxyHandler:
 
         logger.debug(f"Broadcasting to clients (excluding {exclude_client}): {log_msg}")
 
-        for client_id, websocket in self.clients.items():
+        # Snapshot: clients may connect or disconnect while a send is awaited.
+        for client_id, websocket in list(self.clients.items()):
             # Skip the excluded client
             if exclude_client and client_id == exclude_client:
                 continue
@@ -305,9 +315,10 @@ class ProxyHandler:
             message: The message to forward
             sender_id: ID of the client sending the message
         """
-        # Forward to server
-        await self.forward_to_server(message, sender_id)
-
-        # For transcription messages, broadcast to other clients
+        # Transcriptions are a server-to-client message type the server does
+        # not accept; only echo them to the other clients.
         if message.get("type") == "user-input-transcription":
             await self.broadcast_to_clients(message, exclude_client=sender_id)
+            return
+
+        await self.forward_to_server(message, sender_id)

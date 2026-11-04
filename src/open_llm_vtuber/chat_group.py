@@ -287,7 +287,9 @@ async def broadcast_to_group(
     exclude_uid: str | None = None,
 ) -> None:
     """Broadcasts a message to all members in a group except the sender"""
-    for member_uid in group_members:
+    # Iterate a snapshot: callers may pass a live member set that changes
+    # while a send is awaited.
+    for member_uid in list(group_members):
         if member_uid != exclude_uid and member_uid in client_connections:
             try:
                 await client_connections[member_uid].send_text(json.dumps(message))

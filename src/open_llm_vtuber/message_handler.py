@@ -36,7 +36,9 @@ class MessageHandler:
                     await asyncio.wait_for(event.wait(), timeout)
                 else:
                     await event.wait()
-                return self._response_data[client_uid].pop(response_key, None)
+                # .get: cleanup_client may have dropped this client while we
+                # waited; indexing the defaultdict would re-create its entry.
+                return self._response_data.get(client_uid, {}).pop(response_key, None)
             except asyncio.TimeoutError:
                 logger.warning(
                     f"Timeout waiting for {response_type} "
@@ -47,8 +49,8 @@ class MessageHandler:
         try:
             yield wait
         finally:
-            self._response_events[client_uid].pop(response_key, None)
-            self._response_data[client_uid].pop(response_key, None)
+            self._response_events.get(client_uid, {}).pop(response_key, None)
+            self._response_data.get(client_uid, {}).pop(response_key, None)
 
     async def wait_for_response(
         self,
