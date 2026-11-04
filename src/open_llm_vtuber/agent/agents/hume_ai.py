@@ -3,6 +3,7 @@ import base64
 from collections.abc import AsyncIterator, Awaitable, Callable
 import json
 import websockets
+from websockets.protocol import State
 from loguru import logger
 from pathlib import Path
 
@@ -48,6 +49,9 @@ class HumeAIAgent(AgentInterface):
         self._idle_timer = None
         self._metadata_writer = metadata_writer
         self._background_tasks: set[asyncio.Task] = set()
+        # Audio files written by this instance; only these are removed on
+        # cleanup because ./cache is shared with other sessions.
+        self._audio_files: set[Path] = set()
 
         # Create cache directory if it doesn't exist
         self.cache_dir = Path("./cache")
@@ -136,7 +140,7 @@ class HumeAIAgent(AgentInterface):
 
     async def _ensure_connection(self):
         """Ensure connection is alive, reconnect if needed"""
-        if not self._connected or not self._ws or self._ws.closed:
+        if not self._connected or not self._ws or self._ws.state is not State.OPEN:
             await self.connect(self._chat_group_id)
 
     async def set_memory(
@@ -179,76 +183,87 @@ class HumeAIAgent(AgentInterface):
         Returns:
             AsyncIterator[AudioOutput]: Stream of AudioOutput objects
         """
-        try:
+        # Reconnect and resend at most once, and only before any audio was
+        # yielded, so a dropped connection can neither recurse nor duplicate
+        # part of a reply.
+        for attempt in range(2):
+            yielded = False
+            try:
+                async for result in self._chat_once(batch_input):
+                    yielded = True
+                    yield result
+                return
+            except websockets.exceptions.ConnectionClosed as e:
+                self._connected = False
+                if attempt or yielded:
+                    logger.error(f"Connection closed during chat: {e}")
+                    raise
+                logger.warning(f"Connection closed: {e}, attempting to reconnect...")
+            except Exception as e:
+                logger.error(f"Error in chat: {e}")
+                raise
+
+    async def _chat_once(self, batch_input: BatchInput) -> AsyncIterator[AudioOutput]:
+        """Send one user input and stream the reply over the current socket."""
+        self._reset_idle_timer()
+        await self._ensure_connection()
+
+        # Extract main text from BatchInput
+        input_text = batch_input.texts[0].content if batch_input.texts else ""
+
+        # Hume AI doesn't support image input, log warning if images present
+        if batch_input.images:
+            logger.warning(
+                "Hume AI does not support image input. Images will be ignored."
+            )
+
+        message = {
+            "type": "user_input",
+            "text": input_text,
+        }
+        await self._ws.send(json.dumps(message))
+
+        async for message in self._ws:
             self._reset_idle_timer()
-            await self._ensure_connection()
+            logger.debug(f"Received message: {message}")
+            try:
+                response_data = json.loads(message)
+                msg_type = response_data.get("type")
+                msg_id = response_data.get("id")
 
-            # Extract main text from BatchInput
-            input_text = batch_input.texts[0].content if batch_input.texts else ""
+                if msg_type == "assistant_message":
+                    self._current_text = response_data["message"]["content"]
+                    self._current_id = msg_id
 
-            # Hume AI doesn't support image input, log warning if images present
-            if batch_input.images:
-                logger.warning(
-                    "Hume AI does not support image input. Images will be ignored."
-                )
+                elif msg_type == "audio_output":
+                    if msg_id == self._current_id and self._current_text:
+                        audio_data = base64.b64decode(response_data["data"])
+                        cache_file = self.cache_dir / f"evi_audio_{msg_id}.wav"
 
-            message = {
-                "type": "user_input",
-                "text": input_text,
-            }
-            await self._ws.send(json.dumps(message))
+                        await asyncio.to_thread(cache_file.write_bytes, audio_data)
+                        self._audio_files.add(cache_file)
+                        logger.debug(f"Saved audio to cache file: {cache_file}")
 
-            async for message in self._ws:
-                self._reset_idle_timer()
-                logger.debug(f"Received message: {message}")
-                try:
-                    response_data = json.loads(message)
-                    msg_type = response_data.get("type")
-                    msg_id = response_data.get("id")
+                        # Create AudioOutput with DisplayText
+                        yield AudioOutput(
+                            audio_path=str(cache_file),
+                            display_text=DisplayText(text=self._current_text),
+                            transcript=self._current_text,
+                            actions=Actions(),
+                        )
 
-                    if msg_type == "assistant_message":
-                        self._current_text = response_data["message"]["content"]
-                        self._current_id = msg_id
+                        self._current_text = None
+                        self._current_id = None
 
-                    elif msg_type == "audio_output":
-                        if msg_id == self._current_id and self._current_text:
-                            audio_data = base64.b64decode(response_data["data"])
-                            cache_file = self.cache_dir / f"evi_audio_{msg_id}.wav"
+                elif msg_type == "assistant_end":
+                    break
 
-                            await asyncio.to_thread(cache_file.write_bytes, audio_data)
-                            logger.debug(f"Saved audio to cache file: {cache_file}")
+                elif msg_type == "tool_error_message":
+                    logger.error(f"Tool error: {response_data.get('error')}")
 
-                            # Create AudioOutput with DisplayText
-                            yield AudioOutput(
-                                audio_path=str(cache_file),
-                                display_text=DisplayText(text=self._current_text),
-                                transcript=self._current_text,
-                                actions=Actions(),
-                            )
-
-                            self._current_text = None
-                            self._current_id = None
-
-                    elif msg_type == "assistant_end":
-                        break
-
-                    elif msg_type == "tool_error_message":
-                        logger.error(f"Tool error: {response_data.get('error')}")
-
-                except json.JSONDecodeError as e:
-                    logger.error(f"Failed to parse response JSON: {e}")
-                    continue
-
-        except websockets.exceptions.ConnectionClosed as e:
-            logger.warning(f"Connection closed: {e}, attempting to reconnect...")
-            self._connected = False
-            await self._ensure_connection()
-            async for result in self.chat(batch_input):
-                yield result
-
-        except Exception as e:
-            logger.error(f"Error in chat: {e}")
-            raise
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse response JSON: {e}")
+                continue
 
     async def close(self) -> None:
         """Release the WebSocket and any background tasks."""
@@ -266,17 +281,13 @@ class HumeAIAgent(AgentInterface):
         self._connected = False
 
     def __del__(self):
-        """Cleanup cache files."""
+        """Remove the audio files this instance wrote."""
         idle_timer = getattr(self, "_idle_timer", None)
         if idle_timer:
             idle_timer.cancel()
 
-        cache_dir = getattr(self, "cache_dir", None)
-        if cache_dir is None:
-            return
-
-        try:
-            for file in cache_dir.glob("evi_audio_*.wav"):
-                file.unlink()
-        except Exception as e:
-            logger.error(f"Error cleaning up cache files: {e}")
+        for file in getattr(self, "_audio_files", ()):
+            try:
+                file.unlink(missing_ok=True)
+            except Exception as e:
+                logger.error(f"Error cleaning up cache file {file}: {e}")
