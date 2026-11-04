@@ -3,6 +3,7 @@ from typing import (
     Literal,
 )
 from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass, field
 from loguru import logger
 from .agent_interface import AgentInterface
 from ..output_types import SentenceOutput
@@ -29,6 +30,22 @@ from ...mcpp.tool_executor import ToolExecutor
 # failing) must not loop, and bill, without bound.
 DEFAULT_MAX_TOOL_ROUNDS = 10
 TOOL_ROUND_LIMIT_NOTICE = "[Stopped: too many consecutive tool calls]"
+TOOL_EXECUTOR_MISSING_NOTICE = "[Error: ToolExecutor not configured]"
+
+
+@dataclass
+class _RoundOutcome:
+    """What one streamed LLM round produced."""
+
+    text: str = ""
+    tool_calls: list[Any] = field(default_factory=list)
+    # Claude assistant content blocks (text and tool_use), in stream order.
+    content: list[dict[str, Any]] = field(default_factory=list)
+    # Tool JSON detected in prompt mode.
+    prompt_json: list[dict[str, Any]] | None = None
+    switched_to_prompt: bool = False
+    # The turn ends after this round (LLM error, no executor, no valid tool).
+    finished: bool = False
 
 
 class BasicMemoryAgent(AgentInterface):
@@ -372,6 +389,100 @@ class BasicMemoryAgent(AgentInterface):
         ):
             yield update
 
+    @staticmethod
+    def _tool_results_messages(
+        caller_mode: Literal["Claude", "OpenAI", "Prompt"],
+        results: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Shape tool results as the next request's messages for each mode."""
+        if caller_mode == "Claude":
+            return [{"role": "user", "content": results}]
+        if caller_mode == "Prompt":
+            result_strings = [
+                res.get("content", "Error: Malformed result") for res in results
+            ]
+            return [{"role": "user", "content": "\n".join(result_strings)}]
+        return results
+
+    def _missing_tool_executor_notice(self, caller_mode: str) -> str | None:
+        """Return the error to show when tools were requested but cannot run."""
+        if self._tool_executor:
+            return None
+        logger.error(
+            f"{caller_mode} tool interaction requested but ToolExecutor is not available."
+        )
+        return TOOL_EXECUTOR_MISSING_NOTICE
+
+    async def _run_tool_round(
+        self,
+        messages: list[dict[str, Any]],
+        *,
+        assistant_message: dict[str, Any],
+        memory_text: str,
+        tool_calls: list[ToolCallObject] | list[dict[str, Any]],
+        caller_mode: Literal["Claude", "OpenAI", "Prompt"],
+        label: str,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Record the tool-call turn, run the tools and feed the results back.
+
+        Callers check ``_missing_tool_executor_notice`` first, so a turn that
+        cannot run its tools leaves ``messages`` and memory untouched.
+        """
+        messages.append(assistant_message)
+        if memory_text:
+            self._add_message(memory_text, "assistant")
+
+        results: list[dict[str, Any]] = []
+        async for update in self._execute_tool_calls(
+            tool_calls,
+            caller_mode=caller_mode,
+            label=label,
+            results=results,
+        ):
+            yield update
+
+        if results:
+            messages.extend(self._tool_results_messages(caller_mode, results))
+
+    async def _stream_claude_round(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        outcome: _RoundOutcome,
+    ) -> AsyncIterator[str]:
+        """Stream one Claude response, collecting text and tool_use blocks."""
+        stream = self._llm.chat_completion(messages, self._system, tools=tools)
+        async for event in stream:
+            if event["type"] == "text_delta":
+                text = event["text"]
+                outcome.text += text
+                yield text
+                if not outcome.content or outcome.content[-1]["type"] != "text":
+                    outcome.content.append({"type": "text", "text": text})
+                else:
+                    outcome.content[-1]["text"] += text
+            elif event["type"] == "tool_use_complete":
+                tool_call_data = event["data"]
+                logger.info(
+                    f"Tool request: {tool_call_data['name']} (ID: {tool_call_data['id']})"
+                )
+                outcome.tool_calls.append(tool_call_data)
+                outcome.content.append(
+                    {
+                        "type": "tool_use",
+                        "id": tool_call_data["id"],
+                        "name": tool_call_data["name"],
+                        "input": tool_call_data["input"],
+                    }
+                )
+            elif event["type"] == "message_stop":
+                break
+            elif event["type"] == "error":
+                logger.error(f"LLM API Error: {event['message']}")
+                outcome.finished = True
+                yield f"[Error from LLM: {event['message']}]"
+                return
+
     async def _claude_tool_interaction_loop(
         self,
         initial_messages: list[dict[str, Any]],
@@ -379,101 +490,170 @@ class BasicMemoryAgent(AgentInterface):
     ) -> AsyncIterator[str | dict[str, Any]]:
         """Handle Claude interaction loop with tool support."""
         messages = initial_messages.copy()
-        current_turn_text = ""
-        pending_tool_calls = []
-        current_assistant_message_content = []
 
         for _round in range(self._max_tool_rounds):
-            stream = self._llm.chat_completion(messages, self._system, tools=tools)
-            pending_tool_calls.clear()
-            current_assistant_message_content.clear()
-            current_turn_text = ""
+            outcome = _RoundOutcome()
+            async for text in self._stream_claude_round(messages, tools, outcome):
+                yield text
+            if outcome.finished:
+                return
 
-            async for event in stream:
-                if event["type"] == "text_delta":
-                    text = event["text"]
-                    current_turn_text += text
-                    yield text
-                    if (
-                        not current_assistant_message_content
-                        or current_assistant_message_content[-1]["type"] != "text"
-                    ):
-                        current_assistant_message_content.append(
-                            {"type": "text", "text": text}
-                        )
-                    else:
-                        current_assistant_message_content[-1]["text"] += text
-                elif event["type"] == "tool_use_complete":
-                    tool_call_data = event["data"]
-                    logger.info(
-                        f"Tool request: {tool_call_data['name']} (ID: {tool_call_data['id']})"
-                    )
-                    pending_tool_calls.append(tool_call_data)
-                    current_assistant_message_content.append(
-                        {
-                            "type": "tool_use",
-                            "id": tool_call_data["id"],
-                            "name": tool_call_data["name"],
-                            "input": tool_call_data["input"],
-                        }
-                    )
-                elif event["type"] == "message_stop":
-                    break
-                elif event["type"] == "error":
-                    logger.error(f"LLM API Error: {event['message']}")
-                    yield f"[Error from LLM: {event['message']}]"
-                    return
+            if not outcome.tool_calls:
+                if outcome.text:
+                    self._add_message(outcome.text, "assistant")
+                return
 
-            if pending_tool_calls:
-                filtered_assistant_content = [
-                    block
-                    for block in current_assistant_message_content
-                    if not (
-                        block.get("type") == "text"
-                        and not block.get("text", "").strip()
-                    )
-                ]
+            notice = self._missing_tool_executor_notice("Claude")
+            if notice:
+                yield notice
+                return
 
-                if filtered_assistant_content:
-                    messages.append(
-                        {"role": "assistant", "content": filtered_assistant_content}
-                    )
-                    assistant_text_for_memory = "".join(
-                        [
-                            c["text"]
-                            for c in filtered_assistant_content
-                            if c["type"] == "text"
-                        ]
-                    ).strip()
-                    if assistant_text_for_memory:
-                        self._add_message(assistant_text_for_memory, "assistant")
-
-                tool_results_for_llm = []
-                if not self._tool_executor:
-                    logger.error(
-                        "Claude Tool interaction requested but ToolExecutor is not available."
-                    )
-                    yield "[Error: ToolExecutor not configured]"
-                    return
-
-                async for update in self._execute_tool_calls(
-                    pending_tool_calls,
-                    caller_mode="Claude",
-                    label="Tool executor",
-                    results=tool_results_for_llm,
-                ):
-                    yield update
-
-                if tool_results_for_llm:
-                    messages.append({"role": "user", "content": tool_results_for_llm})
-
-                continue
-            if current_turn_text:
-                self._add_message(current_turn_text, "assistant")
-            return
+            # Whitespace-only text blocks are dropped from the Claude request
+            # and the remembered text is stripped; the OpenAI paths keep the
+            # raw streamed text. The difference is long-standing and kept.
+            assistant_content = [
+                block
+                for block in outcome.content
+                if not (
+                    block.get("type") == "text" and not block.get("text", "").strip()
+                )
+            ]
+            memory_text = "".join(
+                block["text"] for block in assistant_content if block["type"] == "text"
+            ).strip()
+            async for update in self._run_tool_round(
+                messages,
+                assistant_message={"role": "assistant", "content": assistant_content},
+                memory_text=memory_text,
+                tool_calls=outcome.tool_calls,
+                caller_mode="Claude",
+                label="Tool executor",
+            ):
+                yield update
 
         logger.warning(f"Claude tool loop stopped after {self._max_tool_rounds} rounds")
         yield TOOL_ROUND_LIMIT_NOTICE
+
+    def _openai_round_request(
+        self, tools: list[dict[str, Any]]
+    ) -> tuple[str, list[dict[str, Any]] | None]:
+        """Return the system prompt and native tools for the next request."""
+        if not self.prompt_mode_flag:
+            return self._system, tools
+        if not self._mcp_prompt_string:
+            logger.warning("Prompt mode active but mcp_prompt_string is empty!")
+            return self._system, None
+        return f"{self._system}\n\n{self._mcp_prompt_string}", None
+
+    async def _stream_openai_round(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        outcome: _RoundOutcome,
+    ) -> AsyncIterator[str]:
+        """Stream one OpenAI-compatible response into ``outcome``.
+
+        In prompt mode the text is scanned for tool JSON; natively the LLM
+        yields a list of ``ToolCallObject``.
+        """
+        system_prompt, tools_for_api = self._openai_round_request(tools)
+        stream = self._llm.chat_completion(messages, system_prompt, tools=tools_for_api)
+        async for event in stream:
+            if self.prompt_mode_flag:
+                if isinstance(event, str):
+                    outcome.text += event
+                    detected = self._json_detector.process_chunk(event)
+                    if detected:
+                        outcome.prompt_json = detected
+                        break
+                    yield event
+            elif event == "__API_NOT_SUPPORT_TOOLS__":
+                logger.warning(
+                    f"LLM {getattr(self._llm, 'model', '')} has no native tool support. Switching to prompt mode."
+                )
+                self.prompt_mode_flag = True
+                self._json_detector.reset()
+                outcome.switched_to_prompt = True
+                break
+            elif isinstance(event, str):
+                outcome.text += event
+                yield event
+            elif isinstance(event, list) and all(
+                isinstance(tc, ToolCallObject) for tc in event
+            ):
+                outcome.tool_calls = event
+                break
+
+    async def _openai_native_tool_round(
+        self, messages: list[dict[str, Any]], outcome: _RoundOutcome
+    ) -> AsyncIterator[str | dict[str, Any]]:
+        """Run the native tool calls of one OpenAI round."""
+        notice = self._missing_tool_executor_notice("OpenAI")
+        if notice:
+            outcome.finished = True
+            yield notice
+            return
+
+        assistant_message = {
+            "role": "assistant",
+            "content": outcome.text if outcome.text else None,
+            "tool_calls": [
+                {
+                    "id": tc.id,
+                    "type": tc.type,
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments,
+                    },
+                }
+                for tc in outcome.tool_calls
+            ],
+        }
+        async for update in self._run_tool_round(
+            messages,
+            assistant_message=assistant_message,
+            memory_text=outcome.text,
+            tool_calls=outcome.tool_calls,
+            caller_mode="OpenAI",
+            label="OpenAI tool executor",
+        ):
+            yield update
+
+    async def _openai_prompt_tool_round(
+        self, messages: list[dict[str, Any]], outcome: _RoundOutcome
+    ) -> AsyncIterator[str | dict[str, Any]]:
+        """Run the tool JSON a prompt-mode round produced."""
+        logger.info("Processing tools detected via prompt mode JSON.")
+        self._json_detector.reset()
+
+        notice = self._missing_tool_executor_notice("Prompt")
+        if notice:
+            outcome.finished = True
+            yield notice
+            return
+
+        parsed_tools = self._tool_executor.process_tool_from_prompt_json(
+            outcome.prompt_json
+        )
+        if not parsed_tools:
+            # JSON that names no runnable tool is the model's answer, as a
+            # native turn without tool calls is; re-sending the same messages
+            # would only repeat it up to the round limit.
+            logger.warning("Prompt mode JSON contained no valid tool call.")
+            self._add_message(outcome.text, "assistant")
+            outcome.finished = True
+            return
+
+        # Keep the tool-call response in context, as native mode does.
+        async for update in self._run_tool_round(
+            messages,
+            assistant_message={"role": "assistant", "content": outcome.text},
+            memory_text=outcome.text,
+            tool_calls=parsed_tools,
+            caller_mode="Prompt",
+            label="Prompt mode tool executor",
+        ):
+            yield update
 
     async def _openai_tool_interaction_loop(
         self,
@@ -482,155 +662,79 @@ class BasicMemoryAgent(AgentInterface):
     ) -> AsyncIterator[str | dict[str, Any]]:
         """Handle OpenAI interaction with tool support."""
         messages = initial_messages.copy()
-        current_turn_text = ""
-        pending_tool_calls: list[ToolCallObject] | list[dict[str, Any]] = []
-        current_system_prompt = self._system
 
         for _round in range(self._max_tool_rounds):
-            if self.prompt_mode_flag:
-                if self._mcp_prompt_string:
-                    current_system_prompt = (
-                        f"{self._system}\n\n{self._mcp_prompt_string}"
-                    )
-                else:
-                    logger.warning("Prompt mode active but mcp_prompt_string is empty!")
-                    current_system_prompt = self._system
-                tools_for_api = None
+            outcome = _RoundOutcome()
+            async for text in self._stream_openai_round(messages, tools, outcome):
+                yield text
+            if outcome.switched_to_prompt:
+                continue
+
+            if outcome.prompt_json:
+                tool_round = self._openai_prompt_tool_round(messages, outcome)
+            elif outcome.tool_calls:
+                tool_round = self._openai_native_tool_round(messages, outcome)
             else:
-                current_system_prompt = self._system
-                tools_for_api = tools
+                if outcome.text:
+                    self._add_message(outcome.text, "assistant")
+                return
 
-            stream = self._llm.chat_completion(
-                messages, current_system_prompt, tools=tools_for_api
-            )
-            pending_tool_calls.clear()
-            current_turn_text = ""
-            assistant_message_for_api = None
-            detected_prompt_json = None
-            goto_next_while_iteration = False
-
-            async for event in stream:
-                if self.prompt_mode_flag:
-                    if isinstance(event, str):
-                        current_turn_text += event
-                        if self._json_detector:
-                            potential_json = self._json_detector.process_chunk(event)
-                            if isinstance(potential_json, list) and potential_json:
-                                detected_prompt_json = potential_json
-                                break
-                            if isinstance(potential_json, dict):
-                                detected_prompt_json = [potential_json]
-                                break
-                        yield event
-                elif event == "__API_NOT_SUPPORT_TOOLS__":
-                    logger.warning(
-                        f"LLM {getattr(self._llm, 'model', '')} has no native tool support. Switching to prompt mode."
-                    )
-                    self.prompt_mode_flag = True
-                    if self._json_detector:
-                        self._json_detector.reset()
-                    goto_next_while_iteration = True
-                    break
-                elif isinstance(event, str):
-                    current_turn_text += event
-                    yield event
-                elif isinstance(event, list) and all(
-                    isinstance(tc, ToolCallObject) for tc in event
-                ):
-                    pending_tool_calls = event
-                    assistant_message_for_api = {
-                        "role": "assistant",
-                        "content": current_turn_text if current_turn_text else None,
-                        "tool_calls": [
-                            {
-                                "id": tc.id,
-                                "type": tc.type,
-                                "function": {
-                                    "name": tc.function.name,
-                                    "arguments": tc.function.arguments,
-                                },
-                            }
-                            for tc in pending_tool_calls
-                        ],
-                    }
-                    break
-            if goto_next_while_iteration:
-                continue
-
-            if detected_prompt_json:
-                logger.info("Processing tools detected via prompt mode JSON.")
-                if self._json_detector:
-                    self._json_detector.reset()
-                self._add_message(current_turn_text, "assistant")
-
-                if not self._tool_executor:
-                    logger.error(
-                        "Prompt Tool interaction requested but ToolExecutor/MCPClient is not available."
-                    )
-                    yield "[Error: ToolExecutor/MCPClient not configured for prompt mode]"
-                    return
-
-                parsed_tools = self._tool_executor.process_tool_from_prompt_json(
-                    detected_prompt_json
-                )
-                if not parsed_tools:
-                    # JSON that names no runnable tool is the model's answer,
-                    # as a native turn without tool calls is; re-sending the
-                    # same messages would only repeat it up to the round limit.
-                    logger.warning("Prompt mode JSON contained no valid tool call.")
-                    return
-
-                # Keep the tool-call response in context, as native mode does.
-                messages.append({"role": "assistant", "content": current_turn_text})
-                tool_results_for_llm = []
-                async for update in self._execute_tool_calls(
-                    parsed_tools,
-                    caller_mode="Prompt",
-                    label="Prompt mode tool executor",
-                    results=tool_results_for_llm,
-                ):
-                    yield update
-
-                if tool_results_for_llm:
-                    result_strings = [
-                        res.get("content", "Error: Malformed result")
-                        for res in tool_results_for_llm
-                    ]
-                    combined_results_str = "\n".join(result_strings)
-                    messages.append({"role": "user", "content": combined_results_str})
-                continue
-
-            elif pending_tool_calls and assistant_message_for_api:
-                messages.append(assistant_message_for_api)
-                if current_turn_text:
-                    self._add_message(current_turn_text, "assistant")
-
-                tool_results_for_llm = []
-                if not self._tool_executor:
-                    logger.error(
-                        "OpenAI Tool interaction requested but ToolExecutor/MCPClient is not available."
-                    )
-                    yield "[Error: ToolExecutor/MCPClient not configured for OpenAI mode]"
-                    return
-
-                async for update in self._execute_tool_calls(
-                    pending_tool_calls,
-                    caller_mode="OpenAI",
-                    label="OpenAI tool executor",
-                    results=tool_results_for_llm,
-                ):
-                    yield update
-
-                if tool_results_for_llm:
-                    messages.extend(tool_results_for_llm)
-                continue
-
-            if current_turn_text:
-                self._add_message(current_turn_text, "assistant")
-            return
+            async for item in tool_round:
+                yield item
+            if outcome.finished:
+                return
 
         logger.warning(f"OpenAI tool loop stopped after {self._max_tool_rounds} rounds")
         yield TOOL_ROUND_LIMIT_NOTICE
+
+    def _select_tool_mode(
+        self,
+    ) -> tuple[Literal["Claude", "OpenAI"] | None, list[dict[str, Any]] | None]:
+        """Pick the tool loop for the current LLM, or ``None`` for plain chat."""
+        if not (self._use_mcpp and self._tool_manager):
+            return None, None
+
+        if isinstance(self._llm, ClaudeAsyncLLM):
+            tool_mode, tools = "Claude", self._formatted_tools_claude
+        elif isinstance(self._llm, OpenAICompatibleAsyncLLM):
+            tool_mode, tools = "OpenAI", self._formatted_tools_openai
+            # The LLM client remembers a provider that rejected native
+            # tools; start in prompt mode so the MCP prompt is injected.
+            if not getattr(self._llm, "support_tools", True):
+                self.prompt_mode_flag = True
+                self._json_detector.reset()
+        else:
+            logger.warning(
+                f"LLM type {type(self._llm)} not explicitly handled for tool mode determination."
+            )
+            return None, None
+
+        if not tools:
+            logger.warning(
+                f"No tools available/formatted for '{tool_mode}' mode, despite MCP being enabled."
+            )
+        return tool_mode, tools
+
+    async def _simple_chat(
+        self, messages: list[dict[str, Any]]
+    ) -> AsyncIterator[str | dict[str, Any]]:
+        """Stream a completion without tools and remember the reply."""
+        logger.info("Starting simple chat completion.")
+        token_stream = self._llm.chat_completion(messages, self._system)
+        complete_response = ""
+        async for event in token_stream:
+            if isinstance(event, dict) and event.get("type") == "text_delta":
+                text_chunk = event.get("text", "")
+            elif isinstance(event, str):
+                text_chunk = event
+            else:
+                continue
+            if text_chunk:
+                yield make_text_delta(text_chunk)
+                yield text_chunk
+                complete_response += text_chunk
+        if complete_response:
+            self._add_message(complete_response, "assistant")
 
     def _chat_function_factory(
         self,
@@ -653,77 +757,29 @@ class BasicMemoryAgent(AgentInterface):
             self.prompt_mode_flag = False
 
             messages = self._to_messages(input_data)
-            tools = None
-            tool_mode = None
-            llm_supports_native_tools = False
+            tool_mode, tools = self._select_tool_mode()
 
-            if self._use_mcpp and self._tool_manager:
-                tools = None
-                if isinstance(self._llm, ClaudeAsyncLLM):
-                    tool_mode = "Claude"
-                    tools = self._formatted_tools_claude
-                    llm_supports_native_tools = True
-                elif isinstance(self._llm, OpenAICompatibleAsyncLLM):
-                    tool_mode = "OpenAI"
-                    tools = self._formatted_tools_openai
-                    llm_supports_native_tools = True
-                    # The LLM client remembers a provider that rejected native
-                    # tools; start in prompt mode so the MCP prompt is injected.
-                    if not getattr(self._llm, "support_tools", True):
-                        self.prompt_mode_flag = True
-                        if self._json_detector:
-                            self._json_detector.reset()
-                else:
-                    logger.warning(
-                        f"LLM type {type(self._llm)} not explicitly handled for tool mode determination."
-                    )
-
-                if llm_supports_native_tools and not tools:
-                    logger.warning(
-                        f"No tools available/formatted for '{tool_mode}' mode, despite MCP being enabled."
-                    )
-
-            if self._use_mcpp and tool_mode == "Claude":
+            if tool_mode == "Claude":
                 logger.debug(
                     f"Starting Claude tool interaction loop with {len(tools)} tools."
                 )
-                stream = self._claude_tool_interaction_loop(
-                    messages, tools if tools else []
+                stream = self._stream_with_text_deltas(
+                    self._claude_tool_interaction_loop(messages, tools or [])
                 )
-                async for output in self._stream_with_text_deltas(stream):
-                    yield output
-                return
-            elif self._use_mcpp and tool_mode == "OpenAI":
+            elif tool_mode == "OpenAI":
                 logger.debug(
                     f"Starting OpenAI tool interaction loop with {len(tools)} tools."
                 )
-                stream = self._openai_tool_interaction_loop(
-                    messages, tools if tools else []
-                )
                 # Prompt-mode tool JSON is not display text; stream only native turns.
-                async for output in self._stream_with_text_deltas(
-                    stream, enabled=lambda: not self.prompt_mode_flag
-                ):
-                    yield output
-                return
+                stream = self._stream_with_text_deltas(
+                    self._openai_tool_interaction_loop(messages, tools or []),
+                    enabled=lambda: not self.prompt_mode_flag,
+                )
             else:
-                logger.info("Starting simple chat completion.")
-                token_stream = self._llm.chat_completion(messages, self._system)
-                complete_response = ""
-                async for event in token_stream:
-                    text_chunk = ""
-                    if isinstance(event, dict) and event.get("type") == "text_delta":
-                        text_chunk = event.get("text", "")
-                    elif isinstance(event, str):
-                        text_chunk = event
-                    else:
-                        continue
-                    if text_chunk:
-                        yield make_text_delta(text_chunk)
-                        yield text_chunk
-                        complete_response += text_chunk
-                if complete_response:
-                    self._add_message(complete_response, "assistant")
+                stream = self._simple_chat(messages)
+
+            async for output in stream:
+                yield output
 
         return chat_with_memory
 

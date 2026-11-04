@@ -135,6 +135,3 @@ class StreamJSONDetector:
         self.potential_jsons = []
         self.completed_jsons = []
         self.processed_ranges = []
-
-
-# Usage example

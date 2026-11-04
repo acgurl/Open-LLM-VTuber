@@ -139,8 +139,6 @@ class ToolAdapter:
                 input_schema=schema,
                 related_server=server_name,
                 description=description,
-                # Generic schema will be generated later if needed
-                generic_schema=None,
                 remote_name=tool.name,
             )
 

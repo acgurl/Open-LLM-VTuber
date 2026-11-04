@@ -109,12 +109,14 @@ class ServerRegistry:
         self, server_name: str, server_details: dict[str, Any]
     ) -> MCPServer | None:
         url = server_details.get("url")
-        if not self._is_valid_http_url(url):
+        try:
+            parse_mcp_url(url)
+        except ValueError:
             logger.warning(f"MCPSR: Invalid HTTP url for '{server_name}'. Ignoring.")
             return None
 
         headers = server_details.get("headers")
-        if headers is not None and not self._is_valid_headers(headers):
+        if headers is not None and not headers_are_string_pairs(headers):
             logger.warning(
                 f"MCPSR: Invalid HTTP headers for '{server_name}'. Ignoring."
             )
@@ -171,26 +173,6 @@ class ServerRegistry:
             cwd=server_details.get("cwd"),
             timeout=server_details.get("timeout"),
         )
-
-    @staticmethod
-    def _is_valid_http_url(url: Any) -> bool:
-        try:
-            parse_mcp_url(url)
-        except ValueError:
-            return False
-        return True
-
-    @staticmethod
-    def _is_valid_headers(headers: Any) -> bool:
-        return headers_are_string_pairs(headers)
-
-    def remove_server(self, server_name: str) -> None:
-        """Remove a server from the available servers."""
-        try:
-            self.servers.pop(server_name)
-            logger.info(f"MCPSR: Removed server: {server_name}")
-        except KeyError:
-            logger.warning(f"MCPSR: Server '{server_name}' not found. Cannot remove.")
 
     def get_server(self, server_name: str) -> MCPServer | None:
         """Get the server by name."""

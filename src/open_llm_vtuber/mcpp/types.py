@@ -13,7 +13,7 @@ class MCPServer:
         args (list[str], optional): Arguments for the command. Defaults to an empty list.
         env (Optional[dict[str, str]], optional): Environment variables for the command. Defaults to None.
         cwd (Optional[str], optional): Working directory for the command. Defaults to None.
-        timeout (Optional[timedelta], optional): Timeout for the command. Defaults to 10 seconds.
+        timeout (Optional[timedelta], optional): Timeout for the server. Defaults to 30 seconds.
         url (Optional[str], optional): Streamable HTTP endpoint for remote servers.
         headers (Optional[dict[str, str]], optional): HTTP headers sent to an HTTP server.
     """
@@ -42,7 +42,6 @@ class FormattedTool:
     Args:
         input_schema (dict[str, Any]): Input schema for the tool.
         related_server (str): The name of the server that contains the tool.
-        generic_schema (Optional[dict[str, Any]], optional): Generic schema for the tool. Defaults to None.
         description (str, optional): Description of the tool, usually from the server's tool definition. Defaults to "No description available.".
         remote_name (Optional[str], optional): Name to send to the MCP server when
             the exposed name was namespaced. Defaults to the exposed name.
@@ -50,7 +49,6 @@ class FormattedTool:
 
     input_schema: dict[str, Any]
     related_server: str
-    generic_schema: dict[str, Any] | None = None
     description: str = "No description available."
     remote_name: str | None = None
 

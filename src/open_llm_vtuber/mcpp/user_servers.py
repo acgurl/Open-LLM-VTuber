@@ -47,20 +47,20 @@ _BLOCKED_HEADERS = {
     "transfer-encoding",
     "upgrade",
 }
+# Never public: validate_public_https_url rejects these without a DNS lookup.
 _BLOCKED_HOST_SUFFIXES = (
+    ".home.arpa",
     ".internal",
     ".local",
     ".localhost",
-    ".home.arpa",
 )
+# classify_mcp_url also treats common LAN-only suffixes as browser-local;
+# validate_public_https_url leaves those to the DNS check instead.
 _LOCAL_HOST_SUFFIXES = (
+    *_BLOCKED_HOST_SUFFIXES,
     ".corp",
     ".home",
-    ".home.arpa",
-    ".internal",
     ".lan",
-    ".local",
-    ".localhost",
 )
 _USER_MCP_ENTRY_KEYS = {"url", "headers", "enabled", "type", "transport"}
 _TRANSPORT_ALIASES = {
@@ -181,6 +181,24 @@ def parse_mcp_url(url: Any):
     return parsed
 
 
+def _resolve_addresses(host: str, port: int) -> set[str]:
+    """Resolve ``host`` to its IP addresses, rejecting names that do not resolve."""
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise ValueError("url host could not be resolved") from exc
+    if not infos:
+        raise ValueError("url host could not be resolved")
+    return {info[4][0] for info in infos}
+
+
+def _resolves_to_public(host: str, port: int) -> bool:
+    """True when every address ``host`` resolves to is public."""
+    return all(
+        _is_public_address(address) for address in _resolve_addresses(host, port)
+    )
+
+
 def _is_local_hostname(host: str) -> bool:
     if (
         host == "localhost"
@@ -214,16 +232,8 @@ def classify_mcp_url(url: Any) -> str:
     except ValueError:
         is_ip_literal = False
 
-    if not is_ip_literal:
-        try:
-            infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-        except socket.gaierror as exc:
-            raise ValueError("url host could not be resolved") from exc
-        if not infos:
-            raise ValueError("url host could not be resolved")
-        addresses = {info[4][0] for info in infos}
-        if any(not _is_public_address(address) for address in addresses):
-            return "local"
+    if not is_ip_literal and not _resolves_to_public(host, port):
+        return "local"
 
     if parsed.scheme != "https":
         raise ValueError("remote MCP url must use https")
@@ -246,20 +256,8 @@ def validate_public_https_url(url: Any) -> str:
     ):
         raise ValueError("url must point at a public host")
 
-    try:
-        port = parsed.port or 443
-    except ValueError as exc:
-        raise ValueError("url contains an invalid port") from exc
-
-    try:
-        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-    except socket.gaierror as exc:
-        raise ValueError("url host could not be resolved") from exc
-    if not infos:
-        raise ValueError("url host could not be resolved")
-
-    addresses = {info[4][0] for info in infos}
-    if not all(_is_public_address(address) for address in addresses):
+    # parse_mcp_url already rejected an invalid port.
+    if not _resolves_to_public(host, parsed.port or 443):
         raise ValueError("url must not resolve to a private or reserved address")
 
     return url
@@ -339,6 +337,43 @@ def local_server_key(server_id: str) -> str:
     return f"local:{server_id}"
 
 
+def _parse_user_mcp_entry(raw_name: Any, entry: Any) -> dict:
+    """Validate one ``mcp_servers`` entry and classify it as local or remote."""
+    name = validate_server_name(raw_name)
+    if not isinstance(entry, dict):
+        raise ValueError(f"server '{name}' must be an object")
+    unknown = set(entry) - _USER_MCP_ENTRY_KEYS
+    if unknown:
+        raise ValueError(
+            f"server '{name}' has unsupported keys: "
+            f"{', '.join(sorted(unknown))}; only url/headers/enabled/"
+            "type/transport are allowed (stdio commands cannot run on "
+            "the server)"
+        )
+    if "type" in entry and "transport" in entry:
+        if normalize_mcp_transport(entry["type"]) != normalize_mcp_transport(
+            entry["transport"]
+        ):
+            raise ValueError(f"server '{name}' has conflicting type and transport")
+    transport = normalize_mcp_transport(
+        entry.get("transport", entry.get("type", "http"))
+    )
+    url = entry.get("url")
+    mode = classify_mcp_url(url)
+    headers = validate_headers(entry.get("headers"))
+    enabled = entry.get("enabled", True)
+    if not isinstance(enabled, bool):
+        raise ValueError(f"server '{name}' enabled must be a boolean")
+    return {
+        "name": name,
+        "url": url,
+        "headers": headers,
+        "enabled": enabled,
+        "mode": mode,
+        "transport": transport,
+    }
+
+
 def parse_user_mcp_config(config: Any) -> list[dict]:
     """Validate one user-edited ``mcp_servers`` document.
 
@@ -355,50 +390,14 @@ def parse_user_mcp_config(config: Any) -> list[dict]:
     if "mcp_servers" in config and "mcpServers" in config:
         raise ValueError("use either mcp_servers or mcpServers, not both")
     servers = config.get("mcp_servers", config.get("mcpServers"))
-    if servers is None:
-        raise ValueError("config.mcp_servers must be an object")
     if not isinstance(servers, dict):
         raise ValueError("config.mcp_servers must be an object")
     if len(servers) > MAX_USER_MCP_SERVERS:
         raise ValueError(f"At most {MAX_USER_MCP_SERVERS} MCP servers are allowed")
 
-    parsed: list[dict] = []
-    for raw_name, entry in servers.items():
-        name = validate_server_name(raw_name)
-        if not isinstance(entry, dict):
-            raise ValueError(f"server '{name}' must be an object")
-        unknown = set(entry) - _USER_MCP_ENTRY_KEYS
-        if unknown:
-            raise ValueError(
-                f"server '{name}' has unsupported keys: "
-                f"{', '.join(sorted(unknown))}; only url/headers/enabled/"
-                "type/transport are allowed (stdio commands cannot run on "
-                "the server)"
-            )
-        if "type" in entry and "transport" in entry:
-            if normalize_mcp_transport(entry["type"]) != normalize_mcp_transport(
-                entry["transport"]
-            ):
-                raise ValueError(f"server '{name}' has conflicting type and transport")
-        transport = normalize_mcp_transport(
-            entry.get("transport", entry.get("type", "http"))
-        )
-        url = entry.get("url")
-        mode = classify_mcp_url(url)
-        headers = validate_headers(entry.get("headers"))
-        enabled = entry.get("enabled", True)
-        if not isinstance(enabled, bool):
-            raise ValueError(f"server '{name}' enabled must be a boolean")
-        parsed.append(
-            {
-                "name": name,
-                "url": url,
-                "headers": headers,
-                "enabled": enabled,
-                "mode": mode,
-                "transport": transport,
-            }
-        )
+    parsed = [
+        _parse_user_mcp_entry(raw_name, entry) for raw_name, entry in servers.items()
+    ]
 
     local_count = sum(1 for entry in parsed if entry["mode"] == "local")
     if local_count > MAX_LOCAL_MCP_SERVERS:
