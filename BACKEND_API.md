@@ -730,7 +730,7 @@ LLM 被提示在句子里插入方括号关键字（提示词 `prompts/utils/liv
 - `delete-history` 删掉当前活动历史后也被置 `None`（`websocket_handler.py:614-615`）。
 - 两种空值（`""` / `None`）对落库判断等效，`store_history_message` 都会直接返回（`service_context.py:269-270`）。
 - `fetch-and-set-history` 除了返回消息，还会把该历史的消息灌进 agent 记忆（`agent_engine.set_memory`）并设为活动历史（`service_context.py:243-260`）。
-- **一轮对话的写入绑定到该轮开始时的 `history_uid`**（`single_conversation.py:49-112`）。播放期间切到别的历史不会把这条回复写到新历史；但新历史的 `set_memory` 会替换 agent 工作记忆，所以客户端切历史前应先打断进行中的一轮（见 12.3）。
+- **一轮对话的写入绑定到该轮开始时的 `history_uid`**（`single_conversation.py:49-112`）；群聊在整段对话开始时为每个成员各自绑定（人类输入、AI 回复、打断、工具调用都写进绑定的历史）。播放期间切到别的历史不会把这条回复写到新历史；但新历史的 `set_memory` 会替换 agent 工作记忆，所以客户端切历史前应先打断进行中的一轮（见 12.3）。
 
 ### 12.3 消息写入时机
 
@@ -738,7 +738,7 @@ LLM 被提示在句子里插入方括号关键字（提示词 `prompts/utils/liv
 | --- | --- |
 | 正常一轮 | `role:"human"`（用户输入文本，含 ASR 结果）在轮次开始时写入；`role:"ai"`（完整回复）在**文本生成完毕时立即写入**，早于 TTS 播放结束与 `frontend-playback-complete` |
 | 工具调用 | 每次 `tool_call_status` 转发后按 `tool_id` upsert 到 `tool_calls` 表，归到当前轮（该轮 human 消息的序号 `turn_index`）；刷新/换设备后随 `history-data` 返回 |
-| 主动说话 `ai-speak-signal` | **都不写**（`skip_history`） |
+| 主动说话 `ai-speak-signal` | **都不写**（`skip_history`），包括这一轮的工具调用 |
 | 打断（回复尚未生成完） | `role:"ai"` = 用户听到的部分 + `role:"system"` = `[Interrupted by user]`，写入该轮开始时的历史 |
 | 打断（回复已生成完、只是播放没结束） | **不写**：完整回复已在生成完毕时落库，打断只停播放 |
 | 切历史 / 新建历史 / 换角色前 | 客户端应先发 `interrupt-signal` 收尾进行中的一轮；否则旧一轮的音画会串到新会话，且 agent 记忆被换掉 |
