@@ -150,7 +150,9 @@ export function handleServerMessage(msg: ServerMessage) {
     }
 
     case 'history-deleted':
-      useHistory.getState().removeHistory(msg.history_uid);
+      // 服务端删除失败时保留本地条目，避免列表与库不一致
+      if (msg.success) useHistory.getState().removeHistory(msg.history_uid);
+      else toast(t('history.deleteFailed'), 'error');
       break;
 
     case 'config-files':

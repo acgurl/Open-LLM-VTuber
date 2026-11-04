@@ -154,7 +154,12 @@ export class LocalSseMcpClient implements LocalMcpClientLike {
         for (const frame of frames) this.handleEvent(parseSseEvent(frame));
       }
       if (!this.closed) {
-        this.rejectEndpoint(new Error('本地 SSE MCP 连接已关闭'));
+        // The server ended the stream: no response can arrive any more, so
+        // fail pending and future requests now instead of waiting for timeouts.
+        this.closed = true;
+        const reason = new Error('本地 SSE MCP 连接已关闭');
+        this.rejectEndpoint(reason);
+        this.rejectAllPending(reason);
       }
     } catch (error) {
       if (this.closed) return;
@@ -215,6 +220,7 @@ export class LocalSseMcpClient implements LocalMcpClientLike {
   ): Promise<JsonRpcMessage> {
     await this.endpointReady;
     if (!this.endpoint) throw new Error('本地 SSE MCP 未提供消息端点');
+    if (this.closed) throw new Error('本地 SSE MCP 连接已关闭');
 
     const id = this.nextId++;
     const promise = new Promise<JsonRpcMessage>((resolve, reject) => {

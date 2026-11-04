@@ -55,6 +55,7 @@
     "unavailable": "History unavailable",
     "delete": "Delete",
     "confirmDelete": "Delete this conversation?",
+    "deleteFailed": "Failed to delete this conversation",
     "confirmShort": "Confirm",
     "today": "Today",
     "yesterday": "Yesterday",
