@@ -3,8 +3,9 @@ This module contains the pydantic model for the configurations of
 different types of agents.
 """
 
-from pydantic import BaseModel, Field
-from typing import ClassVar, Literal
+from loguru import logger
+from pydantic import BaseModel, Field, field_validator, model_validator
+from typing import Any, ClassVar, Literal
 from .i18n import I18nMixin, Description
 from .stateless_llm import StatelessLLMConfigs
 
@@ -94,28 +95,10 @@ class HumeAIConfig(I18nMixin, BaseModel):
 # =================================
 
 
-class LettaConfig(I18nMixin, BaseModel):
-    """Configuration for the Letta agent."""
-
-    host: str = Field("localhost", alias="host")
-    port: int = Field(8283, alias="port")
-    id: str = Field(..., alias="id")
-    faster_first_response: bool | None = Field(True, alias="faster_first_response")
-    segment_method: Literal["regex", "pysbd"] = Field("pysbd", alias="segment_method")
-
-    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
-        "host": Description(
-            en="Host address for the Letta server", zh="Letta服务器的主机地址"
-        ),
-        "port": Description(
-            en="Port number for the Letta server (default: 8283)",
-            zh="Letta服务器的端口号（默认：8283）",
-        ),
-        "id": Description(
-            en="Agent instance ID running on the Letta server",
-            zh="指定Letta服务器上运行的Agent实例id",
-        ),
-    }
+# Agents that were removed; their settings sections are still accepted (and
+# ignored) so existing conf.yaml files keep loading.
+_REMOVED_AGENTS = ("letta_agent",)
+_removed_agent_warnings: set[str] = set()
 
 
 class AgentSettings(I18nMixin, BaseModel):
@@ -125,7 +108,6 @@ class AgentSettings(I18nMixin, BaseModel):
         None, alias="basic_memory_agent"
     )
     hume_ai_agent: HumeAIConfig | None = Field(None, alias="hume_ai_agent")
-    letta_agent: LettaConfig | None = Field(None, alias="letta_agent")
 
     DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "basic_memory_agent": Description(
@@ -134,18 +116,32 @@ class AgentSettings(I18nMixin, BaseModel):
         "hume_ai_agent": Description(
             en="Configuration for Hume AI agent", zh="Hume AI 代理配置"
         ),
-        "letta_agent": Description(
-            en="Configuration for Letta agent", zh="Letta 代理配置"
-        ),
     }
+
+    @model_validator(mode="before")
+    @classmethod
+    def drop_removed_agent_settings(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        removed = [name for name in _REMOVED_AGENTS if name in data]
+        if not removed:
+            return data
+        for name in removed:
+            if name not in _removed_agent_warnings:
+                _removed_agent_warnings.add(name)
+                logger.warning(
+                    f"agent_settings.{name} is ignored because that agent was removed. "
+                    "Delete this section from conf.yaml."
+                )
+        return {key: value for key, value in data.items() if key not in removed}
 
 
 class AgentConfig(I18nMixin, BaseModel):
     """This class contains all of the configurations related to agent."""
 
-    conversation_agent_choice: Literal[
-        "basic_memory_agent", "hume_ai_agent", "letta_agent"
-    ] = Field(..., alias="conversation_agent_choice")
+    conversation_agent_choice: Literal["basic_memory_agent", "hume_ai_agent"] = Field(
+        ..., alias="conversation_agent_choice"
+    )
     agent_settings: AgentSettings = Field(..., alias="agent_settings")
     llm_configs: StatelessLLMConfigs = Field(..., alias="llm_configs")
 
@@ -160,3 +156,13 @@ class AgentConfig(I18nMixin, BaseModel):
             en="Pool of LLM provider configurations", zh="语言模型提供者配置池"
         ),
     }
+
+    @field_validator("conversation_agent_choice", mode="before")
+    @classmethod
+    def reject_removed_agent(cls, value: Any) -> Any:
+        if value in _REMOVED_AGENTS:
+            raise ValueError(
+                f"conversation_agent_choice '{value}' was removed; "
+                "use 'basic_memory_agent' or 'hume_ai_agent'"
+            )
+        return value

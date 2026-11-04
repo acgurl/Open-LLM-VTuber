@@ -134,16 +134,6 @@ character_config:
         # Max LLM requests per user turn while the model keeps calling tools
         max_tool_rounds: 10
 
-      letta_agent:
-        host: 'localhost' # Host address
-        port: 8283 # Port number
-        id: xxx # ID number of the Agent running on the Letta server
-        faster_first_response: True
-        # Method for segmenting sentences: 'regex' or 'pysbd'
-        segment_method: 'pysbd'
-        # Once Letta is chosen as the agent, the LLM that runs in practice is configured on Letta, so the user needs to run the Letta server themselves.
-        # For more detailed information, please refer to their documentation.
-
       hume_ai_agent:
         api_key: ''
         host: 'api.hume.ai' # Do not change this in most cases
