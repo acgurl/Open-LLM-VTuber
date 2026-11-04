@@ -77,40 +77,47 @@ class LocalMCPBridge:
         if response.get("server_id") not in (None, server_id):
             logger.warning("MCPC: Local tool result came from an unexpected server")
             return error_tool_result("Invalid local MCP response")
+        return _tool_result_from_response(response)
 
-        raw_items = response.get("content_items")
-        if not isinstance(raw_items, list):
-            return error_tool_result("Invalid local MCP response")
 
-        content_items: list[dict[str, Any]] = []
-        for item in raw_items[:_MAX_CONTENT_ITEMS]:
-            if not isinstance(item, dict):
-                continue
-            normalized: dict[str, Any] = {
-                "type": str(item.get("type") or "text"),
-            }
-            for key in ("text", "data", "mimeType", "url", "altText"):
-                value = item.get(key)
-                if isinstance(value, str):
-                    normalized[key] = value
-            content_items.append(normalized)
-
-        if not content_items:
-            content_items = [{"type": "text", "text": ""}]
-
-        if response.get("is_error"):
-            text = next(
-                (
-                    item.get("text")
-                    for item in content_items
-                    if item.get("type") in {"error", "text"} and item.get("text")
-                ),
-                "Local MCP tool failed",
-            )
-            return error_tool_result(text)
-
-        metadata = response.get("metadata")
-        return {
-            "metadata": metadata if isinstance(metadata, dict) else {},
-            "content_items": content_items,
+def _normalize_content_items(raw_items: list[Any]) -> list[dict[str, Any]]:
+    """Keep only the string fields of at most ``_MAX_CONTENT_ITEMS`` dict items."""
+    content_items: list[dict[str, Any]] = []
+    for item in raw_items[:_MAX_CONTENT_ITEMS]:
+        if not isinstance(item, dict):
+            continue
+        normalized: dict[str, Any] = {
+            "type": str(item.get("type") or "text"),
         }
+        for key in ("text", "data", "mimeType", "url", "altText"):
+            value = item.get(key)
+            if isinstance(value, str):
+                normalized[key] = value
+        content_items.append(normalized)
+    return content_items or [{"type": "text", "text": ""}]
+
+
+def _tool_result_from_response(response: dict[str, Any]) -> dict[str, Any]:
+    """Turn the browser's ``local-tool-result`` message into a tool result."""
+    raw_items = response.get("content_items")
+    if not isinstance(raw_items, list):
+        return error_tool_result("Invalid local MCP response")
+
+    content_items = _normalize_content_items(raw_items)
+
+    if response.get("is_error"):
+        text = next(
+            (
+                item.get("text")
+                for item in content_items
+                if item.get("type") in {"error", "text"} and item.get("text")
+            ),
+            "Local MCP tool failed",
+        )
+        return error_tool_result(text)
+
+    metadata = response.get("metadata")
+    return {
+        "metadata": metadata if isinstance(metadata, dict) else {},
+        "content_items": content_items,
+    }
