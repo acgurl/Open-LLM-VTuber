@@ -228,24 +228,7 @@ class ProxyHandler:
                     msg = await self.server_ws.receive()
 
                     if msg.type == aiohttp.WSMsgType.TEXT:
-                        try:
-                            # Parse the message
-                            if not msg.data:  # Check if data is empty
-                                continue
-
-                            data = json.loads(msg.data)
-                            if not data:  # Check if parsed data is empty
-                                continue
-
-                            if _ends_turn(data):
-                                logger.info(f"Turn ended by server: {data.get('type')}")
-                                self.message_queue.conversation_active = False
-
-                            # Broadcast the message to all clients
-                            await self.broadcast_to_clients(data)
-                        except json.JSONDecodeError as e:
-                            logger.error(f"Failed to parse message data: {e}")
-                            continue
+                        await self._forward_server_text(msg.data)
                     elif msg.type == aiohttp.WSMsgType.ERROR:
                         logger.error(f"WebSocket error: {self.server_ws.exception()}")
                         break
@@ -260,6 +243,26 @@ class ProxyHandler:
             self.connected = False
             self.message_queue.conversation_active = False
             logger.info("Server message forwarding ended")
+
+    async def _forward_server_text(self, raw: str) -> None:
+        """Broadcast one server text frame, ending the queued turn if it does."""
+        try:
+            # Parse the message
+            if not raw:  # Check if data is empty
+                return
+
+            data = json.loads(raw)
+            if not data:  # Check if parsed data is empty
+                return
+
+            if _ends_turn(data):
+                logger.info(f"Turn ended by server: {data.get('type')}")
+                self.message_queue.conversation_active = False
+
+            # Broadcast the message to all clients
+            await self.broadcast_to_clients(data)
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse message data: {e}")
 
     async def broadcast_to_clients(
         self, message: dict, exclude_client: str | None = None

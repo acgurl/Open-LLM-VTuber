@@ -1,6 +1,6 @@
 import re
 from typing import Any
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 import pysbd
 from loguru import logger
 from langdetect import detect
@@ -516,6 +516,34 @@ class SentenceDivider:
             if sentence.strip()
         ]
 
+    def _buffer_consumers(
+        self,
+    ) -> list[Callable[[], list[SentenceWithTags] | None]]:
+        """Consumers to try, in order, for the current buffer.
+
+        Each returns the sentences it took off the buffer, or None (buffer
+        untouched) to let the next one try.
+        """
+        next_tag_pos, tag_pattern_found = self._find_next_tag(self._buffer)
+        consumers: list[Callable[[], list[SentenceWithTags] | None]] = []
+        if next_tag_pos == 0:
+            consumers.append(self._consume_tag_at_start)
+        elif next_tag_pos < len(self._buffer):
+            consumers.append(
+                lambda: self._consume_text_before_tag(next_tag_pos, tag_pattern_found)
+            )
+            consumers.append(self._consume_tag_anywhere)
+        consumers.append(self._consume_first_comma_sentence)
+        consumers.append(self._consume_sentences)
+        return consumers
+
+    def _consume_next(self) -> list[SentenceWithTags] | None:
+        for consume in self._buffer_consumers():
+            emitted = consume()
+            if emitted is not None:
+                return emitted
+        return None
+
     async def _process_buffer(self) -> AsyncIterator[SentenceWithTags]:
         """
         Process the current buffer, yielding complete sentences with tags.
@@ -523,41 +551,11 @@ class SentenceDivider:
         It consumes processed parts from self._buffer.
         """
         while self._buffer.strip():
-            next_tag_pos, tag_pattern_found = self._find_next_tag(self._buffer)
-
-            if next_tag_pos == 0:
-                emitted = self._consume_tag_at_start()
-                if emitted is not None:
-                    for sentence in emitted:
-                        yield sentence
-                    continue
-
-            elif next_tag_pos < len(self._buffer):
-                emitted = self._consume_text_before_tag(next_tag_pos, tag_pattern_found)
-                if emitted is not None:
-                    for sentence in emitted:
-                        yield sentence
-                    continue
-
-                emitted = self._consume_tag_anywhere()
-                if emitted is not None:
-                    for sentence in emitted:
-                        yield sentence
-                    continue
-
-            emitted = self._consume_first_comma_sentence()
-            if emitted is not None:
-                for sentence in emitted:
-                    yield sentence
-                continue
-
-            emitted = self._consume_sentences()
-            if emitted is not None:
-                for sentence in emitted:
-                    yield sentence
-                continue
-
-            break
+            emitted = self._consume_next()
+            if emitted is None:
+                break
+            for sentence in emitted:
+                yield sentence
 
     async def _flush_buffer(self) -> AsyncIterator[SentenceWithTags]:
         """

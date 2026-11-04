@@ -1,4 +1,4 @@
-from typing import TypedDict
+from typing import Any, TypedDict
 from collections.abc import Callable
 from fastapi import WebSocket, WebSocketDisconnect
 import asyncio
@@ -703,23 +703,35 @@ class WebSocketHandler:
 
         images = data.get("images")
         if images is not None:
-            if not isinstance(images, list) or len(images) > MAX_IMAGES_PER_MESSAGE:
-                return f"At most {MAX_IMAGES_PER_MESSAGE} images are allowed"
-            for image in images:
-                if not isinstance(image, dict):
-                    return "Invalid image payload"
-                source = image.get("source")
-                mime_type = image.get("mime_type")
-                image_data = image.get("data")
-                if source not in IMAGE_SOURCES:
-                    return "Invalid image source"
-                if not isinstance(mime_type, str) or not mime_type.startswith("image/"):
-                    return "Invalid image type"
-                if not isinstance(image_data, str):
-                    return "Invalid image data"
-                if len(image_data) > MAX_IMAGE_DATA_CHARS:
-                    return "Image is too large"
+            return self._validate_images(images)
 
+        return None
+
+    @classmethod
+    def _validate_images(cls, images: Any) -> str | None:
+        if not isinstance(images, list) or len(images) > MAX_IMAGES_PER_MESSAGE:
+            return f"At most {MAX_IMAGES_PER_MESSAGE} images are allowed"
+        for image in images:
+            error = cls._validate_image(image)
+            if error:
+                return error
+        return None
+
+    @staticmethod
+    def _validate_image(image: Any) -> str | None:
+        if not isinstance(image, dict):
+            return "Invalid image payload"
+        source = image.get("source")
+        mime_type = image.get("mime_type")
+        image_data = image.get("data")
+        if source not in IMAGE_SOURCES:
+            return "Invalid image source"
+        if not isinstance(mime_type, str) or not mime_type.startswith("image/"):
+            return "Invalid image type"
+        if not isinstance(image_data, str):
+            return "Invalid image data"
+        if len(image_data) > MAX_IMAGE_DATA_CHARS:
+            return "Image is too large"
         return None
 
     async def _handle_conversation_trigger(
