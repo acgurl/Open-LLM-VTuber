@@ -65,9 +65,3 @@ class SiliconFlowTTS(TTSInterface):
             logger.error(f"生成音频文件失败Failed to generate the audio file.: {e}")
             self.remove_partial_file(cache_file)
             return None
-
-    def remove_file(self, filepath: str, verbose: bool = True) -> None:
-        super().remove_file(filepath, verbose)
-
-    def generate_cache_file_name(self, file_name_no_ext=None, file_extension="wav"):
-        return super().generate_cache_file_name(file_name_no_ext, file_extension)
