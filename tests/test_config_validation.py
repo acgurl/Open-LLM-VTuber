@@ -76,6 +76,22 @@ class TemplateDefaultsTests(unittest.TestCase):
 
                 self.assertEqual(settings.basic_memory_agent.use_mcpp, default)
 
+    def test_templates_have_identical_key_sets(self):
+        def key_paths(node, prefix=""):
+            paths = set()
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    path = f"{prefix}.{key}" if prefix else str(key)
+                    paths.add(path)
+                    paths |= key_paths(value, path)
+            return paths
+
+        en_keys = key_paths(read_yaml(str(TEMPLATE)))
+        zh_keys = key_paths(read_yaml(str(ZH_TEMPLATE)))
+
+        self.assertEqual(sorted(en_keys - zh_keys), [], "keys missing from ZH")
+        self.assertEqual(sorted(zh_keys - en_keys), [], "keys missing from EN")
+
     def test_templates_have_no_removed_agent_sections(self):
         for template in (TEMPLATE, ZH_TEMPLATE):
             with self.subTest(template=template.name):
