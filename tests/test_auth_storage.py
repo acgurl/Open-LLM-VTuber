@@ -137,6 +137,24 @@ class ArchiveTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result)
         self.assertFalse((self.root / "archive").exists())
 
+    async def test_non_object_archive_is_replaced_instead_of_crashing(self):
+        history_uid = await self.store.create_history("conf")
+        await self.store.store_message("conf", history_uid, "human", "hi")
+        archive_dir = self.root / "archive"
+        archive_dir.mkdir()
+        (archive_dir / "local-history-archive.json").write_text("[]", encoding="utf-8")
+
+        result = await archive_user_histories(
+            self.repository,
+            user_id="local",
+            archive_dir=archive_dir,
+        )
+
+        self.assertTrue(result.created)
+        self.assertEqual(result.history_count, 1)
+        data = json.loads(result.path.read_text(encoding="utf-8"))
+        self.assertEqual(data["histories"][0]["history_uid"], history_uid)
+
 
 if __name__ == "__main__":
     unittest.main()
