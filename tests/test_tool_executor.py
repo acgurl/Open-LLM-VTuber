@@ -1,5 +1,9 @@
 import asyncio
+import datetime
+import json
+import re
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -134,6 +138,69 @@ class ExecuteToolsConcurrencyTests(unittest.IsolatedAsyncioTestCase):
             [result["tool_use_id"] for result in updates[-1]["results"]],
             [f"id-{i}" for i in range(5)],
         )
+
+
+class StatusTimestampTests(unittest.TestCase):
+    def test_timestamp_is_valid_utc_iso_string(self):
+        timestamp = ToolExecutor._tool_status("id", "tool", "running", "")["timestamp"]
+
+        self.assertTrue(timestamp.endswith("Z"))
+        self.assertNotIn("+00:00", timestamp)
+        parsed = datetime.datetime.fromisoformat(timestamp[:-1] + "+00:00")
+        self.assertEqual(parsed.utcoffset(), datetime.timedelta(0))
+
+
+class PromptJsonParsingTests(unittest.TestCase):
+    def setUp(self):
+        self.executor = object.__new__(ToolExecutor)
+
+    def _parse(self, arguments):
+        return self.executor.process_tool_from_prompt_json(
+            [{"mcp_server": "kb", "tool": "search", "arguments": arguments}]
+        )
+
+    def test_object_arguments_are_accepted(self):
+        parsed = self._parse({"query": "x"})
+
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0]["name"], "search")
+        self.assertEqual(parsed[0]["args"], {"query": "x"})
+
+    def test_json_string_arguments_are_accepted(self):
+        self.assertEqual(self._parse('{"query": "x"}')[0]["args"], {"query": "x"})
+
+    def test_empty_arguments_are_accepted(self):
+        self.assertEqual(self._parse({})[0]["args"], {})
+        self.assertEqual(self._parse(None)[0]["args"], {})
+
+    def test_malformed_arguments_are_skipped(self):
+        self.assertEqual(self._parse("{not json"), [])
+        self.assertEqual(self._parse([1, 2]), [])
+
+    def test_missing_server_or_tool_is_skipped(self):
+        parsed = self.executor.process_tool_from_prompt_json(
+            [{"tool": "search", "arguments": {}}, "not a dict"]
+        )
+
+        self.assertEqual(parsed, [])
+
+
+class McpPromptTemplateTests(unittest.TestCase):
+    """The prompt-mode example must stay valid JSON the parser accepts."""
+
+    def test_example_json_parses_into_a_tool_call(self):
+        prompt_path = (
+            Path(__file__).resolve().parents[1] / "prompts" / "utils" / "mcp_prompt.txt"
+        )
+        text = prompt_path.read_text(encoding="utf-8")
+        example = re.search(r"### JSON Response Format:\s*(\{.*?\n\})", text, re.S)
+        self.assertIsNotNone(example)
+
+        data = json.loads(example.group(1).replace("<value>", "1"))
+        parsed = object.__new__(ToolExecutor).process_tool_from_prompt_json([data])
+
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0]["name"], "<tool_name>")
 
 
 if __name__ == "__main__":

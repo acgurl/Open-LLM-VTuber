@@ -92,23 +92,13 @@ class BasicMemoryAgent(AgentInterface):
         self._set_llm(llm)
         self.set_system(system if system else self._system)
 
-        if self._use_mcpp and not all(
-            [
-                self._tool_manager,
-                self._tool_executor,
-                self._json_detector,
-            ]
-        ):
+        # The JSON detector is always created, so only the injected components
+        # tell whether tooling was wired up.
+        if self._use_mcpp and not all([self._tool_manager, self._tool_executor]):
             logger.warning(
                 "use_mcpp is True, but some MCP components are missing in the agent. Tool calling might not work as expected."
             )
-        elif not self._use_mcpp and any(
-            [
-                self._tool_manager,
-                self._tool_executor,
-                self._json_detector,
-            ]
-        ):
+        elif not self._use_mcpp and any([self._tool_manager, self._tool_executor]):
             logger.warning(
                 "use_mcpp is False, but some MCP components were passed to the agent."
             )
@@ -583,25 +573,31 @@ class BasicMemoryAgent(AgentInterface):
                 parsed_tools = self._tool_executor.process_tool_from_prompt_json(
                     detected_prompt_json
                 )
-                if parsed_tools:
-                    tool_results_for_llm = []
-                    async for update in self._execute_tool_calls(
-                        parsed_tools,
-                        caller_mode="Prompt",
-                        label="Prompt mode tool executor",
-                        results=tool_results_for_llm,
-                    ):
-                        yield update
+                if not parsed_tools:
+                    # JSON that names no runnable tool is the model's answer,
+                    # as a native turn without tool calls is; re-sending the
+                    # same messages would only repeat it up to the round limit.
+                    logger.warning("Prompt mode JSON contained no valid tool call.")
+                    return
 
-                    if tool_results_for_llm:
-                        result_strings = [
-                            res.get("content", "Error: Malformed result")
-                            for res in tool_results_for_llm
-                        ]
-                        combined_results_str = "\n".join(result_strings)
-                        messages.append(
-                            {"role": "user", "content": combined_results_str}
-                        )
+                # Keep the tool-call response in context, as native mode does.
+                messages.append({"role": "assistant", "content": current_turn_text})
+                tool_results_for_llm = []
+                async for update in self._execute_tool_calls(
+                    parsed_tools,
+                    caller_mode="Prompt",
+                    label="Prompt mode tool executor",
+                    results=tool_results_for_llm,
+                ):
+                    yield update
+
+                if tool_results_for_llm:
+                    result_strings = [
+                        res.get("content", "Error: Malformed result")
+                        for res in tool_results_for_llm
+                    ]
+                    combined_results_str = "\n".join(result_strings)
+                    messages.append({"role": "user", "content": combined_results_str})
                 continue
 
             elif pending_tool_calls and assistant_message_for_api:
@@ -671,6 +667,12 @@ class BasicMemoryAgent(AgentInterface):
                     tool_mode = "OpenAI"
                     tools = self._formatted_tools_openai
                     llm_supports_native_tools = True
+                    # The LLM client remembers a provider that rejected native
+                    # tools; start in prompt mode so the MCP prompt is injected.
+                    if not getattr(self._llm, "support_tools", True):
+                        self.prompt_mode_flag = True
+                        if self._json_detector:
+                            self._json_detector.reset()
                 else:
                     logger.warning(
                         f"LLM type {type(self._llm)} not explicitly handled for tool mode determination."

@@ -30,6 +30,7 @@ def _build_template(kwargs: dict) -> StatelessLLMInterface:
         organization_id=kwargs.get("organization_id"),
         template=kwargs.get("template"),
         project_id=kwargs.get("project_id"),
+        temperature=kwargs.get("temperature"),
     )
 
 

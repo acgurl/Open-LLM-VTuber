@@ -243,6 +243,10 @@ class MCPClient:
         async with self._session(server_name) as session:
             response = await session.call_tool(tool_name, tool_args)
 
+        # CallToolResult carries server metadata in ``meta`` (``_meta`` on the
+        # wire); callers keep reading it under the "metadata" key.
+        metadata = getattr(response, "meta", None) or {}
+
         if response.isError:
             error_text = (
                 response.content[0].text
@@ -252,27 +256,14 @@ class MCPClient:
             logger.error(f"MCPC: Error calling tool '{tool_name}': {error_text}")
             # Return error information within the standard structure
             return {
-                "metadata": getattr(response, "metadata", {}),
+                "metadata": metadata,
                 "content_items": [{"type": "error", "text": error_text}],
             }
 
         content_items = []
         if response.content:
             for item in response.content:
-                item_dict = {"type": getattr(item, "type", "text")}
-                # Extract available attributes from content item
-                for attr in [
-                    "text",
-                    "data",
-                    "mimeType",
-                    "url",
-                    "altText",
-                ]:  # Added url and altText
-                    if (
-                        hasattr(item, attr) and getattr(item, attr) is not None
-                    ):  # Check for None
-                        item_dict[attr] = getattr(item, attr)
-                content_items.append(item_dict)
+                content_items.append(self._content_item_dict(item))
         else:
             logger.warning(
                 f"MCPC: Tool '{tool_name}' returned no content. Returning empty content_items."
@@ -282,10 +273,41 @@ class MCPClient:
             )  # Ensure content_items is not empty
 
         result = {
-            "metadata": getattr(response, "metadata", {}),
+            "metadata": metadata,
             "content_items": content_items,
         }
         return result
+
+    @staticmethod
+    def _content_item_dict(item: Any) -> dict[str, Any]:
+        """Flatten one MCP content block into the content-item dict callers use.
+
+        Text/image/audio blocks map their own ``text``/``data``/``mimeType``.
+        A ``resource_link`` puts its ``uri`` under "url"; an embedded
+        ``resource`` puts its contents' ``uri`` under "url", text contents
+        under "text" and base64 blob contents under "data".
+        """
+        item_dict = {"type": getattr(item, "type", "text")}
+        for attr in ["text", "data", "mimeType", "url", "altText"]:
+            value = getattr(item, attr, None)
+            if value is not None:
+                item_dict[attr] = value
+
+        uri = getattr(item, "uri", None)
+        resource = getattr(item, "resource", None)
+        if resource is not None:
+            uri = getattr(resource, "uri", None)
+            for source, target in (
+                ("text", "text"),
+                ("blob", "data"),
+                ("mimeType", "mimeType"),
+            ):
+                value = getattr(resource, source, None)
+                if value is not None:
+                    item_dict[target] = value
+        if uri is not None:
+            item_dict["url"] = str(uri)
+        return item_dict
 
     async def aclose(self) -> None:
         """Closes all active server connections."""
