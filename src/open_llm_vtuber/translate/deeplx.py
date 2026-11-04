@@ -16,7 +16,7 @@ class DeepLXTranslate(TranslateInterface):
             data = {"text": [text], "target_lang": self.target_lang}
             post_data = json.dumps(data)
             response_text = httpx.post(
-                url=self.api_endpoint, data=post_data, timeout=10.0
+                url=self.api_endpoint, content=post_data, timeout=10.0
             ).text
             res = json.loads(response_text)["translations"]
             res = " ".join([d["text"] for d in res])

@@ -111,11 +111,22 @@ class TencentTranslate(TranslateInterface):
 
         try:
             response = httpx.post(
-                url="https://" + self.host, headers=headers, data=payload
+                url="https://" + self.host,
+                headers=headers,
+                content=payload,
+                timeout=10.0,
             )
             res = response.json()
-            logger.info(f"Request successful: {res}")
-            return res.get("Response", {}).get("TargetText", "Translation failed")
+            logger.debug(f"Tencent translate response: {res}")
+            # API errors come back as HTTP 200 with Response.Error; raise like
+            # transport errors (and DeepLX) instead of returning a placeholder
+            # string that TTS would read aloud.
+            result = res.get("Response", {})
+            if "Error" in result or "TargetText" not in result:
+                raise RuntimeError(
+                    f"Tencent translate API error: {result.get('Error')}"
+                )
+            return result["TargetText"]
         except Exception as e:
             logger.critical(f"API call error: {e}")
             raise
