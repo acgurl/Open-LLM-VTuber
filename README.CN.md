@@ -317,7 +317,7 @@ Git 中实际跟踪的那一部分资源。
 # 后端测试（与 CI 相同的命令）
 uv run --frozen python -m unittest discover -s tests -v
 
-# 代码检查与格式化
+# 代码检查与格式化（ruff/pre-commit 在 `dev` 依赖组，直接 `uv sync` 即会安装）
 ruff check .
 ruff format --check .
 pre-commit run --all-files
@@ -379,6 +379,7 @@ tests/                        unittest 测试集
 - OIDC 没有 refresh token；会话过期后需要重新登录。
 - 大部分配置修改需要重启；只有角色/背景切换和用户级 MCP 能在运行时生效。
 - 浏览器本地 MCP 受浏览器权限限制，无法访问任意内网服务。
+- B 站直播（`scripts/run_bilibili_live.py`）依赖 `blivedm`，本仓库不内置也不作为依赖发布：需手动将 <https://github.com/xfgryujk/blivedm> 克隆到仓库根目录的 `blivedm/`，并安装 `bilibili` extra（`uv sync --extra bilibili`）。Docker 镜像不包含它。
 - Live2D 示例模型有独立的许可条款（见下）。
 
 ## 致谢与许可

@@ -45,7 +45,10 @@ async def main():
 
     except ImportError as e:
         logger.error(f"Failed to import required modules: {e}")
-        logger.error("Make sure you have installed blivedm with: pip install blivedm")
+        logger.error(
+            "blivedm is not installed: clone https://github.com/xfgryujk/blivedm "
+            "into blivedm/ at the repo root and run `uv sync --extra bilibili`"
+        )
     except Exception as e:
         logger.error(f"Error starting BiliBili Live client: {e}")
         import traceback

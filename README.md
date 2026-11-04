@@ -349,7 +349,7 @@ everyone.
 # backend tests (same command as CI; `src` holds the package, the repo root holds `prompts`)
 PYTHONPATH=src uv run --frozen python -m unittest discover -s tests -v
 
-# lint and formatting
+# lint and formatting (ruff/pre-commit are in the `dev` group, installed by a plain `uv sync`)
 ruff check .
 ruff format --check .
 pre-commit run --all-files
@@ -416,6 +416,9 @@ tests/                        unittest suite
 - Most configuration changes require a restart; only character/background switching and per-user MCP
   apply at runtime.
 - Browser-local MCP depends on browser permissions and cannot reach arbitrary private services.
+- Bilibili live (`scripts/run_bilibili_live.py`) needs `blivedm`, which is not vendored or published
+  as a dependency: clone <https://github.com/xfgryujk/blivedm> into `blivedm/` at the repo root and
+  install the `bilibili` extra (`uv sync --extra bilibili`). It is not included in the Docker image.
 - Live2D sample models have their own license terms (see below).
 
 ## Credits and license

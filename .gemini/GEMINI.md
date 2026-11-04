@@ -98,7 +98,7 @@ conf.yaml            # User's configuration file, generated from a template
   - First, try to solve the problem using the Python standard library or existing project dependencies defined in `pyproject.toml`.
   - If a new dependency is required, it must have a compatible license and be well-maintained.
   - Use `uv add`, `uv remove`, `uv run` instead of pip to manage dependencies. If user uses conda, install uv with pip then.
-  - After adding a new dependency, in addition to `pyproject.toml`, you must add the dependency to `requirements.txt` as well.
+  - `requirements.txt` and `requirements-bilibili.txt` are exported from `uv.lock` by the Sync Requirements workflow; do not edit them by hand (run `uv lock` after changing `pyproject.toml`).
 
 ### 4.2. Cross-Platform Compatibility
 

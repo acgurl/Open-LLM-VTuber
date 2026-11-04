@@ -1,30 +1,263 @@
-aiohttp==3.9.5
-anthropic==0.68.1
-azure-cognitiveservices-speech==1.46.0
+aiohappyeyeballs==2.6.1
+aiohttp==3.13.3
+aiosignal==1.4.0
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anthropic==0.76.0
+anyio==4.12.1
+async-timeout==5.0.1 ; python_full_version < '3.11'
+attrs==25.4.0
+azure-cognitiveservices-speech==1.47.0
+azure-core==1.38.0
 brotli==1.1.0
+cartesia==2.0.17
+certifi==2026.1.4
+cffi==2.0.0
 chardet==5.2.0
-duckduckgo-mcp-server==0.1.1
-edge-tts==7.2.3
-fastapi==0.118.0
-groq==0.32.0
+charset-normalizer==3.4.4
+click==8.5.0
+colorama==0.4.6 ; sys_platform == 'win32'
+comtypes==1.4.15 ; sys_platform == 'win32'
+cryptography==46.0.3
+distro==1.9.0
+dnspython==2.8.0
+docstring-parser==0.17.0
+edge-tts==7.3.1
+elevenlabs==2.31.0
+email-validator==2.3.0
+exceptiongroup==1.3.1 ; python_full_version < '3.11'
+fastapi==0.128.0
+fastapi-cli==0.0.20
+fastapi-cloud-cli==0.11.0
+fastar==0.8.0
+frozenlist==1.8.0
+groq==1.0.0
+h11==0.16.0
+httpcore==1.0.9
+httptools==0.7.1
 httpx==0.28.1
+httpx-sse==0.4.0
+idna==3.20
+iterators==0.2.0
+jinja2==3.1.6
+jiter==0.12.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
 langdetect==1.0.9
-letta-client==0.1.324
 loguru==0.7.3
-mcp==1.15.0
-numpy==1.26.4
-openai==1.109.1
+markdown-it-py==4.0.0
+markupsafe==3.0.3
+mcp==1.26.0
+mdurl==0.1.2
+multidict==6.7.0
+numpy==2.2.6 ; python_full_version < '3.11'
+numpy==2.4.6 ; python_full_version == '3.11.*'
+numpy==2.5.4 ; python_full_version >= '3.12'
+openai==2.15.0
 packaging==26.3
-pre-commit==4.3.0
+propcache==0.4.1
+pycparser==3.0 ; implementation_name != 'PyPy'
+pydantic==2.12.5
+pydantic-core==2.41.5
+pydantic-extra-types==2.11.0
+pydantic-settings==2.12.0
 pydub==0.25.1
+pygments==2.19.2
+pyjwt==2.10.1
+pyobjc==12.1 ; sys_platform == 'darwin'
+pyobjc-core==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-accessibility==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-accounts==12.1 ; platform_release >= '12' and sys_platform == 'darwin'
+pyobjc-framework-addressbook==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-adservices==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-adsupport==12.1 ; platform_release >= '18' and sys_platform == 'darwin'
+pyobjc-framework-applescriptkit==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-applescriptobjc==12.1 ; platform_release >= '10' and sys_platform == 'darwin'
+pyobjc-framework-applicationservices==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-apptrackingtransparency==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-arkit==12.1 ; platform_release >= '25' and sys_platform == 'darwin'
+pyobjc-framework-audiovideobridging==12.1 ; platform_release >= '12' and sys_platform == 'darwin'
+pyobjc-framework-authenticationservices==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-automaticassessmentconfiguration==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-automator==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-avfoundation==12.1 ; platform_release >= '11' and sys_platform == 'darwin'
+pyobjc-framework-avkit==12.1 ; platform_release >= '13' and sys_platform == 'darwin'
+pyobjc-framework-avrouting==12.1 ; platform_release >= '22' and sys_platform == 'darwin'
+pyobjc-framework-backgroundassets==12.1 ; platform_release >= '22' and sys_platform == 'darwin'
+pyobjc-framework-browserenginekit==12.1 ; platform_release >= '23.4' and sys_platform == 'darwin'
+pyobjc-framework-businesschat==12.1 ; platform_release >= '18' and sys_platform == 'darwin'
+pyobjc-framework-calendarstore==12.1 ; platform_release >= '9' and sys_platform == 'darwin'
+pyobjc-framework-callkit==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-carbon==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-cfnetwork==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-cinematic==12.1 ; platform_release >= '23' and sys_platform == 'darwin'
+pyobjc-framework-classkit==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-cloudkit==12.1 ; platform_release >= '14' and sys_platform == 'darwin'
+pyobjc-framework-cocoa==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-collaboration==12.1 ; platform_release >= '9' and sys_platform == 'darwin'
+pyobjc-framework-colorsync==12.1 ; platform_release >= '17' and sys_platform == 'darwin'
+pyobjc-framework-compositorservices==12.1 ; platform_release >= '25' and sys_platform == 'darwin'
+pyobjc-framework-contacts==12.1 ; platform_release >= '15' and sys_platform == 'darwin'
+pyobjc-framework-contactsui==12.1 ; platform_release >= '15' and sys_platform == 'darwin'
+pyobjc-framework-coreaudio==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-coreaudiokit==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-corebluetooth==12.1 ; platform_release >= '14' and sys_platform == 'darwin'
+pyobjc-framework-coredata==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-corehaptics==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-corelocation==12.1 ; platform_release >= '10' and sys_platform == 'darwin'
+pyobjc-framework-coremedia==12.1 ; platform_release >= '11' and sys_platform == 'darwin'
+pyobjc-framework-coremediaio==12.1 ; platform_release >= '11' and sys_platform == 'darwin'
+pyobjc-framework-coremidi==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-coreml==12.1 ; platform_release >= '17' and sys_platform == 'darwin'
+pyobjc-framework-coremotion==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-coreservices==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-corespotlight==12.1 ; platform_release >= '17' and sys_platform == 'darwin'
+pyobjc-framework-coretext==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-corewlan==12.1 ; platform_release >= '10' and sys_platform == 'darwin'
+pyobjc-framework-cryptotokenkit==12.1 ; platform_release >= '14' and sys_platform == 'darwin'
+pyobjc-framework-datadetection==12.1 ; platform_release >= '21' and sys_platform == 'darwin'
+pyobjc-framework-devicecheck==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-devicediscoveryextension==12.1 ; platform_release >= '24' and sys_platform == 'darwin'
+pyobjc-framework-dictionaryservices==12.1 ; platform_release >= '9' and sys_platform == 'darwin'
+pyobjc-framework-discrecording==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-discrecordingui==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-diskarbitration==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-dvdplayback==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-eventkit==12.1 ; platform_release >= '12' and sys_platform == 'darwin'
+pyobjc-framework-exceptionhandling==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-executionpolicy==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-extensionkit==12.1 ; platform_release >= '22' and sys_platform == 'darwin'
+pyobjc-framework-externalaccessory==12.1 ; platform_release >= '17' and sys_platform == 'darwin'
+pyobjc-framework-fileprovider==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-fileproviderui==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-findersync==12.1 ; platform_release >= '14' and sys_platform == 'darwin'
+pyobjc-framework-fsevents==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-fskit==12.1 ; platform_release >= '24.4' and sys_platform == 'darwin'
+pyobjc-framework-gamecenter==12.1 ; platform_release >= '12' and sys_platform == 'darwin'
+pyobjc-framework-gamecontroller==12.1 ; platform_release >= '13' and sys_platform == 'darwin'
+pyobjc-framework-gamekit==12.1 ; platform_release >= '12' and sys_platform == 'darwin'
+pyobjc-framework-gameplaykit==12.1 ; platform_release >= '15' and sys_platform == 'darwin'
+pyobjc-framework-gamesave==12.1 ; platform_release >= '25' and sys_platform == 'darwin'
+pyobjc-framework-healthkit==12.1 ; platform_release >= '22' and sys_platform == 'darwin'
+pyobjc-framework-imagecapturecore==12.1 ; platform_release >= '10' and sys_platform == 'darwin'
+pyobjc-framework-inputmethodkit==12.1 ; platform_release >= '9' and sys_platform == 'darwin'
+pyobjc-framework-installerplugins==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-instantmessage==12.1 ; platform_release >= '9' and sys_platform == 'darwin'
+pyobjc-framework-intents==12.1 ; platform_release >= '16' and sys_platform == 'darwin'
+pyobjc-framework-intentsui==12.1 ; platform_release >= '21' and sys_platform == 'darwin'
+pyobjc-framework-iobluetooth==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-iobluetoothui==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-iosurface==12.1 ; platform_release >= '10' and sys_platform == 'darwin'
+pyobjc-framework-ituneslibrary==12.1 ; platform_release >= '10' and sys_platform == 'darwin'
+pyobjc-framework-kernelmanagement==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-latentsemanticmapping==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-launchservices==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-libdispatch==12.1 ; platform_release >= '12' and sys_platform == 'darwin'
+pyobjc-framework-libxpc==12.1 ; platform_release >= '12' and sys_platform == 'darwin'
+pyobjc-framework-linkpresentation==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-localauthentication==12.1 ; platform_release >= '14' and sys_platform == 'darwin'
+pyobjc-framework-localauthenticationembeddedui==12.1 ; platform_release >= '21' and sys_platform == 'darwin'
+pyobjc-framework-mailkit==12.1 ; platform_release >= '21' and sys_platform == 'darwin'
+pyobjc-framework-mapkit==12.1 ; platform_release >= '13' and sys_platform == 'darwin'
+pyobjc-framework-mediaaccessibility==12.1 ; platform_release >= '13' and sys_platform == 'darwin'
+pyobjc-framework-mediaextension==12.1 ; platform_release >= '24' and sys_platform == 'darwin'
+pyobjc-framework-medialibrary==12.1 ; platform_release >= '13' and sys_platform == 'darwin'
+pyobjc-framework-mediaplayer==12.1 ; platform_release >= '16' and sys_platform == 'darwin'
+pyobjc-framework-mediatoolbox==12.1 ; platform_release >= '13' and sys_platform == 'darwin'
+pyobjc-framework-metal==12.1 ; platform_release >= '15' and sys_platform == 'darwin'
+pyobjc-framework-metalfx==12.1 ; platform_release >= '22' and sys_platform == 'darwin'
+pyobjc-framework-metalkit==12.1 ; platform_release >= '15' and sys_platform == 'darwin'
+pyobjc-framework-metalperformanceshaders==12.1 ; platform_release >= '17' and sys_platform == 'darwin'
+pyobjc-framework-metalperformanceshadersgraph==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-metrickit==12.1 ; platform_release >= '21' and sys_platform == 'darwin'
+pyobjc-framework-mlcompute==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-modelio==12.1 ; platform_release >= '15' and sys_platform == 'darwin'
+pyobjc-framework-multipeerconnectivity==12.1 ; platform_release >= '14' and sys_platform == 'darwin'
+pyobjc-framework-naturallanguage==12.1 ; platform_release >= '18' and sys_platform == 'darwin'
+pyobjc-framework-netfs==12.1 ; platform_release >= '10' and sys_platform == 'darwin'
+pyobjc-framework-network==12.1 ; platform_release >= '18' and sys_platform == 'darwin'
+pyobjc-framework-networkextension==12.1 ; platform_release >= '15' and sys_platform == 'darwin'
+pyobjc-framework-notificationcenter==12.1 ; platform_release >= '14' and sys_platform == 'darwin'
+pyobjc-framework-opendirectory==12.1 ; platform_release >= '10' and sys_platform == 'darwin'
+pyobjc-framework-osakit==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-oslog==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-passkit==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-pencilkit==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-phase==12.1 ; platform_release >= '21' and sys_platform == 'darwin'
+pyobjc-framework-photos==12.1 ; platform_release >= '15' and sys_platform == 'darwin'
+pyobjc-framework-photosui==12.1 ; platform_release >= '15' and sys_platform == 'darwin'
+pyobjc-framework-preferencepanes==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-pubsub==12.1 ; platform_release >= '9' and platform_release < '18' and sys_platform == 'darwin'
+pyobjc-framework-pushkit==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-quartz==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-quicklookthumbnailing==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-replaykit==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-safariservices==12.1 ; platform_release >= '16' and sys_platform == 'darwin'
+pyobjc-framework-safetykit==12.1 ; platform_release >= '22' and sys_platform == 'darwin'
+pyobjc-framework-scenekit==12.1 ; platform_release >= '11' and sys_platform == 'darwin'
+pyobjc-framework-screencapturekit==12.1 ; platform_release >= '21.4' and sys_platform == 'darwin'
+pyobjc-framework-screensaver==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-screentime==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-scriptingbridge==12.1 ; platform_release >= '9' and sys_platform == 'darwin'
+pyobjc-framework-searchkit==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-security==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-securityfoundation==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-securityinterface==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-securityui==12.1 ; platform_release >= '24.4' and sys_platform == 'darwin'
+pyobjc-framework-sensitivecontentanalysis==12.1 ; platform_release >= '23' and sys_platform == 'darwin'
+pyobjc-framework-servicemanagement==12.1 ; platform_release >= '10' and sys_platform == 'darwin'
+pyobjc-framework-sharedwithyou==12.1 ; platform_release >= '22' and sys_platform == 'darwin'
+pyobjc-framework-sharedwithyoucore==12.1 ; platform_release >= '22' and sys_platform == 'darwin'
+pyobjc-framework-shazamkit==12.1 ; platform_release >= '21' and sys_platform == 'darwin'
+pyobjc-framework-social==12.1 ; platform_release >= '12' and sys_platform == 'darwin'
+pyobjc-framework-soundanalysis==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-speech==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-spritekit==12.1 ; platform_release >= '13' and sys_platform == 'darwin'
+pyobjc-framework-storekit==12.1 ; platform_release >= '11' and sys_platform == 'darwin'
+pyobjc-framework-symbols==12.1 ; platform_release >= '23' and sys_platform == 'darwin'
+pyobjc-framework-syncservices==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-systemconfiguration==12.1 ; sys_platform == 'darwin'
+pyobjc-framework-systemextensions==12.1 ; platform_release >= '19' and sys_platform == 'darwin'
+pyobjc-framework-threadnetwork==12.1 ; platform_release >= '22' and sys_platform == 'darwin'
+pyobjc-framework-uniformtypeidentifiers==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-usernotifications==12.1 ; platform_release >= '18' and sys_platform == 'darwin'
+pyobjc-framework-usernotificationsui==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-videosubscriberaccount==12.1 ; platform_release >= '18' and sys_platform == 'darwin'
+pyobjc-framework-videotoolbox==12.1 ; platform_release >= '12' and sys_platform == 'darwin'
+pyobjc-framework-virtualization==12.1 ; platform_release >= '20' and sys_platform == 'darwin'
+pyobjc-framework-vision==12.1 ; platform_release >= '17' and sys_platform == 'darwin'
+pyobjc-framework-webkit==12.1 ; sys_platform == 'darwin'
+pypiwin32==223 ; sys_platform == 'win32'
 pysbd==0.3.4
+python-dotenv==1.2.1
+python-multipart==0.0.21
 pyttsx3==2.99
+pywin32==311 ; sys_platform == 'win32'
 pyyaml==6.0.3
+referencing==0.37.0
 requests==2.32.5
-ruamel-yaml==0.18.15
-ruff==0.13.2
+rich==14.3.1
+rich-toolkit==0.17.1
+rignore==0.7.6
+rpds-py==0.30.0
+ruamel-yaml==0.19.1
+sentry-sdk==2.50.0
+shellingham==1.5.4
+six==1.17.0
+sniffio==1.3.1
 soundfile==0.13.1
-tomli==2.2.1
-uvicorn==0.37.0
-websocket-client==1.8.0
-yarl==1.9.11
+sse-starlette==3.2.0
+starlette==0.50.0
+tabulate==0.9.0
+tomli==2.4.0
+tqdm==4.67.1
+typer==0.21.1
+typing-extensions==4.15.0
+typing-inspection==0.4.2
+urllib3==2.6.3
+uvicorn==0.40.0
+uvloop==0.22.1 ; platform_python_implementation != 'PyPy' and sys_platform != 'cygwin' and sys_platform != 'win32'
+watchfiles==1.1.1
+websockets==16.0
+win32-setctime==1.2.0 ; sys_platform == 'win32'
+yarl==1.22.0
