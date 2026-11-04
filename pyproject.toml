@@ -17,10 +17,9 @@ dependencies = [
     "langdetect>=1.0.9",
     "loguru>=0.7.2",
     "mcp[cli]>=1.6.0",
-    "numpy>=1.26.4,<2",
+    "numpy>=1.26.4",
     "openai>=1.57.4",
     "packaging>=24.0",
-    "pre-commit>=4.1.0",
     "pydub>=0.25.1",
     "pysbd>=0.3.4",
     "pyttsx3>=2.98",
@@ -28,12 +27,9 @@ dependencies = [
     "pyyaml>=6.0.2",
     "requests>=2.32.3",
     "ruamel-yaml>=0.18.10",
-    "ruff>=0.8.6",
     "soundfile>=0.12.1",
     "tomli>=2.2.1",
     "uvicorn[standard]>=0.33.0",
-    "websocket-client>=1.8.0",
-    "duckduckgo-mcp-server>=0.1.1",
 ]
 
 [project.optional-dependencies]
@@ -49,6 +45,13 @@ gradio-tts = [
 # fish_api_tts
 fish-audio = [
     "fish-audio-sdk>=1.0.0",
+]
+
+[dependency-groups]
+# Local tooling only; CI lint runs `uvx pre-commit` and the image uses --no-dev.
+dev = [
+    "pre-commit>=4.1.0",
+    "ruff>=0.8.6",
 ]
 
 [tool.ruff]
