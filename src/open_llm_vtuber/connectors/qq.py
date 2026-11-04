@@ -29,6 +29,7 @@ API_BASE = "https://api.sgroup.qq.com"
 SANDBOX_API_BASE = "https://sandbox.api.sgroup.qq.com"
 TOKEN_REFRESH_MARGIN_SECONDS = 60
 HTTP_TIMEOUT_SECONDS = 15.0
+RETRY_STATUS_CODES = {502, 503, 504}
 MAX_FRAME_BYTES = 4 * 1024 * 1024
 
 INTENT_BITS = {
@@ -161,7 +162,9 @@ class QQConnector(Connector):
         super().__init__(config.id, config.name)
         self.config = config
         self.api_base = SANDBOX_API_BASE if config.sandbox else API_BASE
-        self._http = http_client or httpx.AsyncClient(timeout=HTTP_TIMEOUT_SECONDS)
+        self._http = http_client or httpx.AsyncClient(
+            timeout=config.request_timeout_seconds
+        )
         self._connect = connect
         self._clock = clock
         self._token: str | None = None
@@ -174,11 +177,38 @@ class QQConnector(Connector):
 
     # ==== auth / REST
 
+    async def _http_request(
+        self, method: str, url: str, **kwargs: Any
+    ) -> httpx.Response:
+        """One REST call, retried on transient network failures."""
+        retries = self.config.http_retries
+        attempt = 0
+        while True:
+            try:
+                response = await self._http.request(method, url, **kwargs)
+            except httpx.TransportError as exc:
+                if attempt >= retries:
+                    raise
+                error = f"{type(exc).__name__}: {exc}"
+            else:
+                # After the last retry the 5xx goes to the caller as an API error.
+                if response.status_code not in RETRY_STATUS_CODES or attempt >= retries:
+                    return response
+                error = f"HTTP {response.status_code}"
+            delay = self.config.retry_backoff_seconds * 2**attempt
+            attempt += 1
+            logger.warning(
+                f"Connector {self.connector_id}: {method} {url} failed ({error}); "
+                f"retry {attempt}/{retries} in {delay:g}s"
+            )
+            await asyncio.sleep(delay)
+
     async def _access_token(self) -> str:
         async with self._token_lock:
             if self._token and self._clock() < self._token_expires_at:
                 return self._token
-            response = await self._http.post(
+            response = await self._http_request(
+                "POST",
                 TOKEN_URL,
                 json={
                     "appId": self.config.app_id,
@@ -207,7 +237,7 @@ class QQConnector(Connector):
         self, method: str, path: str, body: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         token = await self._access_token()
-        response = await self._http.request(
+        response = await self._http_request(
             method,
             f"{self.api_base}{path}",
             json=body,
