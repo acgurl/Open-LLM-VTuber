@@ -39,6 +39,7 @@ class TTSEngine(TTSInterface):
                     return file_name
                 except Exception as e:
                     logger.critical(f"Error: Failed to generate audio. {e}")
+                    self.remove_partial_file(file_name)
                     return None
             case "voice_creation":
                 try:
@@ -53,6 +54,7 @@ class TTSEngine(TTSInterface):
                     return file_name
                 except Exception as e:
                     logger.critical(f"Error: Failed to generate audio. {e}")
+                    self.remove_partial_file(file_name)
                     return None
             case _:
                 logger.critical(f"Error: Unknown api_name: {self.api_name}")

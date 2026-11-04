@@ -34,6 +34,7 @@ class TTSEngine(TTSInterface):
         except Exception as e:
             logger.critical(f"\nError: edge-tts unable to generate audio: {e}")
             logger.critical("It's possible that edge-tts is blocked in your region.")
+            self.remove_partial_file(file_name)
             return None
 
         return file_name

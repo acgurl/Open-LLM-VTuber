@@ -1,5 +1,4 @@
 import abc
-import os
 import queue
 import threading
 from typing import Any
@@ -77,8 +76,7 @@ class PooledTTSEngine(TTSInterface):
                 self._release_client(client, healthy=success)
 
         if not success:
-            if os.path.exists(output_path):
-                os.remove(output_path)
+            self.remove_partial_file(output_path)
             return None
         return output_path
 

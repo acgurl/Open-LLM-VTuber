@@ -141,7 +141,7 @@ class TTSEngine(TTSInterface):
         except Exception as e:
             logger.critical(f"Error: Cartesia TTS unable to generate audio: {e}")
             self.remove_partial_file(speech_file_path)
-            raise
+            return None
 
         return str(speech_file_path)
 

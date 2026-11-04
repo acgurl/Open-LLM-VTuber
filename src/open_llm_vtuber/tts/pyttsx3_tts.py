@@ -20,8 +20,13 @@ class TTSEngine(TTSInterface):
         logger.debug(f"Start Generating {file_name_no_ext}")
         file_name = self.generate_cache_file_name(file_name_no_ext, self.file_extension)
 
-        with self.lock:
-            self.engine.save_to_file(text=text, filename=file_name)
-            self.engine.runAndWait()
+        try:
+            with self.lock:
+                self.engine.save_to_file(text=text, filename=file_name)
+                self.engine.runAndWait()
+        except Exception as e:
+            logger.critical(f"Error: pyttsx3 unable to generate audio: {e}")
+            self.remove_partial_file(file_name)
+            return None
         logger.info(f"Finished Generating {file_name}")
         return file_name

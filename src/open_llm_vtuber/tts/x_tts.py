@@ -1,5 +1,5 @@
 import requests
-from loguru import logger
+from ._http import fetch_audio_to_file
 from .tts_interface import TTSInterface
 
 
@@ -26,16 +26,8 @@ class TTSEngine(TTSInterface):
         }
 
         # Send POST request to the TTS API
-        response = requests.post(self.api_url, json=data, timeout=120)
-
-        # Check if the request was successful
-        if response.status_code == 200:
-            # Save the audio content to a file
-            with open(file_name, "wb") as audio_file:
-                audio_file.write(response.content)
-            return file_name
-        # Handle errors or unsuccessful requests
-        logger.critical(
-            f"Error: Failed to generate audio. Status code: {response.status_code}"
+        return fetch_audio_to_file(
+            self,
+            lambda: requests.post(self.api_url, json=data, timeout=120),
+            file_name,
         )
-        return None
