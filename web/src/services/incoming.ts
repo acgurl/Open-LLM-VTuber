@@ -15,7 +15,6 @@ import {
   handleLocalToolCall,
   onLocalMcpError,
   onLocalMcpRegistered,
-  onLocalMcpUnregistered,
 } from './localMcp';
 import i18n from '../i18n';
 import type { ServerMessage } from '../protocol/types';
@@ -206,7 +205,7 @@ export function handleServerMessage(msg: ServerMessage) {
       break;
 
     case 'local-mcp-unregistered':
-      onLocalMcpUnregistered(msg);
+      // Nothing to do: the next local-mcp-config reconciles the server list.
       break;
 
     case 'local-mcp-error':

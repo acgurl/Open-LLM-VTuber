@@ -17,6 +17,8 @@ import {
   errorFromHttp,
   filterCustomHeaders,
   listToolsPaged,
+  parseSseEvent,
+  type SseEvent,
   takeSseFrames,
 } from './localMcpClient';
 
@@ -24,26 +26,6 @@ interface PendingRequest {
   resolve: (message: JsonRpcMessage) => void;
   reject: (error: Error) => void;
   timer: number;
-}
-
-interface SseEvent {
-  event: string;
-  data: string;
-}
-
-function parseSseEvent(chunk: string): SseEvent | null {
-  let event = 'message';
-  const dataLines: string[] = [];
-  for (const line of chunk.split(/\r?\n/)) {
-    if (line.startsWith(':')) continue;
-    if (line.startsWith('event:')) {
-      event = line.slice(6).trim();
-    } else if (line.startsWith('data:')) {
-      dataLines.push(line.slice(5).trimStart());
-    }
-  }
-  if (!dataLines.length) return null;
-  return { event, data: dataLines.join('\n') };
 }
 
 export class LocalSseMcpClient implements LocalMcpClientLike {

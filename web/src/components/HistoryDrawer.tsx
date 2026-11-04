@@ -13,6 +13,7 @@ import { stripTags, buildTagSet } from '../utils/text';
 import { usePresence } from '../hooks/usePresence';
 import { useDialog } from '../hooks/useDialog';
 import type { HistorySummary } from '../protocol/types';
+import { TrashIcon } from './icons';
 
 // 第一次点删除只“上膛”，这段时间内再点一次才真的删
 const CONFIRM_MS = 3000;
@@ -180,13 +181,5 @@ export function HistoryDrawer() {
         </div>
       </aside>
     </>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-    </svg>
   );
 }

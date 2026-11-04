@@ -157,10 +157,3 @@ export function onLocalMcpError(
     error: message.message,
   });
 }
-
-export function onLocalMcpUnregistered(
-  message: Extract<ServerMessage, { type: 'local-mcp-unregistered' }>,
-): void {
-  if (!message.success) return;
-  // The next local-mcp-config will reconcile the list; nothing else to do.
-}
