@@ -127,9 +127,9 @@ character_config:
         faster_first_response: True
         # Method for segmenting sentences: 'regex' or 'pysbd'
         segment_method: 'pysbd'
-        # Use MCP (Model Context Protocol) Plus to let the LLM have the ability to use tools
+        # Use MCP (Model Context Protocol) Plus to let the LLM have the ability to use tools (default: False)
         # 'Plus' means that it has the ability to call tools by using OpenAI API.
-        use_mcpp: True
+        use_mcpp: False
         mcp_enabled_servers: ["time", "ddg-search"] # Enabled MCP servers
         # Max LLM requests per user turn while the model keeps calling tools
         max_tool_rounds: 10
@@ -270,7 +270,7 @@ character_config:
 
     # pyttsx3_tts doesn't have any config.
 
-    cosyvoice_tts: # Cosy Voice TTS connects to the gradio webui
+    cosyvoice_tts: # Cosy Voice TTS connects to the gradio webui (requires: uv sync --extra gradio-tts)
       # Check their documentation for deployment and the meaning of the following configurations
       client_url: 'http://127.0.0.1:50000/' # CosyVoice gradio demo webui url
       mode_checkbox_group: '预训练音色'
@@ -282,7 +282,7 @@ character_config:
       seed: 0
       api_name: '/generate_audio'
 
-    cosyvoice2_tts: # Cosy Voice TTS connects to the gradio webui
+    cosyvoice2_tts: # Cosy Voice TTS connects to the gradio webui (requires: uv sync --extra gradio-tts)
       # Check their documentation for deployment and the meaning of the following configurations
       client_url: 'http://127.0.0.1:50000/' # CosyVoice gradio demo webui url
       mode_checkbox_group: '3s极速复刻'
@@ -313,7 +313,7 @@ character_config:
       media_type: 'wav'
       streaming_mode: 'false'
 
-    fish_api_tts:
+    fish_api_tts: # requires: uv sync --extra fish-audio
       # The API key for the Fish TTS API.
       api_key: ''
       # The reference ID for the voice to be used. Get it on the [Fish Audio website](https://fish.audio/).
@@ -333,7 +333,7 @@ character_config:
       speed: 1
       gain: 0
 
-    spark_tts:
+    spark_tts: # requires: uv sync --extra gradio-tts
       api_url: 'http://127.0.0.1:6006/' # API URL. Uses Gradio's built-in front-end API. Repository: https://github.com/SparkAudio/Spark-TTS
       api_name:  "voice_clone" # Endpoint name. Options: voice_clone, voice_creation
       prompt_wav_upload: "https://uploadstatic.mihoyo.com/ys-obc/2022/11/02/16576950/4d9feb71760c5e8eb5f6c700df12fa0c_6824265537002152805.mp3" # Reference audio URL. Provide if api_name equals "voice_clone"

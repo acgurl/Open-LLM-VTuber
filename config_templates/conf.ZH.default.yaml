@@ -275,7 +275,7 @@ character_config:
 
     # pyttsx3_tts 没有任何配置。
 
-    cosyvoice_tts: # Cosy Voice TTS 连接到 gradio webui
+    cosyvoice_tts: # Cosy Voice TTS 连接到 gradio webui（需安装: uv sync --extra gradio-tts）
       # 查看他们的文档以了解部署和以下配置的含义
       client_url: 'http://127.0.0.1:50000/' # CosyVoice gradio 演示 webui url
       mode_checkbox_group: '预训练音色' # 模式复选框组
@@ -287,7 +287,7 @@ character_config:
       seed: 0 # 种子
       api_name: '/generate_audio' # API 名称
 
-    cosyvoice2_tts: # Cosy Voice TTS 连接到 gradio webui
+    cosyvoice2_tts: # Cosy Voice TTS 连接到 gradio webui（需安装: uv sync --extra gradio-tts）
       # 查看他们的文档以了解部署和以下配置的含义
       client_url: 'http://127.0.0.1:50000/' # CosyVoice gradio 演示 webui url
       mode_checkbox_group: '预训练音色' # 模式复选框组, 可选项: '预训练音色', '3s极速复刻', '跨语种复刻', '自然语言控制'
@@ -318,7 +318,7 @@ character_config:
       media_type: 'wav' # 媒体类型
       streaming_mode: 'false' # 流模式
 
-    fish_api_tts:
+    fish_api_tts: # 需安装: uv sync --extra fish-audio
       # Fish TTS API 的 API 密钥。
       api_key: ''
       # 要使用的语音的参考 ID。在 [Fish Audio 网站](https://fish.audio/) 上获取。
@@ -327,7 +327,7 @@ character_config:
       latency: 'balanced' # 延迟
       base_url: 'https://api.fish.audio' # 基础 URL
 
-    spark_tts:
+    spark_tts: # 需安装: uv sync --extra gradio-tts
       api_url: 'http://127.0.0.1:6006/' # 初始API地址，使用gradio自带的前端API。地址：https://github.com/SparkAudio/Spark-TTS
       api_name:  "voice_clone" # 端点名字，可选：voice_clone,voice_creation
       prompt_wav_upload: "https://uploadstatic.mihoyo.com/ys-obc/2022/11/02/16576950/4d9feb71760c5e8eb5f6c700df12fa0c_6824265537002152805.mp3" # 参考音频地址,api_name: = "voice_clone"时填写

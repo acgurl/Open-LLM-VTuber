@@ -43,6 +43,14 @@ bilibili = [
     "Brotli~=1.1.0",
     "yarl>=1.12.0,<2.0"
 ]
+# Gradio-based TTS clients: cosyvoice_tts, cosyvoice2_tts, spark_tts
+gradio-tts = [
+    "gradio_client>=1.0.0",
+]
+# fish_api_tts
+fish-audio = [
+    "fish-audio-sdk>=1.0.0",
+]
 
 [tool.ruff]
 target-version = "py310"
