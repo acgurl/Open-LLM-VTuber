@@ -294,17 +294,45 @@ async def run_agent_turn(
     # completion would leave the turn vulnerable to a concurrent history
     # switch (the reply could be written to the wrong history or lost).
     if full_response and turn_history_uid:
+        await _persist_reply(context, full_response, turn_history_uid)
+        logger.info(f"AI response: {full_response}")
+
+    return full_response
+
+
+async def _persist_reply(context: Any, full_response: str, history_uid: str) -> None:
+    """Store the AI reply and mark the turn persisted, even if cancelled.
+
+    The write runs in a worker thread that a cancellation cannot stop. Letting
+    the turn finish the write before re-raising keeps
+    ``turn_response_persisted`` truthful for the interrupt handler, which
+    would otherwise store the heard part as a second AI message.
+    """
+
+    async def write() -> None:
         await context.store_history_message(
             role="ai",
             content=full_response,
             name=context.character_config.character_name,
             avatar=context.character_config.avatar,
-            history_uid=turn_history_uid,
+            history_uid=history_uid,
         )
         context.turn_response_persisted = True
-        logger.info(f"AI response: {full_response}")
 
-    return full_response
+    persist = asyncio.ensure_future(write())
+    try:
+        await asyncio.shield(persist)
+    except asyncio.CancelledError:
+        while not persist.done():
+            try:
+                await asyncio.shield(persist)
+            except asyncio.CancelledError:
+                continue
+            except Exception:
+                break
+        if not persist.cancelled() and persist.exception() is not None:
+            logger.error(f"Failed to persist AI reply: {persist.exception()}")
+        raise
 
 
 async def process_agent_output(

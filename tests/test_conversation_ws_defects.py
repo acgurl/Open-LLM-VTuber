@@ -10,6 +10,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import aiohttp
 
+from open_llm_vtuber.agent.output_types import Actions, DisplayText, SentenceOutput
+
 from open_llm_vtuber.chat_group import ChatGroupManager, broadcast_to_group
 from open_llm_vtuber.conversations import conversation_handler
 from open_llm_vtuber.conversations import conversation_utils
@@ -292,6 +294,89 @@ class IndividualInterruptOrderingTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(task.done())
         context.store_history_message.assert_not_awaited()
         context.agent_engine.handle_interrupt.assert_not_called()
+
+
+class _SentenceAgent:
+    def chat(self, _batch_input):
+        async def stream():
+            yield SentenceOutput(
+                display_text=DisplayText(text="full reply"),
+                tts_text="full reply",
+                actions=Actions(),
+            )
+
+        return stream()
+
+
+class InterruptDuringReplyWriteTests(unittest.IsolatedAsyncioTestCase):
+    """D-WS2: interrupting while the reply write is in a worker thread."""
+
+    async def test_reply_is_stored_exactly_once(self):
+        stored = []
+        write_started = threading.Event()
+        release_write = threading.Event()
+        blocked_once = []
+
+        def blocking_write(role, content):
+            if role == "ai" and not blocked_once:
+                blocked_once.append(True)
+                write_started.set()
+                release_write.wait(5)
+            stored.append((role, content))
+
+        async def store(role, content, name=None, avatar=None, history_uid=None):
+            await asyncio.to_thread(blocking_write, role, content)
+
+        context = SimpleNamespace(
+            character_config=SimpleNamespace(
+                character_name="AI", avatar="", human_name="Human"
+            ),
+            agent_engine=_SentenceAgent(),
+            live2d_model=None,
+            tts_engine=None,
+            translate_engine=None,
+            history_uid="history",
+            turn_history_uid="history",
+            turn_response_persisted=False,
+            store_history_message=store,
+        )
+        turn = asyncio.create_task(
+            conversation_utils.run_agent_turn(
+                context,
+                channels=OutboundChannels(text=AsyncMock(), audio=AsyncMock()),
+                tts_manager=None,
+                input_text="hi",
+                turn_history_uid="history",
+            )
+        )
+        try:
+            self.assertTrue(await asyncio.to_thread(write_started.wait, 5))
+
+            interrupt = asyncio.create_task(
+                conversation_handler.handle_individual_interrupt(
+                    "client", {"client": turn}, context, "full"
+                )
+            )
+            await asyncio.sleep(0.05)
+            release_write.set()
+            await asyncio.wait_for(interrupt, timeout=5)
+            for _ in range(100):
+                if any(content == "full reply" for _, content in stored):
+                    break
+                await asyncio.sleep(0.01)
+        finally:
+            release_write.set()
+            if not turn.done():
+                turn.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await turn
+
+        self.assertTrue(turn.cancelled())
+        self.assertEqual(
+            [entry for entry in stored if entry[0] != "human"],
+            [("ai", "full reply")],
+        )
+        self.assertTrue(context.turn_response_persisted)
 
 
 class _FakeServerWebSocket:
