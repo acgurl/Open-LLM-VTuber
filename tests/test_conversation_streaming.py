@@ -278,5 +278,36 @@ class SingleHistoryWriteTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(context.turn_response_persisted)
 
 
+class TranslationFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_translation_speaks_original_and_keeps_the_turn(self):
+        channels = OutboundChannels(text=AsyncMock(), audio=AsyncMock())
+        translate_engine = Mock()
+        translate_engine.translate.side_effect = [RuntimeError("api down"), "bye"]
+        tts_manager = Mock(speak=AsyncMock())
+        context = SimpleNamespace(
+            character_config=SimpleNamespace(character_name="AI", avatar=None),
+            agent_engine=None,
+            live2d_model=None,
+            tts_engine=Mock(),
+            translate_engine=translate_engine,
+        )
+
+        async def stream():
+            yield _sentence("你好。")
+            yield _sentence("再见。")
+
+        full_response = await conversation_utils.consume_agent_stream(
+            stream(),
+            context=context,
+            channels=channels,
+            tts_manager=tts_manager,
+            send_text_delta=AsyncMock(),
+        )
+
+        self.assertEqual(full_response, "你好。再见。")
+        spoken = [call.kwargs["tts_text"] for call in tts_manager.speak.await_args_list]
+        self.assertEqual(spoken, ["你好。", "bye"])
+
+
 if __name__ == "__main__":
     unittest.main()

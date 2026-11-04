@@ -7,7 +7,6 @@ from .agents.agent_interface import AgentInterface
 from .agents.basic_memory_agent import DEFAULT_MAX_TOOL_ROUNDS, BasicMemoryAgent
 from .stateless_llm_factory import LLMFactory as StatelessLLMFactory
 from .agents.hume_ai import HumeAIAgent
-from .agents.letta_agent import LettaAgent
 
 from ..mcpp.tool_manager import ToolManager
 from ..mcpp.tool_executor import ToolExecutor
@@ -86,26 +85,6 @@ def _build_hume_ai_agent(
     )
 
 
-def _build_letta_agent(
-    agent_settings: dict,
-    _llm_configs: dict,
-    _system_prompt: str,
-    live2d_model,
-    tts_preprocessor_config,
-    _kwargs: dict,
-) -> AgentInterface:
-    settings = agent_settings.get("letta_agent", {})
-    return LettaAgent(
-        live2d_model=live2d_model,
-        id=settings.get("id"),
-        tts_preprocessor_config=tts_preprocessor_config,
-        faster_first_response=settings.get("faster_first_response"),
-        segment_method=settings.get("segment_method"),
-        host=settings.get("host"),
-        port=settings.get("port"),
-    )
-
-
 AgentBuilder = Callable[
     [dict, dict, str, Any, Any, dict],
     AgentInterface,
@@ -114,7 +93,6 @@ AgentBuilder = Callable[
 _AGENT_BUILDERS: dict[str, AgentBuilder] = {
     "basic_memory_agent": _build_basic_memory_agent,
     "hume_ai_agent": _build_hume_ai_agent,
-    "letta_agent": _build_letta_agent,
 }
 
 

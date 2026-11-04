@@ -33,7 +33,6 @@ dependencies = [
     "tomli>=2.2.1",
     "uvicorn[standard]>=0.33.0",
     "websocket-client>=1.8.0",
-    "letta-client>=0.1.100",
     "duckduckgo-mcp-server>=0.1.1",
 ]
 
@@ -42,6 +41,14 @@ bilibili = [
     "aiohttp>=3.10.0",
     "Brotli~=1.1.0",
     "yarl>=1.12.0,<2.0"
+]
+# Gradio-based TTS clients: cosyvoice_tts, cosyvoice2_tts, spark_tts
+gradio-tts = [
+    "gradio_client>=1.0.0",
+]
+# fish_api_tts
+fish-audio = [
+    "fish-audio-sdk>=1.0.0",
 ]
 
 [tool.ruff]

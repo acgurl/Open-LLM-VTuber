@@ -401,7 +401,14 @@ async def handle_sentence_output(
             if not is_silent_text(tts_text):
                 # Translators are synchronous HTTP clients; keep them off
                 # the event loop.
-                tts_text = await asyncio.to_thread(translate_engine.translate, tts_text)
+                try:
+                    tts_text = await asyncio.to_thread(
+                        translate_engine.translate, tts_text
+                    )
+                except Exception as e:
+                    # A failed translation must not end the turn; speak the
+                    # original sentence instead.
+                    logger.error(f"Translation failed, speaking original text: {e}")
             logger.info(f"🏃 Text after translation: '''{tts_text}'''...")
         else:
             logger.debug("🚫 No translation engine available. Skipping translation.")

@@ -28,16 +28,20 @@ class ArchiveResult:
 
 
 def _existing_archive(path: Path) -> ArchiveResult | None:
+    """Summarize a readable archive; ``None`` when it is missing or corrupt."""
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        if not isinstance(data, dict):
+            raise ValueError("archive root is not a JSON object")
+        return ArchiveResult(
+            path=path,
+            history_count=int(data.get("history_count", 0)),
+            message_count=int(data.get("message_count", 0)),
+            created=False,
+        )
+    except (OSError, ValueError, TypeError) as exc:
+        logger.warning(f"Ignoring unreadable history archive at {path}: {exc}")
         return None
-    return ArchiveResult(
-        path=path,
-        history_count=int(data.get("history_count", 0)),
-        message_count=int(data.get("message_count", 0)),
-        created=False,
-    )
 
 
 async def archive_user_histories(
@@ -49,9 +53,10 @@ async def archive_user_histories(
 ) -> ArchiveResult | None:
     """Write every non-empty history of ``user_id`` to one JSON file.
 
-    The archive is idempotent: once the file exists it is left untouched so a
-    restart cannot overwrite the original export. Returns ``None`` when the
-    user has no histories.
+    The archive is idempotent: once a readable archive exists it is left
+    untouched so a restart cannot overwrite the original export. An unreadable
+    or corrupt file at that path is replaced by a fresh export. Returns
+    ``None`` when the user has no histories.
     """
     directory = Path(archive_dir)
     path = directory / filename

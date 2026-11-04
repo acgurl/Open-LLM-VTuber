@@ -1,7 +1,10 @@
 import asyncio
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, create_autospec, patch
+
+from websockets.asyncio.client import ClientConnection
+from websockets.protocol import State
 
 from open_llm_vtuber.live import bilibili_live
 from open_llm_vtuber.live.bilibili_live import BiliBiliLivePlatform
@@ -99,6 +102,24 @@ class IncomingMessageHandlerTests(unittest.IsolatedAsyncioTestCase):
             [client.room_id for client in _FakeLiveClient.instances], [1, 2]
         )
         self.assertTrue(all(client.stopped for client in _FakeLiveClient.instances))
+
+
+class ConnectionStateTests(unittest.TestCase):
+    def _platform(self, state):
+        platform = BiliBiliLivePlatform.__new__(BiliBiliLivePlatform)
+        platform._connected = True
+        # Autospec the real websockets class so attribute drift shows up here.
+        platform._websocket = create_autospec(ClientConnection, instance=True)
+        platform._websocket.state = state
+        return platform
+
+    def test_open_socket_is_connected(self):
+        self.assertTrue(self._platform(State.OPEN).is_connected)
+
+    def test_closed_socket_is_not_connected(self):
+        for state in (State.CLOSING, State.CLOSED):
+            with self.subTest(state=state):
+                self.assertFalse(self._platform(state).is_connected)
 
 
 if __name__ == "__main__":

@@ -4,12 +4,14 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from open_llm_vtuber.config_manager import read_yaml, validate_config
+from open_llm_vtuber.config_manager.agent import BasicMemoryAgentConfig
 from open_llm_vtuber.config_manager.asr import ASRConfig
 from open_llm_vtuber.config_manager.tts import TTSConfig
 
 TEMPLATE = (
     Path(__file__).resolve().parents[1] / "config_templates" / "conf.default.yaml"
 )
+ZH_TEMPLATE = TEMPLATE.with_name("conf.ZH.default.yaml")
 
 
 class SelectedModelConfigTests(unittest.TestCase):
@@ -62,6 +64,41 @@ class CharacterNameFallbackTests(unittest.TestCase):
             config.character_config.character_name,
             config.character_config.conf_name,
         )
+
+
+class TemplateDefaultsTests(unittest.TestCase):
+    def test_templates_keep_use_mcpp_at_the_model_default(self):
+        default = BasicMemoryAgentConfig.model_fields["use_mcpp"].default
+        for template in (TEMPLATE, ZH_TEMPLATE):
+            with self.subTest(template=template.name):
+                config = validate_config(read_yaml(str(template)))
+                settings = config.character_config.agent_config.agent_settings
+
+                self.assertEqual(settings.basic_memory_agent.use_mcpp, default)
+
+    def test_templates_have_identical_key_sets(self):
+        def key_paths(node, prefix=""):
+            paths = set()
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    path = f"{prefix}.{key}" if prefix else str(key)
+                    paths.add(path)
+                    paths |= key_paths(value, path)
+            return paths
+
+        en_keys = key_paths(read_yaml(str(TEMPLATE)))
+        zh_keys = key_paths(read_yaml(str(ZH_TEMPLATE)))
+
+        self.assertEqual(sorted(en_keys - zh_keys), [], "keys missing from ZH")
+        self.assertEqual(sorted(zh_keys - en_keys), [], "keys missing from EN")
+
+    def test_templates_have_no_removed_agent_sections(self):
+        for template in (TEMPLATE, ZH_TEMPLATE):
+            with self.subTest(template=template.name):
+                data = read_yaml(str(template))
+                agent_config = data["character_config"]["agent_config"]
+
+                self.assertNotIn("letta_agent", agent_config["agent_settings"])
 
 
 if __name__ == "__main__":

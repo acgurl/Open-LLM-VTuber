@@ -211,5 +211,38 @@ class ModelConfPayloadTests(unittest.TestCase):
         self.assertNotIn("client_uid", payload)
 
 
+class EngineInitTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.context = ServiceContext()
+        self.context.character_config = SimpleNamespace(
+            tts_config=None, asr_config=None
+        )
+
+    def test_tts_engine_without_sub_config_gets_no_kwargs(self):
+        from open_llm_vtuber.config_manager.tts import TTSConfig
+
+        config = TTSConfig(tts_model="pyttsx3_tts")
+        with patch.object(
+            service_context_module.TTSFactory, "get_tts_engine"
+        ) as get_engine:
+            self.context.init_tts(config)
+
+        get_engine.assert_called_once_with("pyttsx3_tts")
+        self.assertIs(self.context.tts_engine, get_engine.return_value)
+        self.assertIs(self.context.character_config.tts_config, config)
+
+    def test_tts_engine_with_sub_config_gets_its_fields(self):
+        from open_llm_vtuber.config_manager.tts import TTSConfig
+
+        config = TTSConfig(tts_model="edge_tts", edge_tts={"voice": "v"})
+        with patch.object(
+            service_context_module.TTSFactory, "get_tts_engine"
+        ) as get_engine:
+            self.context.init_tts(config)
+
+        self.assertEqual(get_engine.call_args.args, ("edge_tts",))
+        self.assertEqual(get_engine.call_args.kwargs["voice"], "v")
+
+
 if __name__ == "__main__":
     unittest.main()

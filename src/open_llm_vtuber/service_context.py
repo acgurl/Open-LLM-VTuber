@@ -63,6 +63,12 @@ _PROMPTS_NOT_IN_SYSTEM_PROMPT = frozenset(
 )
 
 
+def _engine_kwargs(config, field_name: str) -> dict:
+    """Return the engine's sub-config as kwargs; engines without one get {}."""
+    sub_config = getattr(config, field_name, None)
+    return sub_config.model_dump() if sub_config is not None else {}
+
+
 class ServiceContext:
     """Initializes, stores, and updates the asr, tts, and llm instances and other
     configurations for a connected client."""
@@ -726,7 +732,7 @@ class ServiceContext:
             logger.info(f"Initializing ASR: {asr_config.asr_model}")
             self.asr_engine = ASRFactory.get_asr_system(
                 asr_config.asr_model,
-                **getattr(asr_config, asr_config.asr_model).model_dump(),
+                **_engine_kwargs(asr_config, asr_config.asr_model),
             )
             # saving config should be done after successful initialization
             self.character_config.asr_config = asr_config
@@ -739,7 +745,7 @@ class ServiceContext:
             previous_engine = self.tts_engine
             self.tts_engine = TTSFactory.get_tts_engine(
                 tts_config.tts_model,
-                **getattr(tts_config, tts_config.tts_model.lower()).model_dump(),
+                **_engine_kwargs(tts_config, tts_config.tts_model.lower()),
             )
             # Never close an engine borrowed from the default context; other
             # sessions may still be using it.
