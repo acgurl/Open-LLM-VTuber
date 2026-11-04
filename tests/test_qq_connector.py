@@ -228,15 +228,56 @@ class QQRetryTests(unittest.IsolatedAsyncioTestCase):
             reply_context={"msg_id": "M1"},
         )
 
-    async def test_timeouts_and_gateway_errors_are_retried(self):
-        connector, calls = self._connector([httpx.ReadTimeout("slow"), 502, 200])
+    async def test_sends_are_retried_only_if_the_request_never_left(self):
+        connector, calls = self._connector(
+            [httpx.ConnectError("refused"), httpx.ConnectTimeout("slow"), 200]
+        )
         await connector.send_text(self._message(), "hello", 0)
         self.assertEqual(len(calls), 3)
         await connector.close()
 
-    async def test_gives_up_after_the_configured_retries(self):
-        connector, calls = self._connector([httpx.ReadTimeout("slow")], http_retries=2)
+    async def test_sends_that_may_have_arrived_are_not_retried(self):
+        # The platform may already have delivered the reply; a retry would
+        # post it twice.
+        connector, calls = self._connector([httpx.ReadTimeout("slow"), 200])
         with self.assertRaises(httpx.ReadTimeout):
+            await connector.send_text(self._message(), "hello", 0)
+        self.assertEqual(len(calls), 1)
+        await connector.close()
+
+        connector, calls = self._connector([502, 200])
+        with self.assertRaises(QQAPIError):
+            await connector.send_text(self._message(), "hello", 0)
+        self.assertEqual(len(calls), 1)
+        await connector.close()
+
+    async def test_token_and_gateway_calls_retry_timeouts_and_gateway_errors(self):
+        token_outcomes = [httpx.ReadTimeout("slow"), 502, 200]
+        token_calls = []
+
+        def handler(request):
+            if request.url.host == "bots.qq.com":
+                token_calls.append(request)
+                outcome = token_outcomes[len(token_calls) - 1]
+                if isinstance(outcome, Exception):
+                    raise outcome
+                return httpx.Response(outcome, json={"access_token": "tok"})
+            return httpx.Response(200, json={"url": "wss://gw"})
+
+        client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+        connector = QQConnector(_config(retry_backoff_seconds=0), http_client=client)
+        await connector._access_token()
+        self.assertEqual(len(token_calls), 3)
+        await connector.close()
+
+        connector, calls = self._connector([httpx.ReadTimeout("slow"), 502, 200])
+        await connector._request("GET", "/gateway")
+        self.assertEqual(len(calls), 3)
+        await connector.close()
+
+    async def test_gives_up_after_the_configured_retries(self):
+        connector, calls = self._connector([httpx.ConnectError("x")], http_retries=2)
+        with self.assertRaises(httpx.ConnectError):
             await connector.send_text(self._message(), "hello", 0)
         self.assertEqual(len(calls), 3)
         await connector.close()

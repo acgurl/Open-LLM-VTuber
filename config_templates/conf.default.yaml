@@ -63,8 +63,9 @@ system_config:
         app_id: '${QQ_BOT_APP_ID}'
         app_secret: '${QQ_BOT_APP_SECRET}'
         sandbox: false
-        # REST calls (token, replies) are retried on timeouts, connection errors and
-        # 502/503/504: per-attempt timeout, extra attempts, backoff base (wait n = base * 2^(n-1))
+        # Token/gateway calls are retried on timeouts, connection errors and 502/503/504;
+        # replies only when the connection never opened (no double sends).
+        # Per-attempt timeout, extra attempts, backoff base (wait n = base * 2^(n-1))
         request_timeout_seconds: 8
         http_retries: 3
         retry_backoff_seconds: 0.5

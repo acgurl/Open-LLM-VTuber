@@ -30,6 +30,10 @@ SANDBOX_API_BASE = "https://sandbox.api.sgroup.qq.com"
 TOKEN_REFRESH_MARGIN_SECONDS = 60
 HTTP_TIMEOUT_SECONDS = 15.0
 RETRY_STATUS_CODES = {502, 503, 504}
+# Errors raised before the request was sent, so retrying cannot deliver a
+# message twice. Anything later (read/write timeouts, dropped connections,
+# 5xx) may mean the platform already accepted it.
+NOT_SENT_ERRORS = (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout)
 MAX_FRAME_BYTES = 4 * 1024 * 1024
 
 INTENT_BITS = {
@@ -178,21 +182,31 @@ class QQConnector(Connector):
     # ==== auth / REST
 
     async def _http_request(
-        self, method: str, url: str, **kwargs: Any
+        self, method: str, url: str, *, idempotent: bool = True, **kwargs: Any
     ) -> httpx.Response:
-        """One REST call, retried on transient network failures."""
+        """One REST call, retried on transient network failures.
+
+        Non-idempotent calls (sending a message) are only retried when the
+        request provably never left, so a slow platform cannot make the bot
+        reply twice.
+        """
         retries = self.config.http_retries
+        retryable = httpx.TransportError if idempotent else NOT_SENT_ERRORS
         attempt = 0
         while True:
             try:
                 response = await self._http.request(method, url, **kwargs)
-            except httpx.TransportError as exc:
+            except retryable as exc:
                 if attempt >= retries:
                     raise
                 error = f"{type(exc).__name__}: {exc}"
             else:
                 # After the last retry the 5xx goes to the caller as an API error.
-                if response.status_code not in RETRY_STATUS_CODES or attempt >= retries:
+                if (
+                    not idempotent
+                    or response.status_code not in RETRY_STATUS_CODES
+                    or attempt >= retries
+                ):
                     return response
                 error = f"HTTP {response.status_code}"
             delay = self.config.retry_backoff_seconds * 2**attempt
@@ -207,6 +221,8 @@ class QQConnector(Connector):
         async with self._token_lock:
             if self._token and self._clock() < self._token_expires_at:
                 return self._token
+            # Fetching a token has no side effect, so every transient failure
+            # is retried.
             response = await self._http_request(
                 "POST",
                 TOKEN_URL,
@@ -234,12 +250,18 @@ class QQConnector(Connector):
             return token
 
     async def _request(
-        self, method: str, path: str, body: dict[str, Any] | None = None
+        self,
+        method: str,
+        path: str,
+        body: dict[str, Any] | None = None,
+        *,
+        idempotent: bool | None = None,
     ) -> dict[str, Any]:
         token = await self._access_token()
         response = await self._http_request(
             method,
             f"{self.api_base}{path}",
+            idempotent=method == "GET" if idempotent is None else idempotent,
             json=body,
             headers={
                 "Authorization": f"QQBot {token}",
@@ -277,7 +299,7 @@ class QQConnector(Connector):
             }
         else:
             raise ValueError(f"Unsupported chat type: {message.chat_type}")
-        await self._request("POST", path, body)
+        await self._request("POST", path, body, idempotent=False)
 
     # ==== gateway
 
