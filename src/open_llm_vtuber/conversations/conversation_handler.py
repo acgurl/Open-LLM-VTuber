@@ -261,15 +261,24 @@ async def handle_group_interrupt(
                 try:
                     member_ctx = client_contexts[member_uid]
                     member_ctx.agent_engine.handle_interrupt(heard_response)
+                    # Same rule as the individual path: write to the history
+                    # the conversation was bound to; None means not persisted.
+                    turn_history_uid = getattr(
+                        member_ctx, "turn_history_uid", member_ctx.history_uid
+                    )
+                    if not turn_history_uid:
+                        continue
                     await member_ctx.store_history_message(
                         role="ai",
                         content=heard_response,
                         name=context.character_config.character_name,
                         avatar=context.character_config.avatar,
+                        history_uid=turn_history_uid,
                     )
                     await member_ctx.store_history_message(
                         role="system",
                         content="[Interrupted by user]",
+                        history_uid=turn_history_uid,
                     )
                 except Exception as e:
                     logger.error(f"Error handling interrupt for {member_uid}: {e}")

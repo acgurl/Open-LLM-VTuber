@@ -6,12 +6,12 @@ from fastapi import WebSocket
 import numpy as np
 
 from .conversation_utils import (
+    bind_turn_history,
     consume_agent_stream,
     create_batch_input,
     process_user_input,
     finalize_conversation_turn,
     cleanup_conversation,
-    should_store_history,
     new_session_emoji,
 )
 from .types import (
@@ -77,6 +77,12 @@ async def process_group_conversation(
         # Initialize group conversation context for each AI
         init_group_conversation_contexts(client_contexts, group_members)
 
+        # Bind every member to the history it has open now, as the single
+        # path does: opening another history mid-conversation must not
+        # reroute this conversation's writes (tool calls included).
+        for member_uid in group_members:
+            bind_turn_history(client_contexts[member_uid], metadata)
+
         # Get human name from initiator context
         initiator_context = client_contexts.get(initiator_client_uid)
         human_name = (
@@ -100,11 +106,13 @@ async def process_group_conversation(
 
         for member_uid in group_members:
             member_context = client_contexts[member_uid]
-            if should_store_history(member_context, skip_history):
+            turn_history_uid = _turn_history_uid(member_context)
+            if turn_history_uid:
                 await member_context.store_history_message(
                     role="human",
                     content=input_text,
                     name=human_name,
+                    history_uid=turn_history_uid,
                 )
         if skip_history:
             logger.debug("Skipping storing proactive speak input to group history")
@@ -158,6 +166,11 @@ async def process_group_conversation(
             cleanup_conversation(tts_manager, session_emoji)
         # Clean up
         GroupConversationState.remove_state(state.group_id)
+
+
+def _turn_history_uid(context: ServiceContext) -> str | None:
+    """The history this conversation is bound to; None means not persisted."""
+    return getattr(context, "turn_history_uid", context.history_uid)
 
 
 def init_group_conversation_contexts(
@@ -296,12 +309,14 @@ async def handle_group_member_turn(
         )
         for member_uid in group_members:
             member_context = client_contexts[member_uid]
-            if should_store_history(member_context, should_skip_history):
+            turn_history_uid = _turn_history_uid(member_context)
+            if turn_history_uid and not should_skip_history:
                 await member_context.store_history_message(
                     role="ai",
                     content=full_response,
                     name=context.character_config.character_name,
                     avatar=context.character_config.avatar,
+                    history_uid=turn_history_uid,
                 )
 
     state.memory_index[current_member_uid] = len(state.conversation_history)

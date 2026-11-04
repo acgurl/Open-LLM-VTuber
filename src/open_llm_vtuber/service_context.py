@@ -62,6 +62,12 @@ _PROMPTS_NOT_IN_SYSTEM_PROMPT = frozenset(
     {"group_conversation_prompt", "proactive_speak_prompt", "mcp_prompt"}
 )
 
+# Default for the history writers' ``history_uid``: write to the history that
+# is open now. An explicit ``None`` means the turn is not persisted (proactive
+# or skip_history turns bind ``turn_history_uid=None``), so it must never fall
+# back to the open history.
+CURRENT_HISTORY: Any = object()
+
 
 def _engine_kwargs(config, field_name: str) -> dict:
     """Return the engine's sub-config as kwargs; engines without one get {}."""
@@ -157,7 +163,8 @@ class ServiceContext:
 
     def _reset_mcp_components(self) -> None:
         # Local (browser-side) registrations survive a character switch; only
-        # the deployment/user HTTP base is rebuilt.
+        # the deployment/user HTTP base is rebuilt. The caller owns closing
+        # the dropped MCP client.
         self.mcp_server_registry = None
         self.tool_manager = None
         self.mcp_client = None
@@ -270,7 +277,11 @@ class ServiceContext:
         logger.debug(
             f"Initializing MCP components: use_mcpp={use_mcpp}, enabled_servers={enabled_servers}"
         )
+        previous_client = self.mcp_client
         self._reset_mcp_components()
+        # Each rebuild creates a new client; close the old one so its server
+        # connections (and stdio subprocesses) do not leak on every switch.
+        await self._close_mcp_client(previous_client)
 
         user_servers = build_user_mcp_servers(self._user_mcp_records)
         # Global tools remain gated by the character config. Enabled user
@@ -433,21 +444,29 @@ class ServiceContext:
                 enabled=bool(merged),
             )
 
+    async def _close_mcp_client(self, client: MCPClient | None) -> None:
+        if not client:
+            return
+        logger.info(f"Closing MCPClient for context instance {id(self)}...")
+        try:
+            await client.aclose()
+        except Exception:
+            logger.exception("Failed to close MCPClient")
+
+    @staticmethod
+    async def _close_agent(agent: AgentInterface | None) -> None:
+        if agent and hasattr(agent, "close"):
+            try:
+                await agent.close()
+            except Exception:
+                logger.exception("Failed to close agent engine")
+
     async def close(self):
         """Clean up resources, especially the MCPClient."""
         logger.info("Closing ServiceContext resources...")
-        if self.mcp_client:
-            logger.info(f"Closing MCPClient for context instance {id(self)}...")
-            try:
-                await self.mcp_client.aclose()
-            except Exception:
-                logger.exception("Failed to close MCPClient")
-            self.mcp_client = None
-        if self.agent_engine and hasattr(self.agent_engine, "close"):
-            try:
-                await self.agent_engine.close()
-            except Exception:
-                logger.exception("Failed to close agent engine")
+        client, self.mcp_client = self.mcp_client, None
+        await self._close_mcp_client(client)
+        await self._close_agent(self.agent_engine)
         if self._owns_tts_engine and self.tts_engine is not None:
             try:
                 self.tts_engine.close()
@@ -488,15 +507,19 @@ class ServiceContext:
         self.history_uid = history_uid
         return messages
 
+    def _target_history_uid(self, history_uid: str | None) -> str | None:
+        """Resolve a writer's ``history_uid``; explicit ``None`` writes nothing."""
+        return self.history_uid if history_uid is CURRENT_HISTORY else history_uid
+
     async def store_history_message(
         self,
         role: Literal["human", "ai", "system"],
         content: str,
         name: str | None = None,
         avatar: str | None = None,
-        history_uid: str | None = None,
+        history_uid: str | None = CURRENT_HISTORY,
     ) -> None:
-        target_uid = history_uid if history_uid is not None else self.history_uid
+        target_uid = self._target_history_uid(history_uid)
         if self.history is None or not target_uid:
             return
         await self.history.store_message(
@@ -516,10 +539,10 @@ class ServiceContext:
         status: str,
         content: str = "",
         timestamp: str | None = None,
-        history_uid: str | None = None,
+        history_uid: str | None = CURRENT_HISTORY,
     ) -> bool:
         """Persist a tool execution; failures must never break the live stream."""
-        target_uid = history_uid if history_uid is not None else self.history_uid
+        target_uid = self._target_history_uid(history_uid)
         if self.history is None or not target_uid or not tool_id:
             return False
         try:
@@ -767,6 +790,9 @@ class ServiceContext:
             and persona_prompt == self.character_config.persona_prompt
         ):
             logger.debug("Agent already initialized with the same config.")
+            # MCP was rebuilt (and the old client closed) before this call;
+            # the kept agent must use the new tooling, not the closed one.
+            self._rewire_agent_tooling(agent_config)
             return
 
         system_prompt = await self.construct_system_prompt(persona_prompt)
@@ -779,6 +805,7 @@ class ServiceContext:
         if self.mcp_active and agent_settings.get("basic_memory_agent") is not None:
             agent_settings["basic_memory_agent"]["use_mcpp"] = True
 
+        previous_agent = self.agent_engine
         try:
             self.agent_engine = AgentFactory.create_agent(
                 conversation_agent_choice=agent_config.conversation_agent_choice,
@@ -807,6 +834,24 @@ class ServiceContext:
         except Exception as e:
             logger.error(f"Failed to initialize agent: {e}")
             raise
+
+        # A replaced agent is owned by this context (sessions get their own
+        # agent from init_session_agent); release e.g. a Hume socket.
+        if previous_agent is not self.agent_engine:
+            await self._close_agent(previous_agent)
+
+    def _rewire_agent_tooling(self, agent_config: AgentConfig) -> None:
+        if not isinstance(self.agent_engine, BasicMemoryAgent):
+            return
+        basic_settings = getattr(
+            agent_config.agent_settings, "basic_memory_agent", None
+        )
+        self.agent_engine.set_tooling(
+            self.tool_manager,
+            self.tool_executor,
+            self.mcp_prompt,
+            enabled=self.mcp_active or bool(getattr(basic_settings, "use_mcpp", False)),
+        )
 
     def init_translate(self, translator_config: TranslatorConfig) -> None:
         """Initialize or update the translation engine based on the configuration."""
