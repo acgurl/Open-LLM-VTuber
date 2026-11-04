@@ -1,11 +1,16 @@
 import unittest
 
+from loguru import logger
 from pydantic import ValidationError
 
 from open_llm_vtuber.agent.agents.basic_memory_agent import (
     DEFAULT_MAX_TOOL_ROUNDS,
     TOOL_ROUND_LIMIT_NOTICE,
     BasicMemoryAgent,
+)
+from open_llm_vtuber.agent.input_types import BatchInput, TextData, TextSource
+from open_llm_vtuber.agent.stateless_llm.openai_compatible_llm import (
+    AsyncLLM as OpenAICompatibleAsyncLLM,
 )
 from open_llm_vtuber.config_manager.agent import BasicMemoryAgentConfig
 from open_llm_vtuber.mcpp.json_detector import StreamJSONDetector
@@ -281,6 +286,148 @@ class ToolLoopTerminationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(llm.calls, 3)
         self.assertEqual(items[-1], TOOL_ROUND_LIMIT_NOTICE)
+
+
+class _ScriptedPromptLLM:
+    """Replies with the given chunks, one list per round, recording requests."""
+
+    def __init__(self, rounds):
+        self.rounds = rounds
+        self.requests = []
+
+    def chat_completion(self, messages, system, tools=None):
+        self.requests.append(([dict(m) for m in messages], system, tools))
+        chunks = self.rounds[min(len(self.requests), len(self.rounds)) - 1]
+
+        async def stream():
+            for chunk in chunks:
+                yield chunk
+
+        return stream()
+
+
+class _PromptToolExecutor:
+    def __init__(self, parsed):
+        self.parsed = parsed
+
+    def process_tool_from_prompt_json(self, _detected):
+        return self.parsed
+
+    async def execute_tools(self, tool_calls, caller_mode):
+        yield {"type": "final_tool_results", "results": [{"content": "result"}]}
+
+
+class PromptModeRoundTests(unittest.IsolatedAsyncioTestCase):
+    TOOL_JSON = '{"mcp_server": "kb", "tool": "search", "arguments": {}}'
+
+    def _agent(self, llm, tool_executor):
+        agent = BasicMemoryAgent.__new__(BasicMemoryAgent)
+        agent._system = "system"
+        agent.prompt_mode_flag = True
+        agent._mcp_prompt_string = "MCP"
+        agent._json_detector = StreamJSONDetector()
+        agent._tool_manager = None
+        agent._tool_executor = tool_executor
+        agent._llm = llm
+        agent._add_message = lambda _content, _role: None
+        return agent
+
+    async def test_tool_call_response_is_kept_before_result(self):
+        llm = _ScriptedPromptLLM([[self.TOOL_JSON], ["answer"]])
+        executor = _PromptToolExecutor(
+            [{"name": "search", "server": "kb", "args": {}, "id": "prompt_tool_0"}]
+        )
+        agent = self._agent(llm, executor)
+
+        _ = [
+            item
+            async for item in agent._openai_tool_interaction_loop(
+                [{"role": "user", "content": "hi"}], []
+            )
+        ]
+
+        second_round = llm.requests[1][0]
+        self.assertEqual(
+            second_round[-2], {"role": "assistant", "content": self.TOOL_JSON}
+        )
+        self.assertEqual(second_round[-1], {"role": "user", "content": "result"})
+
+    async def test_json_without_tool_call_ends_the_turn(self):
+        llm = _ScriptedPromptLLM([['{"not": "a tool call"}']])
+        agent = self._agent(llm, _PromptToolExecutor([]))
+
+        items = [item async for item in agent._openai_tool_interaction_loop([], [])]
+
+        self.assertEqual(len(llm.requests), 1)
+        self.assertNotIn(TOOL_ROUND_LIMIT_NOTICE, items)
+
+
+class _FakeToolManager:
+    def get_formatted_tools(self, _mode):
+        return [{"type": "function", "function": {"name": "search"}}]
+
+
+class ToolModeSelectionTests(unittest.IsolatedAsyncioTestCase):
+    def _agent(self, llm, **kwargs):
+        return BasicMemoryAgent(
+            llm=llm,
+            system="system",
+            live2d_model=None,
+            use_mcpp=True,
+            tool_manager=_FakeToolManager(),
+            tool_executor=_PromptToolExecutor([]),
+            mcp_prompt_string="MCP PROMPT",
+            **kwargs,
+        )
+
+    @staticmethod
+    def _openai_llm(support_tools):
+        llm = OpenAICompatibleAsyncLLM.__new__(OpenAICompatibleAsyncLLM)
+        llm.model = "m"
+        llm.support_tools = support_tools
+        scripted = _ScriptedPromptLLM([["hello"]])
+        llm.chat_completion = scripted.chat_completion
+        return llm, scripted
+
+    async def _chat(self, agent):
+        batch = BatchInput(texts=[TextData(source=TextSource.INPUT, content="hi")])
+        return [item async for item in agent.chat(batch)]
+
+    async def test_tools_unsupported_llm_starts_in_prompt_mode(self):
+        llm, scripted = self._openai_llm(support_tools=False)
+        agent = self._agent(llm)
+
+        await self._chat(agent)
+
+        _messages, system, tools = scripted.requests[0]
+        self.assertTrue(agent.prompt_mode_flag)
+        self.assertIn("MCP PROMPT", system)
+        self.assertIsNone(tools)
+
+    async def test_tools_supported_llm_starts_native(self):
+        llm, scripted = self._openai_llm(support_tools=True)
+        agent = self._agent(llm)
+
+        await self._chat(agent)
+
+        _messages, system, tools = scripted.requests[0]
+        self.assertFalse(agent.prompt_mode_flag)
+        self.assertNotIn("MCP PROMPT", system)
+        self.assertEqual(tools, _FakeToolManager().get_formatted_tools("OpenAI"))
+
+
+class McpComponentWarningTests(unittest.TestCase):
+    def test_no_warning_when_mcp_disabled_without_components(self):
+        warnings = []
+        handler_id = logger.add(
+            lambda message: warnings.append(str(message)), level="WARNING"
+        )
+        try:
+            BasicMemoryAgent(llm=object(), system="s", live2d_model=None)
+        finally:
+            logger.remove(handler_id)
+
+        self.assertFalse(any("MCP components" in w for w in warnings))
 
 
 class MaxToolRoundsConfigTests(unittest.TestCase):

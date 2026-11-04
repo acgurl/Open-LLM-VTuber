@@ -150,32 +150,47 @@ class ToolExecutor:
     def process_tool_from_prompt_json(
         self, data: list[dict[str, Any]]
     ) -> list[dict[str, Any]]:
-        """Process tool data from JSON in prompt mode."""
+        """Process tool data from JSON in prompt mode.
+
+        ``arguments`` is an object in the prompt template, but models also send
+        it as a JSON-encoded string; both are accepted. A missing value or an
+        empty object means the tool takes no arguments.
+        """
         parsed_tools = []
         for item in data:
+            if not isinstance(item, dict):
+                logger.warning("Skipping invalid tool structure in prompt mode JSON")
+                continue
             server = item.get("mcp_server")
             tool_name = item.get("tool")
-            arguments_str = item.get("arguments")
-            if all([server, tool_name, arguments_str]):
+            arguments = item.get("arguments")
+            if not server or not tool_name:
+                logger.warning("Skipping invalid tool structure in prompt mode JSON")
+                continue
+            if arguments is None:
+                arguments = {}
+            elif isinstance(arguments, str):
                 try:
-                    args_dict = json.loads(arguments_str)
-                    parsed_tools.append(
-                        {
-                            "name": tool_name,
-                            "server": server,
-                            "args": args_dict,
-                            "id": f"prompt_tool_{len(parsed_tools)}",
-                        }
-                    )
-                    logger.info(f"Parsed tool call from prompt JSON: {tool_name}")
+                    arguments = json.loads(arguments) if arguments.strip() else {}
                 except json.JSONDecodeError:
                     logger.error(
                         "Failed to decode arguments JSON in prompt mode tool call"
                     )
-                except Exception as e:
-                    logger.error(f"Error processing prompt mode tool dict: {e}")
-            else:
-                logger.warning("Skipping invalid tool structure in prompt mode JSON")
+                    continue
+            if not isinstance(arguments, dict):
+                logger.error(
+                    f"Prompt mode arguments for '{tool_name}' are not an object"
+                )
+                continue
+            parsed_tools.append(
+                {
+                    "name": tool_name,
+                    "server": server,
+                    "args": arguments,
+                    "id": f"prompt_tool_{len(parsed_tools)}",
+                }
+            )
+            logger.info(f"Parsed tool call from prompt JSON: {tool_name}")
         return parsed_tools
 
     @staticmethod
@@ -192,7 +207,11 @@ class ToolExecutor:
             "tool_name": tool_name,
             "status": status,
             "content": content,
-            "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat() + "Z",
+            # BACKEND_API.md documents the "...Z" form; isoformat() already
+            # ends in "+00:00", so appending "Z" would make Date.parse fail.
+            "timestamp": datetime.datetime.now(datetime.timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z"),
         }
         update.update(extra)
         return update

@@ -142,6 +142,18 @@ class FactoryRegistryTests(unittest.TestCase):
             temperature=0.7,
         )
 
+    def test_template_llm_receives_temperature(self):
+        with patch.object(stateless_llm_factory, "StatelessLLMWithTemplate") as llm:
+            LLMFactory.create_llm(
+                "stateless_llm_with_template",
+                model="model",
+                base_url="url",
+                template="CHATML",
+                temperature=0.3,
+            )
+
+        self.assertEqual(llm.call_args.kwargs["temperature"], 0.3)
+
     def test_unknown_llm_choice_raises(self):
         with self.assertRaises(ValueError):
             LLMFactory.create_llm("missing")
