@@ -58,6 +58,82 @@ class AsyncLLM(StatelessLLMInterface):
             f"Initialized AsyncLLM with the parameters: {self.base_url}, {self.model}"
         )
 
+    @staticmethod
+    def _accumulate_tool_call_deltas(
+        accumulated: dict[int, dict[str, Any]],
+        delta_tool_calls: list[ChoiceDeltaToolCall],
+    ) -> None:
+        """Merge one chunk's streamed tool-call fragments into ``accumulated``."""
+        for tool_call in delta_tool_calls:
+            index = tool_call.index if hasattr(tool_call, "index") else 0
+
+            if index not in accumulated:
+                accumulated[index] = {
+                    "index": index,
+                    "id": getattr(tool_call, "id", None),
+                    "type": getattr(tool_call, "type", None),
+                    "function": {"name": "", "arguments": ""},
+                }
+            entry = accumulated[index]
+
+            if getattr(tool_call, "id", None):
+                entry["id"] = tool_call.id
+            if getattr(tool_call, "type", None):
+                entry["type"] = tool_call.type
+
+            function = getattr(tool_call, "function", None)
+            if getattr(function, "name", None):
+                entry["function"]["name"] = function.name
+            if getattr(function, "arguments", None):
+                entry["function"]["arguments"] += function.arguments
+
+    @staticmethod
+    def _complete_tool_calls(
+        accumulated: dict[int, dict[str, Any]],
+    ) -> list[ToolCallObject]:
+        return [
+            ToolCallObject.from_dict(tool_data) for tool_data in accumulated.values()
+        ]
+
+    async def _stream_chunks(
+        self, stream: AsyncStream[ChatCompletionChunk]
+    ) -> AsyncIterator[str | list[ToolCallObject]]:
+        """Yield content strings, and accumulated tool calls once each call ends."""
+        accumulated_tool_calls: dict[int, dict[str, Any]] = {}
+        in_tool_call = False
+
+        async for chunk in stream:
+            # Guard against chunks with missing choices field (e.g., from OpenWebUI)
+            if not chunk.choices:
+                continue
+
+            if self.support_tools:
+                delta_tool_calls = getattr(chunk.choices[0].delta, "tool_calls", None)
+                if delta_tool_calls:
+                    logger.debug(f"Tool calls detected in chunk: {delta_tool_calls}")
+                    in_tool_call = True
+                    self._accumulate_tool_call_deltas(
+                        accumulated_tool_calls, delta_tool_calls
+                    )
+                    continue
+
+                # The tool call ended; emit it before the regular content.
+                if in_tool_call:
+                    in_tool_call = False
+                    logger.info(f"Complete tool calls: {accumulated_tool_calls}")
+                    yield self._complete_tool_calls(accumulated_tool_calls)
+                    accumulated_tool_calls = {}  # Reset for potential future tool calls
+
+            # Process regular content chunks
+            if chunk.choices[0].delta.content is None:
+                chunk.choices[0].delta.content = ""
+            yield chunk.choices[0].delta.content
+
+        # If stream ends while still in a tool call, make sure to yield the tool call
+        if in_tool_call and accumulated_tool_calls:
+            logger.info(f"Final tool call at stream end: {accumulated_tool_calls}")
+            yield self._complete_tool_calls(accumulated_tool_calls)
+
     async def chat_completion(
         self,
         messages: list[dict[str, Any]],
@@ -82,9 +158,6 @@ class AsyncLLM(StatelessLLMInterface):
         - APIError: For other API-related errors
         """
         stream = None
-        # Tool call related state variables
-        accumulated_tool_calls = {}
-        in_tool_call = False
 
         try:
             # If system prompt is provided, add it to the messages
@@ -113,96 +186,8 @@ class AsyncLLM(StatelessLLMInterface):
                 f"Tool Support: {self.support_tools}, Available tools: {available_tools}"
             )
 
-            async for chunk in stream:
-                # Guard against chunks with missing choices field (e.g., from OpenWebUI)
-                if not chunk.choices:
-                    continue
-
-                if self.support_tools:
-                    has_tool_calls = (
-                        hasattr(chunk.choices[0].delta, "tool_calls")
-                        and chunk.choices[0].delta.tool_calls
-                    )
-
-                    if has_tool_calls:
-                        logger.debug(
-                            f"Tool calls detected in chunk: {chunk.choices[0].delta.tool_calls}"
-                        )
-                        in_tool_call = True
-                        # Process tool calls in the current chunk
-                        for tool_call in chunk.choices[0].delta.tool_calls:
-                            index = (
-                                tool_call.index if hasattr(tool_call, "index") else 0
-                            )
-
-                            # Initialize tool call for this index if needed
-                            if index not in accumulated_tool_calls:
-                                accumulated_tool_calls[index] = {
-                                    "index": index,
-                                    "id": getattr(tool_call, "id", None),
-                                    "type": getattr(tool_call, "type", None),
-                                    "function": {"name": "", "arguments": ""},
-                                }
-
-                            # Update tool call information
-                            if hasattr(tool_call, "id") and tool_call.id:
-                                accumulated_tool_calls[index]["id"] = tool_call.id
-                            if hasattr(tool_call, "type") and tool_call.type:
-                                accumulated_tool_calls[index]["type"] = tool_call.type
-
-                            # Update function information
-                            if hasattr(tool_call, "function"):
-                                if (
-                                    hasattr(tool_call.function, "name")
-                                    and tool_call.function.name
-                                ):
-                                    accumulated_tool_calls[index]["function"][
-                                        "name"
-                                    ] = tool_call.function.name
-                                if (
-                                    hasattr(tool_call.function, "arguments")
-                                    and tool_call.function.arguments
-                                ):
-                                    accumulated_tool_calls[index]["function"][
-                                        "arguments"
-                                    ] += tool_call.function.arguments
-
-                        continue
-
-                    # If we were in a tool call but now we're not, yield the tool call result
-                    elif in_tool_call and not has_tool_calls:
-                        in_tool_call = False
-                        # Convert accumulated tool calls to the required format and output
-                        logger.info(f"Complete tool calls: {accumulated_tool_calls}")
-
-                        # Use the from_dict method to create a ToolCallObject instance from a dictionary
-                        complete_tool_calls = [
-                            ToolCallObject.from_dict(tool_data)
-                            for tool_data in accumulated_tool_calls.values()
-                        ]
-
-                        yield complete_tool_calls
-                        accumulated_tool_calls = {}  # Reset for potential future tool calls
-
-                # Process regular content chunks
-                if len(chunk.choices) == 0:
-                    logger.info("Empty chunk received")
-                    continue
-                elif chunk.choices[0].delta.content is None:
-                    chunk.choices[0].delta.content = ""
-                yield chunk.choices[0].delta.content
-
-            # If stream ends while still in a tool call, make sure to yield the tool call
-            if in_tool_call and accumulated_tool_calls:
-                logger.info(f"Final tool call at stream end: {accumulated_tool_calls}")
-
-                # Create a ToolCallObject instance from a dictionary using the from_dict method.
-                complete_tool_calls = [
-                    ToolCallObject.from_dict(tool_data)
-                    for tool_data in accumulated_tool_calls.values()
-                ]
-
-                yield complete_tool_calls
+            async for item in self._stream_chunks(stream):
+                yield item
 
         except APIConnectionError as e:
             logger.error(
