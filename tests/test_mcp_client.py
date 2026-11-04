@@ -1,3 +1,4 @@
+import asyncio
 import json
 import tempfile
 import unittest
@@ -79,6 +80,27 @@ class TransportSelectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stdio_calls, ["local", "local"])
         self.assertEqual(session.list_tools_calls, 1)
         self.assertEqual(session.call_tool_calls, [("ping", {})])
+
+    async def test_parallel_calls_start_one_stdio_server(self):
+        client = self.make_client({"local": {"command": "python", "args": []}})
+        session = FakeSession()
+        started = []
+
+        async def fake_start(server_name):
+            started.append(server_name)
+            await asyncio.sleep(0.01)
+            client.active_sessions[server_name] = session
+            return session
+
+        with patch.object(client, "_start_stdio_session", fake_start):
+            await asyncio.gather(
+                client.call_tool("local", "a", {}),
+                client.call_tool("local", "b", {}),
+                client.call_tool("local", "c", {}),
+            )
+
+        self.assertEqual(started, ["local"])
+        self.assertEqual(len(session.call_tool_calls), 3)
 
 
 if __name__ == "__main__":

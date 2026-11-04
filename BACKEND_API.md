@@ -439,6 +439,8 @@ Cookie（`auth/manager.py`）：
 
 内部的 `final_tool_results` 事件只给 LLM，**不会发给客户端**（`tool_executor.py:302`）。群聊中该消息群播。
 
+**并行工具调用**（`ToolExecutor.execute_tools`）：模型在同一轮里发出的多个工具调用会并发执行（同时最多 `MAX_CONCURRENT_TOOL_CALLS = 8` 个，超出的排队）。客户端会先按调用顺序连续收到每个工具的 `running`，再按**完成先后**收到各自的 `completed`/`error`，所以不同 `tool_id` 的状态会交错，前端必须按 `tool_id` 更新卡片，不能假设“一个 running 之后紧跟它自己的 completed”。回给 LLM 的工具结果仍按模型发出调用的顺序排列。
+
 **用户/浏览器 MCP 的消息**（详见[第 22 节](#22-用户-mcp-与浏览器本地-mcp2026-10-25)）：
 
 | type | 字段 | 说明 |

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import datetime
 from dataclasses import dataclass, field
@@ -12,6 +13,9 @@ from .types import ToolCallObject
 from .mcp_client import MCPClient
 from .tool_manager import ToolManager
 from .user_servers import error_content_items, result_size_exceeded
+
+# Upper bound on tools from one model turn that run at the same time.
+MAX_CONCURRENT_TOOL_CALLS = 8
 
 
 @dataclass
@@ -295,59 +299,90 @@ class ToolExecutor:
         tool_calls: list[dict[str, Any]] | list[ToolCallObject],
         caller_mode: Literal["Claude", "OpenAI", "Prompt"],
     ) -> AsyncIterator[dict[str, Any]]:
-        """Execute tools and yield status updates."""
-        tool_results_for_llm = []
+        """Execute tools concurrently and yield status updates.
 
+        Every runnable call is started before any of them is awaited, so the
+        tools the model requested in one turn run in parallel (at most
+        ``MAX_CONCURRENT_TOOL_CALLS`` at a time). Each tool's completion status
+        is yielded as soon as it finishes; the results handed back to the LLM
+        keep the order the model issued the calls in.
+        """
         logger.info(f"Executing {len(tool_calls)} tool(s) for {caller_mode} caller.")
+        parsed_calls = []
         for call in tool_calls:
             parsed = self.parse_tool_call(call)
             scoped_extra = self._scoped_status_extra(parsed.tool_name)
             self._log_tool_start(parsed, call, bool(scoped_extra))
+            parsed_calls.append((parsed, scoped_extra))
 
-            if parsed.parse_error:
-                status, formatted_result = self._report_parse_error(
-                    parsed, caller_mode, scoped_extra
+        formatted_results: list[Any] = [None] * len(parsed_calls)
+        runs: dict[asyncio.Task[ToolRunResult], int] = {}
+        limit = asyncio.Semaphore(MAX_CONCURRENT_TOOL_CALLS)
+
+        async def run_limited(parsed: ParsedToolCall) -> ToolRunResult:
+            async with limit:
+                return await self.run_single_tool(
+                    parsed.tool_name, parsed.tool_id, parsed.tool_input
                 )
-                yield status
-                if formatted_result:
-                    tool_results_for_llm.append(formatted_result)
-                continue
 
-            # Yield 'running' status before execution
-            yield self._tool_status(
-                parsed.tool_id,
-                parsed.tool_name,
-                "running",
-                f"Input: {json.dumps(parsed.tool_input)}",
-                **scoped_extra,
-            )
+        try:
+            for index, (parsed, scoped_extra) in enumerate(parsed_calls):
+                if parsed.parse_error:
+                    status, formatted_results[index] = self._report_parse_error(
+                        parsed, caller_mode, scoped_extra
+                    )
+                    yield status
+                    continue
+                # Yield 'running' status before execution
+                yield self._tool_status(
+                    parsed.tool_id,
+                    parsed.tool_name,
+                    "running",
+                    f"Input: {json.dumps(parsed.tool_input)}",
+                    **scoped_extra,
+                )
+                runs[asyncio.create_task(run_limited(parsed))] = index
 
-            result = await self.run_single_tool(
-                parsed.tool_name, parsed.tool_id, parsed.tool_input
-            )
-            status_content, llm_formatted_content = self._split_image_content(
-                caller_mode, result.text_content, result.content_items
-            )
+            pending = set(runs)
+            while pending:
+                done, pending = await asyncio.wait(
+                    pending, return_when=asyncio.FIRST_COMPLETED
+                )
+                for run in sorted(done, key=runs.__getitem__):
+                    index = runs[run]
+                    parsed, scoped_extra = parsed_calls[index]
+                    result = run.result()
+                    status_content, llm_formatted_content = self._split_image_content(
+                        caller_mode, result.text_content, result.content_items
+                    )
 
-            yield self._tool_status(
-                parsed.tool_id,
-                parsed.tool_name,
-                "error" if result.is_error else "completed",
-                (
-                    status_content
-                    if not result.is_error
-                    else f"Error: {result.text_content}"
-                ),
-                **self._completed_status_extra(parsed.tool_name, result, scoped_extra),
-            )
+                    yield self._tool_status(
+                        parsed.tool_id,
+                        parsed.tool_name,
+                        "error" if result.is_error else "completed",
+                        (
+                            status_content
+                            if not result.is_error
+                            else f"Error: {result.text_content}"
+                        ),
+                        **self._completed_status_extra(
+                            parsed.tool_name, result, scoped_extra
+                        ),
+                    )
 
-            # Format result for LLM and add to list
-            formatted_result = self.format_tool_result(
-                caller_mode, parsed.tool_id, llm_formatted_content, result.is_error
-            )
-            if formatted_result:
-                tool_results_for_llm.append(formatted_result)
+                    formatted_results[index] = self.format_tool_result(
+                        caller_mode,
+                        parsed.tool_id,
+                        llm_formatted_content,
+                        result.is_error,
+                    )
+        finally:
+            # Consumer stopped early (e.g. connection closed): don't leave tools running.
+            for run in runs:
+                if not run.done():
+                    run.cancel()
 
+        tool_results_for_llm = [result for result in formatted_results if result]
         logger.info(
             f"Finished executing tools with {len(tool_results_for_llm)} results."
         )
