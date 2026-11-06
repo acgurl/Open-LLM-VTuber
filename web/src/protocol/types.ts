@@ -25,6 +25,7 @@ export interface ModelInfo {
   idleMotionGroupName?: string;
   frameHeightRatio?: number;
   frameTopRatio?: number;
+  frameWidthRatio?: number;
   focusScale?: number;
   breathScale?: number;
   defaultEmotion?: number | string;

@@ -235,9 +235,10 @@ export class Framing {
     const content = this.contentBounds ?? { x: 0, y: 0, width: canvasW, height: canvasH };
     const heightRatio = this.host.info?.frameHeightRatio ?? FRAME_HEIGHT_RATIO;
     const topRatio = this.host.info?.frameTopRatio ?? FRAME_TOP_RATIO;
+    const widthRatio = this.host.info?.frameWidthRatio ?? FRAME_WIDTH_RATIO;
     this.baseScale = Math.min(
       (h * heightRatio) / content.height,
-      (w * FRAME_WIDTH_RATIO) / content.width,
+      (w * widthRatio) / content.width,
     );
     this.contentCenter = {
       x: content.x + content.width / 2,
