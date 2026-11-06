@@ -73,7 +73,7 @@ class _AuthRoutes:
             # restart the flow instead of dead-ending on an error page.
             logger.warning("OIDC state validation failed; restarting login")
             response = RedirectResponse("/auth/login", status_code=302)
-            response.delete_cookie(**auth.state_cookie_delete_kwargs())
+            response.delete_cookie(**self.auth.state_cookie_delete_kwargs())
             return response
 
         try:
