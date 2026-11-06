@@ -105,7 +105,7 @@ Origin 校验 → 会话 Cookie 解析 → 预留连接名额 → accept()
 | 端点 | 方法 | 行为 |
 | --- | --- | --- |
 | `/auth/login?next=<path>` | GET | 302 到身份提供商；下发 state cookie。已登录或认证关闭时直接 302 到 `next`（经 `safe_next_path` 净化）。Provider 不可用返回 503 `{"error":"Authentication provider unavailable"}`（`auth/routes.py:14-42`） |
-| `/auth/callback?code=&state=` | GET | 校验 state → 换 token → 下发会话 cookie → 302 回 `next`。失败 400/401 JSON `{"error": ...}`（`auth/routes.py:44-85`） |
+| `/auth/callback?code=&state=` | GET | 校验 state → 换 token → 下发会话 cookie → 302 回 `next`。state 校验失败（过期/缺失/篡改）→ 清 state cookie 并 302 回 `/auth/login` 重新走一轮；缺参数/provider 报错 400、换 token 失败 401 JSON `{"error": ...}`（`auth/routes.py`） |
 | `/auth/logout` | GET | 删除会话 cookie；配置了 `post_logout_redirect_uri` 时 302 到 provider 的 end-session，否则 302 到 `/`（`auth/routes.py:87-106`） |
 | `/api/session` | GET | 200 `{"authenticated":true,"mode":"oidc","user_id":"<内部hex>","display_name":"..."}`；未登录 401 `{"authenticated":false,"mode":"oidc"}`（`auth/routes.py:108-121`） |
 

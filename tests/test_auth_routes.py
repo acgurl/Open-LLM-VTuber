@@ -243,14 +243,16 @@ class AuthRouteTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.headers["location"], "/")
         self.assertEqual(self.client.get("/api/private").status_code, 401)
 
-    def test_callback_rejects_invalid_state(self):
+    def test_callback_restarts_login_on_invalid_state(self):
         self._login()
 
         response = self.client.get(
             "/auth/callback?code=code-1&state=tampered",
             follow_redirects=False,
         )
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers["location"], "/auth/login")
+        self.assertIn("vtuber_oauth_state=", response.headers.get("set-cookie", ""))
 
     def test_websockets_require_a_session(self):
         context = SimpleNamespace(user_id=None)

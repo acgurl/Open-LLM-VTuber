@@ -69,10 +69,12 @@ class _AuthRoutes:
             request.cookies.get(self.auth.config.state_cookie_name), state
         )
         if state_payload is None:
-            logger.warning("OIDC state validation failed")
-            return JSONResponse(
-                {"error": "Invalid or expired login state"}, status_code=400
-            )
+            # Stale/missing state (expired cookie, back button, domain switch):
+            # restart the flow instead of dead-ending on an error page.
+            logger.warning("OIDC state validation failed; restarting login")
+            response = RedirectResponse("/auth/login", status_code=302)
+            response.delete_cookie(**auth.state_cookie_delete_kwargs())
+            return response
 
         try:
             identity = await self.auth.authenticate_code(
