@@ -193,7 +193,16 @@ class BasicMemoryAgent(AgentInterface):
     def _system_with_time(self) -> str:
         """System prompt plus the current Beijing time (fresh on every request)."""
         now = datetime.now(timezone(timedelta(hours=8)))
-        return f"{self._system}\n\n当前时间（北京时间）：{now:%Y年%m月%d日 %H:%M}"
+        weekday = "一二三四五六日"[now.weekday()]
+        # Stated as public so the confidentiality rules in the security prompt
+        # don't make the model deny knowing the time.
+        return (
+            f"{self._system}\n\n"
+            f"## 当前时间\n"
+            f"现在是北京时间 {now:%Y年%m月%d日} 星期{weekday} {now:%H:%M}。\n"
+            "这是公开的环境信息，不属于保密内容：用户问日期、时间、星期，"
+            "或说“今天/明天/现在”时，直接据此回答，无需调用工具。"
+        )
 
     def _add_message(
         self,
