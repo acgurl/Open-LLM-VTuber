@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 from typing import (
     Any,
     Literal,
@@ -188,6 +189,11 @@ class BasicMemoryAgent(AgentInterface):
             system = f"{system}\n\nIf you received `[interrupted by user]` signal, you were interrupted."
 
         self._system = system
+
+    def _system_with_time(self) -> str:
+        """System prompt plus the current Beijing time (fresh on every request)."""
+        now = datetime.now(timezone(timedelta(hours=8)))
+        return f"{self._system}\n\n当前时间（北京时间）：{now:%Y年%m月%d日 %H:%M}"
 
     def _add_message(
         self,
@@ -451,7 +457,9 @@ class BasicMemoryAgent(AgentInterface):
         outcome: _RoundOutcome,
     ) -> AsyncIterator[str]:
         """Stream one Claude response, collecting text and tool_use blocks."""
-        stream = self._llm.chat_completion(messages, self._system, tools=tools)
+        stream = self._llm.chat_completion(
+            messages, self._system_with_time(), tools=tools
+        )
         async for event in stream:
             if event["type"] == "text_delta":
                 text = event["text"]
@@ -538,12 +546,13 @@ class BasicMemoryAgent(AgentInterface):
         self, tools: list[dict[str, Any]]
     ) -> tuple[str, list[dict[str, Any]] | None]:
         """Return the system prompt and native tools for the next request."""
+        system = self._system_with_time()
         if not self.prompt_mode_flag:
-            return self._system, tools
+            return system, tools
         if not self._mcp_prompt_string:
             logger.warning("Prompt mode active but mcp_prompt_string is empty!")
-            return self._system, None
-        return f"{self._system}\n\n{self._mcp_prompt_string}", None
+            return system, None
+        return f"{system}\n\n{self._mcp_prompt_string}", None
 
     async def _stream_openai_round(
         self,
@@ -720,7 +729,7 @@ class BasicMemoryAgent(AgentInterface):
     ) -> AsyncIterator[str | dict[str, Any]]:
         """Stream a completion without tools and remember the reply."""
         logger.info("Starting simple chat completion.")
-        token_stream = self._llm.chat_completion(messages, self._system)
+        token_stream = self._llm.chat_completion(messages, self._system_with_time())
         complete_response = ""
         async for event in token_stream:
             if isinstance(event, dict) and event.get("type") == "text_delta":
