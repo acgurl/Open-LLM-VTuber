@@ -197,18 +197,27 @@ class Live2DController {
     }
   }
 
-  // 回到模型默认表情：优先 model_dict 的 defaultEmotion，否则用第 0 个表情。
+  // 回到模型默认表情：defaultEmotion 指向非 0 的表情时套用它，
+  // 否则调用 expressionManager.resetExpression() 回到真正的无表情状态
+  // （第 0 个表情本身可能带情绪，套用它会让表情一直保持）。
   resetExpression() {
     const model = this.model;
     if (!model) return;
     try {
       const manager = (model.internalModel as unknown as {
-        motionManager?: { expressionManager?: { definitions?: unknown[] } };
+        motionManager?: {
+          expressionManager?: { definitions?: unknown[]; resetExpression?: () => void };
+        };
       }).motionManager;
-      const count = manager?.expressionManager?.definitions?.length ?? 0;
-      if (count === 0) return;
-      const target = this.info?.defaultEmotion ?? 0;
-      void model.expression(target);
+      const em = manager?.expressionManager;
+      const count = em?.definitions?.length ?? 0;
+      if (!em || count === 0) return;
+      const target = this.info?.defaultEmotion;
+      if (target !== undefined && target !== 0 && target !== '0') {
+        void model.expression(target);
+      } else {
+        em.resetExpression?.();
+      }
     } catch {
       /* ignore */
     }

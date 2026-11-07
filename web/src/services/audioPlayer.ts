@@ -68,6 +68,8 @@ class AudioPlayer {
     this.heardPartial = '';
     live2d.setLipSync(0);
     live2d.setSpeaking(false);
+    // 被打断时 maybeAck 不会执行，表情要在这里一并复位
+    live2d.resetExpression();
   }
 
   private maybeAck() {
