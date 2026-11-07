@@ -1,12 +1,27 @@
 {
     "mcp_servers": {
-      "time": {
-        "command": "uvx",
-        "args": ["mcp-server-time", "--local-timezone=Asia/Shanghai"]
-      },
-      "ddg-search": {
-        "command": "uvx",
-        "args": ["duckduckgo-mcp-server"]
-      }
+        "time": {
+            "command": "uvx",
+            "args": [
+                "mcp-server-time",
+                "--local-timezone=Asia/Shanghai"
+            ]
+        },
+        "ddg-search": {
+            "command": "uvx",
+            "args": [
+                "duckduckgo-mcp-server"
+            ]
+        },
+        "deepseek-web": {
+            "command": "python",
+            "args": [
+                "-m",
+                "open_llm_vtuber.mcpp.builtin.deepseek_web"
+            ],
+            "env": {
+                "DEEPSEEK_API_KEY": "Your DeepSeek API key"
+            }
+        }
     }
 }
