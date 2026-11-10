@@ -677,6 +677,7 @@ LLM 被提示在句子里插入方括号关键字（提示词 `prompts/utils/liv
 | `frameHeightRatio` | number（可选） | 构图覆盖：可见轮廓高度 = 视口高度 × 该值，默认 `1.39`。半身像等轮廓较矮的模型调小（如 `0.86`）即可拉远 |
 | `frameTopRatio` | number（可选） | 构图覆盖：轮廓顶部在视口中的位置比例，默认 `0.12` |
 | `frameWidthRatio` | number（可选） | 构图覆盖：可见轮廓宽度上限 = 视口宽度 × 该值，默认 `0.92`；最终缩放取高度与宽度约束中更小者，轮廓很宽（如身体/阴影宽大）时只调高度比例不起作用，需同时调小它 |
+| `framePortrait` | object（可选） | 竖屏（视口宽 < 高）时覆盖上面三个构图字段：`{"heightRatio"?, "topRatio"?, "widthRatio"?}`，缺省字段沿用通用值。全身像可在竖屏放大到接近满高（`heightRatio` 1、`topRatio` 0、`widthRatio` 可 > 1 允许裁掉手臂外缘） |
 | `focusScale` | number（可选） | 鼠标跟踪时头部/身体转动的缩放（0–1，缺省 `1` 不缩放）；眼球仍完全跟随。头部形变敏感的模型调小（如 `0.5`） |
 | `breathScale` | number（可选） | 运行时自带“呼吸”摆动叠加到头部/身体角度上的幅度缩放（0–1，缺省 `1`）；自带待机摆动的模型调小以免晃动叠加 |
 | `defaultEmotion` | number / string（可选） | 一轮对话结束后回落的表情；缺省使用第 0 个表情 |
@@ -1077,7 +1078,7 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 
 **Live2D / 表现层**
 
-- [ ] 用 `model_info.url` 加载模型，按渲染出的可见轮廓自动构图（默认轮廓高 = 视口高度 × `frameHeightRatio`（1.39）、顶部留白 `frameTopRatio`（12%）；两个字段均可按模型覆盖）；缩放/拖拽/移动端双指缩放自行实现
+- [ ] 用 `model_info.url` 加载模型，按渲染出的可见轮廓自动构图（默认轮廓高 = 视口高度 × `frameHeightRatio`（1.39）、顶部留白 `frameTopRatio`（12%）；两个字段均可按模型覆盖；竖屏可用 `framePortrait` 再覆盖）；缩放/拖拽/移动端双指缩放自行实现
 - [ ] `volumes` + `slice_length` + `lipSyncGain` 驱动口型
 - [ ] `actions.expressions`（索引数组）/ `actions.motions`（`{group,index?}` 数组）驱动表情动作
 - [ ] `idleMotionGroupName` 待机动作、`tapMotions` 点击区域

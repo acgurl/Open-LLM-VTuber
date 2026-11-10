@@ -13,6 +13,12 @@ export interface MotionRef {
   index?: number;
 }
 
+export interface ModelPortraitFrame {
+  heightRatio?: number;
+  topRatio?: number;
+  widthRatio?: number;
+}
+
 export interface ModelInfo {
   name?: string;
   description?: string;
@@ -26,6 +32,8 @@ export interface ModelInfo {
   frameHeightRatio?: number;
   frameTopRatio?: number;
   frameWidthRatio?: number;
+  // 竖屏（宽 < 高）时的构图覆盖，缺省沿用上面的横屏/通用值
+  framePortrait?: ModelPortraitFrame;
   focusScale?: number;
   breathScale?: number;
   defaultEmotion?: number | string;

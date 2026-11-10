@@ -233,9 +233,14 @@ export class Framing {
     const canvasW = internal.width || model.width || 1;
     const canvasH = internal.height || model.height || 1;
     const content = this.contentBounds ?? { x: 0, y: 0, width: canvasW, height: canvasH };
-    const heightRatio = this.host.info?.frameHeightRatio ?? FRAME_HEIGHT_RATIO;
-    const topRatio = this.host.info?.frameTopRatio ?? FRAME_TOP_RATIO;
-    const widthRatio = this.host.info?.frameWidthRatio ?? FRAME_WIDTH_RATIO;
+    // 竖屏手机上视口比模型更窄，横屏调好的宽度上限会把全身像压得很小；
+    // 模型可在 model_dict 的 framePortrait 里给一套竖屏取景。
+    const portrait = w < h ? this.host.info?.framePortrait : undefined;
+    const heightRatio =
+      portrait?.heightRatio ?? this.host.info?.frameHeightRatio ?? FRAME_HEIGHT_RATIO;
+    const topRatio = portrait?.topRatio ?? this.host.info?.frameTopRatio ?? FRAME_TOP_RATIO;
+    const widthRatio =
+      portrait?.widthRatio ?? this.host.info?.frameWidthRatio ?? FRAME_WIDTH_RATIO;
     this.baseScale = Math.min(
       (h * heightRatio) / content.height,
       (w * widthRatio) / content.width,
