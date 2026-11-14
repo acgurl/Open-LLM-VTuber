@@ -40,6 +40,9 @@ class MCPClient:
         self.active_sessions: dict[str, ClientSession] = {}
         self._stdio_locks: dict[str, asyncio.Lock] = {}
         self._list_tools_cache: dict[str, list[Tool]] = {}  # Cache for list_tools
+        # ``instructions`` each server returned from ``initialize``; the MCP
+        # spec intends them as model-facing usage guidance.
+        self._server_instructions: dict[str, str] = {}
         self._send_text: Callable = send_text
         self._client_uid: str = client_uid
 
@@ -79,6 +82,19 @@ class MCPClient:
                 return self.active_sessions[server_name]
             return await self._start_stdio_session(server_name)
 
+    async def _initialize(self, server_name: str, session: ClientSession) -> None:
+        """Run the MCP handshake and remember the server's instructions."""
+        result = await session.initialize()
+        instructions = getattr(result, "instructions", None)
+        if isinstance(instructions, str) and instructions.strip():
+            self._server_instructions[server_name] = instructions.strip()
+        else:
+            self._server_instructions.pop(server_name, None)
+
+    def get_instructions(self, server_name: str) -> str:
+        """Instructions the server sent on its last handshake, or ""."""
+        return self._server_instructions.get(server_name, "")
+
     async def _start_stdio_session(self, server_name: str) -> ClientSession:
         server = self._get_server(server_name)
         timeout = self._get_timeout(server)
@@ -100,7 +116,7 @@ class MCPClient:
             session = await self.exit_stack.enter_async_context(
                 ClientSession(read, write, read_timeout_seconds=timeout)
             )
-            await session.initialize()
+            await self._initialize(server_name, session)
 
             self.active_sessions[server_name] = session
             logger.info(f"MCPC: Successfully connected to server '{server_name}'.")
@@ -146,7 +162,7 @@ class MCPClient:
                 session = await stack.enter_async_context(
                     ClientSession(read, write, read_timeout_seconds=timeout)
                 )
-                await session.initialize()
+                await self._initialize(server_name, session)
             except Exception as e:
                 logger.exception(
                     f"MCPC: Failed to connect to server '{server_name}': {e}"
@@ -183,7 +199,7 @@ class MCPClient:
                 session = await stack.enter_async_context(
                     ClientSession(read, write, read_timeout_seconds=timeout)
                 )
-                await session.initialize()
+                await self._initialize(server_name, session)
             except Exception as e:
                 logger.exception(
                     f"MCPC: Failed to connect to SSE server '{server_name}': {e}"
@@ -317,6 +333,7 @@ class MCPClient:
         await self.exit_stack.aclose()
         self.active_sessions.clear()
         self._list_tools_cache.clear()  # Clear cache on close
+        self._server_instructions.clear()
         self.exit_stack = AsyncExitStack()
         logger.info("MCPC: Client instance closed.")
 

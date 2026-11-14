@@ -190,14 +190,25 @@ class BasicMemoryAgent(AgentInterface):
 
         self._system = system
 
+    def _tool_server_instructions(self) -> str:
+        """MCP server instructions, only while this agent offers tools."""
+        tool_manager = getattr(self, "_tool_manager", None)
+        if not getattr(self, "_use_mcpp", False) or tool_manager is None:
+            return ""
+        return getattr(tool_manager, "server_instructions", "") or ""
+
     def _system_with_time(self) -> str:
         """System prompt plus the current Beijing time (fresh on every request)."""
         now = datetime.now(timezone(timedelta(hours=8)))
         weekday = "一二三四五六日"[now.weekday()]
+        system = self._system
+        instructions = self._tool_server_instructions()
+        if instructions:
+            system = f"{system}\n\n{instructions}"
         # Stated as public so the confidentiality rules in the security prompt
         # don't make the model deny knowing the time.
         return (
-            f"{self._system}\n\n"
+            f"{system}\n\n"
             f"## 当前时间\n"
             f"现在是北京时间 {now:%Y年%m月%d日} 星期{weekday} {now:%H:%M}。\n"
             "这是公开的环境信息，不属于保密内容：用户问日期、时间、星期，"

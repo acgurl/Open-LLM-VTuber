@@ -15,7 +15,7 @@ class ToolAdapterTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 self.adapter,
                 "get_server_and_tool_info",
-                new=AsyncMock(return_value=({}, raw_tools)),
+                new=AsyncMock(return_value=({}, raw_tools, {})),
             ) as fetch,
             patch.object(
                 self.adapter,
@@ -30,14 +30,14 @@ class ToolAdapterTests(unittest.IsolatedAsyncioTestCase):
         ):
             result = await self.adapter.build_tools(["server"])
 
-        self.assertEqual(result, ("prompt", ["openai"], ["claude"], raw_tools))
+        self.assertEqual(result, ("prompt", ["openai"], ["claude"], raw_tools, ""))
         fetch.assert_awaited_once_with(["server"])
 
     async def test_get_tools_delegates_to_build_tools(self):
         with patch.object(
             self.adapter,
             "build_tools",
-            new=AsyncMock(return_value=("prompt", ["openai"], ["claude"], {})),
+            new=AsyncMock(return_value=("prompt", ["openai"], ["claude"], {}, "")),
         ) as build_tools:
             result = await self.adapter.get_tools(["server"])
 

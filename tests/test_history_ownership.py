@@ -257,7 +257,7 @@ class SwitchConfigLeakTests(unittest.IsolatedAsyncioTestCase):
             patch.object(service_context_module, "ToolExecutor"),
         ):
             tool_adapter.return_value.build_tools = AsyncMock(
-                return_value=("prompt", [], [], {})
+                return_value=("prompt", [], [], {}, "")
             )
             await context._init_mcp_components(True, ["server"])
 
