@@ -12,8 +12,14 @@ class ToolManager:
         formatted_tools_openai: list[dict[str, Any]] | None = None,
         formatted_tools_claude: list[dict[str, Any]] | None = None,
         initial_tools_dict: dict[str, FormattedTool] | None = None,
+        server_instructions: str = "",
     ) -> None:
-        """Initialize the Tool Manager with pre-formatted tool lists."""
+        """Initialize the Tool Manager with pre-formatted tool lists.
+
+        ``server_instructions`` is the system-prompt section built from the
+        MCP servers' ``instructions``; the agent appends it while tools are on.
+        """
+        self.server_instructions: str = server_instructions or ""
         # Store the raw tool data (optional, for get_tool)
         self.tools: dict[str, FormattedTool] = initial_tools_dict or {}
 

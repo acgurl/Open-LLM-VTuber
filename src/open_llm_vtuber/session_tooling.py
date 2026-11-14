@@ -78,6 +78,7 @@ class SessionTooling:
         self._local_mcp_config: dict[str, dict] = {}
         self._base_mcp_tools: dict[str, FormattedTool] = {}
         self._base_mcp_prompt: str = ""
+        self._base_mcp_instructions: str = ""
         self.local_mcp_bridge: LocalMCPBridge | None = None
         self.local_mcp_servers: dict[str, dict] = {}
         self.local_mcp_tools: dict[str, FormattedTool] = {}
@@ -116,6 +117,7 @@ class SessionTooling:
         self.mcp_prompt = ""
         self._base_mcp_tools = {}
         self._base_mcp_prompt = ""
+        self._base_mcp_instructions = ""
         self.mcp_active = False
 
     async def rebuild(self, use_mcpp, enabled_servers) -> None:
@@ -168,9 +170,11 @@ class SessionTooling:
                 openai_tools,
                 claude_tools,
                 raw_tools_dict,
+                instructions_prompt,
             ) = await self.tool_adapter.build_tools(enabled_servers)
             self.mcp_prompt = mcp_prompt_string
             self._base_mcp_prompt = mcp_prompt_string
+            self._base_mcp_instructions = instructions_prompt
             self._base_mcp_tools = (
                 dict(raw_tools_dict) if isinstance(raw_tools_dict, dict) else {}
             )
@@ -185,6 +189,7 @@ class SessionTooling:
                 formatted_tools_openai=openai_tools,
                 formatted_tools_claude=claude_tools,
                 initial_tools_dict=raw_tools_dict,
+                server_instructions=instructions_prompt,
             )
             logger.info("ToolManager initialized with dynamically fetched tools.")
         except Exception as e:
@@ -194,6 +199,7 @@ class SessionTooling:
             self.tool_manager = None
             self._base_mcp_tools = {}
             self._base_mcp_prompt = ""
+            self._base_mcp_instructions = ""
             self.mcp_prompt = "[Error constructing MCP tools/prompt]"
 
     def _prepare_tool_adapter(self, user_servers: dict[str, MCPServer]) -> None:
@@ -372,6 +378,7 @@ class SessionTooling:
                 formatted_tools_openai=openai_tools,
                 formatted_tools_claude=claude_tools,
                 initial_tools_dict=merged,
+                server_instructions=self._base_mcp_instructions,
             )
             if self.mcp_client is None:
                 self.mcp_client = self._build_mcp_client()
