@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from '../stores/toast';
+import { CopyIcon } from './icons';
 import { ApiError } from '../services/api';
 import {
   createBindCode,
@@ -205,12 +206,12 @@ export function ConnectorPanel({ open }: { open: boolean }) {
                 </code>
                 <button
                   type="button"
-                  className="mini-btn"
+                  className="mini-btn icon-only"
                   aria-label={t('settings.connectors.copyCode')}
                   title={t('settings.connectors.copyCode')}
                   onClick={() => void copy(`/bind ${code.code}`)}
                 >
-                  ⧉
+                  <CopyIcon />
                 </button>
               </div>
               <div

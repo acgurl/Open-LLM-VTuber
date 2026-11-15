@@ -11,7 +11,7 @@ import { fileToBase64 } from '../utils/base64';
 import { captureCamera, captureScreen } from '../utils/capture';
 import { LIMITS, type ImagePayload, type ImageSource } from '../protocol/types';
 import { usePresence } from '../hooks/usePresence';
-import { AddIcon, CamIcon, ImageIcon, MicIcon, ScreenShareIcon, StopIcon, SendIcon } from './icons';
+import { AddIcon, CamIcon, CloseIcon, ImageIcon, MicIcon, ScreenShareIcon, StopIcon, SendIcon } from './icons';
 import { ThinkingControls, useThinking } from './ThinkingControls';
 
 interface PendingImage {
@@ -197,7 +197,7 @@ export function InputBar() {
                 title={t('input.removeImage')}
                 onClick={() => removeImage(img.id)}
               >
-                ×
+                <CloseIcon size={11} />
               </button>
             </div>
           ))}

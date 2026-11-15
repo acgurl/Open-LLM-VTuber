@@ -134,21 +134,24 @@ export function McpPanel() {
       <h3>{t('settings.mcp.title')}</h3>
       <div className="mcp-hint">{t('settings.mcp.jsonHint')}</div>
       <textarea
-        className="mcp-editor"
+        className={`mcp-editor${editorError ? ' invalid' : ''}`}
         name="mcp-config"
         rows={12}
         value={text}
         aria-label={t('settings.mcp.title')}
         spellCheck={false}
         placeholder={EXAMPLE}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => {
+          setText(event.target.value);
+          if (editorError) setEditorError('');
+        }}
       />
       {editorError && <div className="mcp-error">{editorError}</div>}
       <div className="mcp-actions">
-        <button className="mini-btn" disabled={saving || loading} onClick={() => void save()}>
+        <button className="mini-btn primary" disabled={saving || loading} onClick={() => void save()}>
           {saving ? t('settings.mcp.saving') : t('settings.mcp.save')}
         </button>
-        <button className="mini-btn" onClick={format}>
+        <button className="mini-btn" disabled={!text.trim()} onClick={format}>
           {t('settings.mcp.format')}
         </button>
         <button className="mini-btn" disabled={loading} onClick={() => void load()}>

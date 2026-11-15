@@ -13,7 +13,7 @@ import { stripTags, buildTagSet } from '../utils/text';
 import { usePresence } from '../hooks/usePresence';
 import { useDialog } from '../hooks/useDialog';
 import type { HistorySummary } from '../protocol/types';
-import { TrashIcon } from './icons';
+import { CloseIcon, PlusIcon, TrashIcon } from './icons';
 
 // 第一次点删除只“上膛”，这段时间内再点一次才真的删
 const CONFIRM_MS = 3000;
@@ -119,7 +119,7 @@ export function HistoryDrawer() {
         <div className="drawer-head">
           <span>{t('history.title')}</span>
           <button className="icon-btn" aria-label={t('drawer.close')} onClick={() => setOpen(false)}>
-            ×
+            <CloseIcon />
           </button>
         </div>
         <button
@@ -129,7 +129,8 @@ export function HistoryDrawer() {
             setOpen(false);
           }}
         >
-          + {t('history.new')}
+          <PlusIcon />
+          {t('history.new')}
         </button>
         <div className="drawer-body">
           {histories.length === 0 && <div className="drawer-empty">{t('history.empty')}</div>}

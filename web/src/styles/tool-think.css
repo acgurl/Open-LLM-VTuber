@@ -1,24 +1,4 @@
 /* ---------- think / 工具卡片 ---------- */
-.think-block {
-  margin: 7px 0;
-  padding: 4px 10px 5px;
-  border-radius: 13px;
-  border: 1px solid var(--line);
-  background: var(--chip);
-  transition:
-    border-color 260ms var(--ease-snap),
-    background 260ms var(--ease-snap),
-    box-shadow 260ms var(--ease-snap),
-    padding 240ms var(--ease-fold);
-}
-
-/* 正在思考：整块轻微提亮，标签旁给三个跳动的点，说明它是活的 */
-.think-block.active {
-  border-color: var(--accent-line);
-  background: color-mix(in oklab, var(--accent) 7%, var(--chip));
-  box-shadow: 0 0 22px -16px var(--accent-glow);
-}
-
 .think-live {
   display: inline-flex;
   align-items: center;
@@ -57,70 +37,15 @@
   }
 }
 
-.think-block.open,
-.think-block.preview {
-  padding-bottom: 8px;
-}
-
-/* 思考中的预览小窗：只露几行，上沿渐隐，内容自动滚到最新；能手动往上翻 */
-.think-block.preview .think-body {
-  max-height: calc(0.86rem * 1.6 * 4 + 4px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: none;
-  mask-image: linear-gradient(to bottom, transparent 0, #000 1.4em);
-}
-
-.think-block.preview .think-body::-webkit-scrollbar {
-  display: none;
-}
-
-/* 展开的全文过长时也给个上限，别把整个聊天列撑爆 */
-.think-block.open .think-body {
-  max-height: min(48vh, 420px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-}
-
-.think-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 0.8rem;
-  padding: 3px 0;
-  transition: color 160ms;
-}
-
-@media (hover: hover) {
-  .think-toggle:hover {
-    color: var(--ink);
-  }
-}
-
 .think-chevron {
   display: inline-block;
   margin-right: 5px;
   transition: transform 220ms var(--ease-fold);
 }
 
-.think-block.open .think-chevron,
-.tool-card .tool-head[aria-expanded='true'] .think-chevron {
+.tool-card .tool-head[aria-expanded="true"] .think-chevron {
   transform: rotate(90deg);
   transition-timing-function: var(--ease-spring);
-}
-
-.think-body {
-  color: var(--muted);
-  font-size: 0.86rem;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  padding: 4px 2px 0;
-  animation: content-in 200ms var(--ease-snap);
 }
 
 .collapsible {
@@ -167,7 +92,7 @@
 }
 
 .tool-card.status-running::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: 0;
@@ -194,7 +119,7 @@
 
 /* 收光只动 opacity 的内圈，不再逐帧重绘 box-shadow——那一帧正好还要折叠，叠起来会掉帧 */
 .tool-card::before {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -347,4 +272,73 @@
   word-break: break-all;
   border-top: 1px solid var(--line);
   background: var(--inset);
+}
+
+/* ---------- 思考卡：与工具卡同一套几何与开合，只把状态色换成主色 ---------- */
+.think-card.status-running {
+  border-color: var(--accent-line);
+}
+
+.think-card.status-running::after {
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+}
+
+.think-card.status-running .tool-status {
+  color: var(--accent);
+}
+
+.think-name {
+  font-family: inherit;
+  font-size: 0.84rem;
+  letter-spacing: 0;
+}
+
+/* 头部的小标记：一颗主色的菱形，思考中缓慢呼吸，和工具卡的状态点同位 */
+.think-mark {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+  background: color-mix(in oklab, var(--accent) 70%, var(--muted));
+  box-shadow: 0 0 8px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+.think-mark.active {
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.think-card .tool-status {
+  display: inline-flex;
+  align-items: center;
+}
+
+.think-body {
+  max-height: min(48vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--surface-pad-y) var(--surface-pad-x);
+  border-top: 1px solid var(--line);
+  background: var(--inset);
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.65;
+}
+
+/* 思考中只露几行，上沿渐隐，内容跟随到最新；结束后展开看全文 */
+.think-card.status-running .think-body {
+  max-height: calc(0.86rem * 1.65 * 5 + 2 * var(--surface-pad-y));
+  scrollbar-width: none;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 1.6em);
+}
+
+.think-card.status-running .think-body::-webkit-scrollbar {
+  display: none;
+}
+
+/* markdown 的段落渲染成行内 span（气泡里为了和动作标签同行）；思考正文要按段换行 */
+.think-body > span {
+  display: block;
+  margin: 0.4em 0;
 }
