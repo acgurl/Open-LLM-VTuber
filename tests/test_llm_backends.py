@@ -20,6 +20,7 @@ from open_llm_vtuber.agent.stateless_llm.openai_responses_llm import (
 from open_llm_vtuber.agent.stateless_llm.stateless_llm_interface import (
     LLMError,
     LLMToolsUnsupportedError,
+    ReasoningText,
     StatelessLLMInterface,
     content_text,
 )
@@ -183,6 +184,31 @@ class OpenAICompatibleTests(unittest.IsolatedAsyncioTestCase):
             {"role": "tool", "tool_call_id": "call-1", "content": "found"},
         )
         self.assertEqual(messages[-1]["content"], "a picture\n[1 image(s) omitted]")
+
+    async def test_reasoning_is_streamed_inside_think_markers(self):
+        def thought(text):
+            delta = SimpleNamespace(
+                content=None, tool_calls=None, reasoning_content=text
+            )
+            return SimpleNamespace(choices=[SimpleNamespace(delta=delta)])
+
+        stream = _Stream([thought("let me "), thought("see"), _chunk("Hi.")])
+        llm, _ = self.make(stream)
+
+        items = await _collect(llm.chat_completion(CONVERSATION))
+
+        self.assertEqual(items, ["<think>", "let me ", "see", "</think>", "Hi."])
+        self.assertTrue(all(isinstance(i, ReasoningText) for i in items[:4]))
+        self.assertNotIsInstance(items[4], ReasoningText)
+
+    async def test_reasoning_only_reply_is_closed(self):
+        delta = SimpleNamespace(content=None, tool_calls=None, reasoning_content="hm")
+        stream = _Stream([SimpleNamespace(choices=[SimpleNamespace(delta=delta)])])
+        llm, _ = self.make(stream)
+
+        items = await _collect(llm.chat_completion(CONVERSATION))
+
+        self.assertEqual(items, ["<think>", "hm", "</think>"])
 
     async def test_no_tools_and_no_temperature_are_omitted(self):
         llm, completions = self.make(_Stream([]), temperature=None)
@@ -349,10 +375,63 @@ class OpenAIResponsesTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(calls[0].function.arguments, '{"q": 1}')
         request = responses.requests[0]
         self.assertEqual(request["instructions"], "SYS")
-        self.assertEqual(request["reasoning"], {"effort": "low"})
+        # Reasoning text is only returned when a summary is asked for.
+        self.assertEqual(request["reasoning"], {"effort": "low", "summary": "auto"})
         self.assertIs(request["temperature"], openai.NOT_GIVEN)
         self.assertFalse(request["store"])
         self.assertTrue(stream.closed)
+
+    async def test_reasoning_summary_is_streamed_inside_think_markers(self):
+        stream = _Stream(
+            [
+                _event("response.reasoning_summary_part.added", summary_index=0),
+                _event("response.reasoning_summary_text.delta", delta="plan"),
+                _event("response.reasoning_summary_part.added", summary_index=1),
+                _event("response.reasoning_summary_text.delta", delta="check"),
+                _event("response.output_text.delta", delta="Hi."),
+            ]
+        )
+        llm, _ = self.make(stream, reasoning_effort="low")
+
+        items = await _collect(llm.chat_completion(CONVERSATION))
+
+        self.assertEqual(items, ["<think>", "plan", "\n\n", "check", "</think>", "Hi."])
+        self.assertNotIsInstance(items[-1], ReasoningText)
+
+    async def test_refused_summaries_are_dropped_and_remembered(self):
+        refused = _api_error(
+            openai.BadRequestError,
+            400,
+            "Your organization must be verified to generate reasoning summaries",
+        )
+        outcomes = [
+            refused,
+            _Stream([_event("response.output_text.delta", delta="ok")]),
+        ]
+        llm, _ = self.make(None, reasoning_effort="low")
+        requests = []
+
+        async def create(**kwargs):
+            requests.append(kwargs)
+            outcome = outcomes.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+
+        llm.client.responses.create = create
+
+        items = await _collect(llm.chat_completion(CONVERSATION))
+
+        self.assertEqual(items, ["ok"])
+        self.assertEqual(requests[1]["reasoning"], {"effort": "low"})
+        self.assertTrue(llm._summaries_refused)
+
+    async def test_no_summary_without_reasoning(self):
+        llm, responses = self.make(_Stream([]))
+
+        await _collect(llm.chat_completion(CONVERSATION))
+
+        self.assertIs(responses.requests[0]["reasoning"], openai.NOT_GIVEN)
 
     async def test_failures_are_raised(self):
         failed = _event("response.failed", response=SimpleNamespace(error="quota"))
@@ -383,11 +462,12 @@ class _ClaudeStream:
     async def __aexit__(self, *_args):
         return False
 
-    @property
-    def text_stream(self):
+    def __aiter__(self):
         async def stream():
             for text in self.texts:
-                yield text
+                kind, value = text if isinstance(text, tuple) else ("text", text)
+                delta = SimpleNamespace(type=f"{kind}_delta", **{kind: value})
+                yield SimpleNamespace(type="content_block_delta", delta=delta)
 
         return stream()
 
@@ -495,6 +575,38 @@ class ClaudeTests(unittest.IsolatedAsyncioTestCase):
         await _collect(llm.chat_completion([{"role": "user", "content": "x"}]))
         self.assertEqual(messages.requests[0]["temperature"], 0.2)
         self.assertIs(messages.requests[0]["tools"], anthropic.NOT_GIVEN)
+
+    async def test_thinking_is_streamed_inside_think_markers(self):
+        final = SimpleNamespace(stop_reason="end_turn", content=[])
+        stream = _ClaudeStream(
+            [("thinking", "let me "), ("thinking", "see"), "Hi."], final
+        )
+        llm, messages = self.make(stream)
+
+        items = await _collect(
+            llm.chat_completion(
+                [{"role": "user", "content": "x"}],
+                options={"thinking": {"type": "adaptive"}},
+            )
+        )
+
+        self.assertEqual(items, ["<think>", "let me ", "see", "</think>", "Hi."])
+        # Current models omit thinking text unless asked to summarize it.
+        self.assertEqual(
+            messages.requests[0]["extra_body"]["thinking"],
+            {"type": "adaptive", "display": "summarized"},
+        )
+
+    async def test_explicit_thinking_display_is_kept(self):
+        final = SimpleNamespace(stop_reason="end_turn", content=[])
+        options = {"thinking": {"type": "adaptive", "display": "omitted"}}
+        llm, messages = self.make(_ClaudeStream([], final))
+
+        await _collect(
+            llm.chat_completion([{"role": "user", "content": "x"}], options=options)
+        )
+
+        self.assertEqual(messages.requests[0]["extra_body"], options)
 
     async def test_tool_use_turn_is_returned_and_replayed_verbatim(self):
         thinking = _Block(type="thinking", thinking="", signature="sig")

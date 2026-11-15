@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta, timezone
 from typing import (
     Any,
@@ -11,6 +12,7 @@ from ..output_types import SentenceOutput
 from ..stateless_llm.stateless_llm_interface import (
     LLMError,
     LLMToolsUnsupportedError,
+    ReasoningText,
     StatelessLLMInterface,
 )
 from ..transformers import (
@@ -34,6 +36,7 @@ from ...mcpp.tool_executor import ToolExecutor
 DEFAULT_MAX_TOOL_ROUNDS = 10
 TOOL_ROUND_LIMIT_NOTICE = "[Stopped: too many consecutive tool calls]"
 TOOL_EXECUTOR_MISSING_NOTICE = "[Error: ToolExecutor not configured]"
+_THINK_BLOCK = re.compile(r"<think>.*?(?:</think>|$)", re.DOTALL | re.IGNORECASE)
 
 
 @dataclass
@@ -303,7 +306,9 @@ class BasicMemoryAgent(AgentInterface):
         """
         async for item in stream:
             if isinstance(item, str):
-                if item and not self.prompt_mode_flag:
+                if item and (
+                    isinstance(item, ReasoningText) or not self.prompt_mode_flag
+                ):
                     yield make_text_delta(item)
                 yield item
             else:
@@ -315,6 +320,8 @@ class BasicMemoryAgent(AgentInterface):
             return
 
         self._interrupt_handled = True
+        # The client may report what it displayed, reasoning included.
+        heard_response = _THINK_BLOCK.sub("", heard_response or "").strip()
 
         if self._memory and self._memory[-1]["role"] == "assistant":
             self._memory[-1]["content"] = heard_response + "..."
@@ -519,7 +526,10 @@ class BasicMemoryAgent(AgentInterface):
         )
         try:
             async for event in stream:
-                if isinstance(event, str):
+                if isinstance(event, ReasoningText):
+                    # Shown folded, never remembered or scanned for tool JSON.
+                    yield event
+                elif isinstance(event, str):
                     outcome.text += event
                     if self.prompt_mode_flag:
                         detected = self._json_detector.process_chunk(event)
@@ -678,7 +688,8 @@ class BasicMemoryAgent(AgentInterface):
                 if isinstance(event, str) and event:
                     yield make_text_delta(event)
                     yield event
-                    complete_response += event
+                    if not isinstance(event, ReasoningText):
+                        complete_response += event
         except LLMError as error:
             yield make_text_delta(str(error))
             yield str(error)

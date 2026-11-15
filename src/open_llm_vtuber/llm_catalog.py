@@ -30,7 +30,13 @@ The remaining keys of an entry are that provider's ``llm_configs`` settings.
 ``params`` are extra request-body fields, deep-merged into every request made
 at that level, so any vendor's switch can be expressed. A level without
 ``params`` gets the provider's standard effort field (see
-``_EFFORT_SHORTHAND``); ``off`` without ``params`` adds nothing.
+``_effort_shorthand``); ``off`` without ``params`` adds nothing.
+
+The client shows the model's reasoning folded above the reply. Backends ask
+for readable reasoning when a request turns it on: Claude's adaptive thinking
+gets ``display: summarized``, Vertex's ``thinkingConfig`` gets
+``includeThoughts``, and OpenAI Responses reasoning gets ``summary: auto``
+(dropped for the key if the API refuses it). An explicit value is kept.
 ``allowed_users`` follows the character presets' rule (``config_manager/
 access.py``): internal user ids or verified login emails, never display names.
 
@@ -94,7 +100,8 @@ def _effort_shorthand(provider: str, level: str) -> dict[str, Any] | None:
     if provider == "openai_responses_llm":
         return {"reasoning": {"effort": level}}
     if provider == "claude_llm":
-        return {"output_config": {"effort": level}}
+        # Adaptive thinking (Claude 4.6+); the backend asks for readable text.
+        return {"thinking": {"type": "adaptive"}, "output_config": {"effort": level}}
     if provider == "vertex_llm":
         return {"generationConfig": {"thinkingConfig": {"thinkingLevel": level}}}
     return None

@@ -11,6 +11,7 @@ from loguru import logger
 
 from .stateless_llm_interface import (
     StatelessLLMInterface,
+    ThinkMarkers,
     authentication_error,
     connection_error,
     generation_error,
@@ -22,6 +23,24 @@ from ...mcpp.types import ToolCallObject
 
 # Assistant turns kept verbatim while their tool calls are being answered.
 _MAX_KEPT_TURNS = 256
+
+
+def _visible_thinking(options: dict[str, Any] | None) -> dict[str, Any]:
+    """``options`` asking for readable thinking when they turn it on.
+
+    Current models default ``thinking.display`` to ``omitted`` (empty thinking
+    text), which the user would see as a long pause; an explicit ``display``
+    is kept.
+    """
+    extra = dict(options or {})
+    thinking = extra.get("thinking")
+    if (
+        isinstance(thinking, dict)
+        and thinking.get("type") == "adaptive"
+        and "display" not in thinking
+    ):
+        extra["thinking"] = {**thinking, "display": "summarized"}
+    return extra
 
 
 def _content_blocks(content: Any) -> list[dict[str, Any]]:
@@ -209,13 +228,24 @@ class ClaudeLLM(StatelessLLMInterface):
                 temperature=(
                     NOT_GIVEN if self.temperature is None else self.temperature
                 ),
-                extra_body=options or None,
+                extra_body=_visible_thinking(options) or None,
             ) as stream:
                 produced_text = False
-                async for text in stream.text_stream:
-                    if text:
+                think = ThinkMarkers()
+                async for event in stream:
+                    if event.type != "content_block_delta":
+                        continue
+                    delta = event.delta
+                    if delta.type == "thinking_delta":
+                        for item in think.thought(delta.thinking):
+                            yield item
+                    elif delta.type == "text_delta" and delta.text:
+                        for item in think.close():
+                            yield item
                         produced_text = True
-                        yield text
+                        yield delta.text
+                for item in think.close():
+                    yield item
                 message = await stream.get_final_message()
 
             if message.stop_reason == "refusal":

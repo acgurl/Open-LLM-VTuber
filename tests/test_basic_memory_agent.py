@@ -12,6 +12,7 @@ from open_llm_vtuber.agent.input_types import BatchInput, TextData, TextSource
 from open_llm_vtuber.agent.stateless_llm.stateless_llm_interface import (
     LLMError,
     LLMToolsUnsupportedError,
+    ReasoningText,
 )
 from open_llm_vtuber.config_manager.agent import BasicMemoryAgentConfig
 from open_llm_vtuber.mcpp.json_detector import StreamJSONDetector
@@ -78,6 +79,17 @@ class _TextThenToolLLM:
             yield "B"
 
         return second_round()
+
+
+class _ReasoningLLM:
+    def chat_completion(self, _messages, _system, tools=None):
+        async def reply():
+            yield ReasoningText("<think>")
+            yield ReasoningText("hm")
+            yield ReasoningText("</think>")
+            yield "Hi."
+
+        return reply()
 
 
 class _ToolExecutor:
@@ -165,6 +177,27 @@ class ToolLoopStateTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(items[-1], "Error calling the chat endpoint: boom")
         self.assertEqual(self.added, [("partial", "assistant")])
+
+    async def test_reasoning_is_shown_but_never_remembered(self):
+        agent = self.agent
+        agent._llm = _ReasoningLLM()
+
+        loop_items = [item async for item in agent._tool_interaction_loop([], [])]
+        chat_items = [item async for item in agent._simple_chat([])]
+
+        self.assertEqual(loop_items, ["<think>", "hm", "</think>", "Hi."])
+        self.assertIn("<think>", chat_items)
+        self.assertEqual(self.added, [("Hi.", "assistant"), ("Hi.", "assistant")])
+
+    def test_interrupt_drops_reasoning_from_heard_text(self):
+        agent = BasicMemoryAgent.__new__(BasicMemoryAgent)
+        agent._memory = []
+        agent._interrupt_handled = False
+        agent.interrupt_method = "user"
+
+        agent.handle_interrupt("<think>plan</think>Hello")
+
+        self.assertEqual(agent._memory[0]["content"], "Hello...")
 
     async def test_prompt_mode_resets_json_detector_after_success(self):
         agent = self.agent

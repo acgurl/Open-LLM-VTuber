@@ -8,12 +8,13 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from loguru import logger
-from openai import NOT_GIVEN, AsyncOpenAI
+from openai import NOT_GIVEN, AsyncOpenAI, BadRequestError
 
 from .openai_compatible_llm import openai_errors
 from ...utils.dicts import deep_merge
 from .stateless_llm_interface import (
     StatelessLLMInterface,
+    ThinkMarkers,
     content_text,
     generation_error,
     tool_specs,
@@ -124,6 +125,8 @@ class OpenAIResponsesLLM(StatelessLLMInterface):
         self.model = model
         self.temperature = temperature
         self.reasoning_effort = reasoning_effort
+        # Set once the API refuses reasoning summaries for this key.
+        self._summaries_refused = False
         self.max_output_tokens = max_output_tokens
         self.client = AsyncOpenAI(
             base_url=base_url,
@@ -137,14 +140,30 @@ class OpenAIResponsesLLM(StatelessLLMInterface):
         self, stream: AsyncIterator[Any]
     ) -> AsyncIterator[str | list[ToolCallObject]]:
         calls: list[ToolCallObject] = []
+        think = ThinkMarkers()
         async for event in stream:
             kind = event.type
-            if kind == "response.output_text.delta":
+            if kind in (
+                "response.reasoning_summary_text.delta",
+                "response.reasoning_text.delta",
+            ):
+                for item in think.thought(event.delta or ""):
+                    yield item
+            elif kind == "response.reasoning_summary_part.added":
+                # Summaries come in parts; keep them apart as paragraphs.
+                if think.open and getattr(event, "summary_index", 0):
+                    for item in think.thought("\n\n"):
+                        yield item
+            elif kind == "response.output_text.delta":
                 if event.delta:
+                    for item in think.close():
+                        yield item
                     yield event.delta
             elif kind == "response.output_item.done":
                 item = event.item
                 if getattr(item, "type", None) == "function_call":
+                    for closing in think.close():
+                        yield closing
                     calls.append(
                         ToolCallObject.from_dict(
                             {
@@ -174,6 +193,8 @@ class OpenAIResponsesLLM(StatelessLLMInterface):
                 details = getattr(event.response, "incomplete_details", None)
                 logger.warning(f"Responses API ({self.model}): incomplete: {details}")
 
+        for item in think.close():
+            yield item
         if calls:
             logger.info(f"Tool calls requested: {[c.function.name for c in calls]}")
             yield calls
@@ -200,23 +221,50 @@ class OpenAIResponsesLLM(StatelessLLMInterface):
                 extra.pop("reasoning"),
             )
 
+        asks_summary = False
+        if (
+            isinstance(reasoning, dict)
+            and reasoning.get("effort") != "none"
+            and "summary" not in reasoning
+            and not self._summaries_refused
+        ):
+            # Reasoning text is only returned as a summary, and only on request.
+            reasoning = {**reasoning, "summary": "auto"}
+            asks_summary = True
+
+        def create(reasoning_param: Any) -> Any:
+            return self.client.responses.create(
+                model=self.model,
+                input=items,
+                instructions=system or NOT_GIVEN,
+                tools=function_tools or NOT_GIVEN,
+                temperature=(
+                    NOT_GIVEN if self.temperature is None else self.temperature
+                ),
+                reasoning=reasoning_param,
+                max_output_tokens=self.max_output_tokens or NOT_GIVEN,
+                store=False,
+                stream=True,
+                extra_body=extra or None,
+            )
+
         stream = None
         try:
             async with openai_errors(self.model, self.base_url, bool(function_tools)):
-                stream = await self.client.responses.create(
-                    model=self.model,
-                    input=items,
-                    instructions=system or NOT_GIVEN,
-                    tools=function_tools or NOT_GIVEN,
-                    temperature=(
-                        NOT_GIVEN if self.temperature is None else self.temperature
-                    ),
-                    reasoning=reasoning,
-                    max_output_tokens=self.max_output_tokens or NOT_GIVEN,
-                    store=False,
-                    stream=True,
-                    extra_body=extra or None,
-                )
+                try:
+                    stream = await create(reasoning)
+                except BadRequestError as error:
+                    # Some organizations must be verified before they get
+                    # summaries; answer without them from then on.
+                    if not asks_summary or "summar" not in str(error).lower():
+                        raise
+                    logger.warning(
+                        f"{self.model}: reasoning summaries refused ({error}); "
+                        "continuing without them"
+                    )
+                    self._summaries_refused = True
+                    reasoning = {k: v for k, v in reasoning.items() if k != "summary"}
+                    stream = await create(reasoning)
                 async for item in self._stream_events(stream):
                     yield item
         finally:

@@ -57,8 +57,29 @@
   }
 }
 
-.think-block.open {
+.think-block.open,
+.think-block.preview {
   padding-bottom: 8px;
+}
+
+/* 思考中的预览小窗：只露几行，上沿渐隐，内容自动滚到最新；能手动往上翻 */
+.think-block.preview .think-body {
+  max-height: calc(0.86rem * 1.6 * 4 + 4px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  mask-image: linear-gradient(to bottom, transparent 0, #000 1.4em);
+}
+
+.think-block.preview .think-body::-webkit-scrollbar {
+  display: none;
+}
+
+/* 展开的全文过长时也给个上限，别把整个聊天列撑爆 */
+.think-block.open .think-body {
+  max-height: min(48vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .think-toggle {
