@@ -371,6 +371,40 @@ class VertexLLMTestCase(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    async def test_thought_sections_are_kept_apart(self):
+        def thought(text):
+            return {
+                "candidates": [
+                    {"content": {"parts": [{"thought": True, "text": text}]}}
+                ]
+            }
+
+        google = _Google(
+            [
+                httpx.Response(
+                    200,
+                    content=_sse(
+                        thought("**Planning**\n\nI am sketching"),
+                        thought(" the proof."),  # one section split across chunks
+                        thought("**Checking**\n\nAll steps hold."),
+                        _text_chunk("Done."),
+                    ),
+                )
+            ]
+        )
+        llm = self.make_llm(google)
+
+        items = await self.collect(
+            llm.chat_completion([{"role": "user", "content": "x"}])
+        )
+
+        self.assertEqual(
+            "".join(items[1:-2]),
+            "**Planning**\n\nI am sketching the proof."
+            "\n\n**Checking**\n\nAll steps hold.",
+        )
+        self.assertEqual(items[-2:], ["</think>", "Done."])
+
     async def test_thinking_config_asks_for_thoughts(self):
         google = _Google([httpx.Response(200, content=_sse(_text_chunk("Hi.")))])
         llm = self.make_llm(google)
