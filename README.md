@@ -1,4 +1,4 @@
-![](./assets/banner.jpg)
+![](./docs/assets/banner.jpg)
 
 <h1 align="center">Open-LLM-VTuber</h1>
 
@@ -7,7 +7,7 @@ A self-hosted, multi-user Live2D voice companion with a rebuilt web client.
 </p>
 
 <p align="center">
-English | <a href="./README.CN.md">简体中文</a> | <a href="./README.JP.md">日本語 (upstream)</a> | <a href="./README.KR.md">한국어 (upstream)</a>
+English | <a href="./docs/README.CN.md">简体中文</a>
 </p>
 
 <p align="center">
@@ -100,7 +100,7 @@ Important runtime properties:
 - **History is restored into the agent** when a client opens an existing history, so a previous
   conversation can be continued after reconnecting.
 - **The whole backend accepts JSON WebSocket frames only.** Microphone audio is sent as an array of
-  floats, not as binary PCM. See [BACKEND_API.md](./BACKEND_API.md).
+  floats, not as binary PCM. See [BACKEND_API.md](./docs/BACKEND_API.md).
 - **The frontend must be served same-origin.** OIDC session cookies are `HttpOnly` and
   credential-less CORS is disabled; the WebSocket origin check also compares the request host.
 - **Configuration is loaded at startup.** At runtime you can switch character presets, backgrounds
@@ -122,7 +122,7 @@ Important runtime properties:
 | `/live2d-models/info` | Scan for Live2D models (the authoritative list is `model_dict.json`) |
 
 The complete message set, payload shapes, limits and close codes are documented in
-[BACKEND_API.md](./BACKEND_API.md).
+[BACKEND_API.md](./docs/BACKEND_API.md).
 
 ## Quick start (local)
 
@@ -315,7 +315,7 @@ Notes:
   `/api/`, `/auth/`, `/cache/`, `/web-tool/` and `/model_dict.json` are `no-store`.
 - `GET /healthz` is public and is the readiness probe.
 - DNS, Cloudflare and Caddy details for the reference deployment are outside this repository and
-  recorded in [HANDOFF.md](./HANDOFF.md).
+  recorded in [HANDOFF.md](./docs/HANDOFF.md).
 
 ## Character presets
 
@@ -424,8 +424,8 @@ tests/                        unittest suite
 
 | Document | Contents |
 | --- | --- |
-| [BACKEND_API.md](./BACKEND_API.md) | Complete WebSocket/HTTP contract, payloads, limits, timing, gotchas |
-| [HANDOFF.md](./HANDOFF.md) | Production deployment topology, mounts, operations, change history |
+| [BACKEND_API.md](./docs/BACKEND_API.md) | Complete WebSocket/HTTP contract, payloads, limits, timing, gotchas |
+| [HANDOFF.md](./docs/HANDOFF.md) | Production deployment topology, mounts, operations, change history |
 | [CLAUDE.md](./CLAUDE.md) | Codebase guide for development agents |
 | [config_templates/README.md](./config_templates/README.md) | How the default templates are used |
 

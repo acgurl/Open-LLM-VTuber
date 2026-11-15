@@ -7,12 +7,12 @@
 </p>
 
 <p align="center">
-<a href="./README.md">English</a> | 简体中文 | <a href="./README.JP.md">日本語（上游）</a> | <a href="./README.KR.md">한국어（上游）</a>
+<a href="../README.md">English</a> | 简体中文
 </p>
 
 <p align="center">
 <a href="https://github.com/acgurl/Open-LLM-VTuber/actions/workflows/tests.yml"><img src="https://github.com/acgurl/Open-LLM-VTuber/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
-<a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+<a href="../LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
 </p>
 
 **参考部署：** <https://vtuber.acgurl.cn/>（需要 OIDC 登录）
@@ -358,8 +358,8 @@ tests/                        unittest 测试集
 | --- | --- |
 | [BACKEND_API.md](./BACKEND_API.md) | 完整的 WebSocket/HTTP 契约、载荷、限额、时序与已知坑 |
 | [HANDOFF.md](./HANDOFF.md) | 生产部署拓扑、挂载、运维操作与变更记录 |
-| [CLAUDE.md](./CLAUDE.md) | 面向开发 agent 的代码库说明 |
-| [config_templates/README.md](./config_templates/README.md) | 默认模板的使用方式 |
+| [CLAUDE.md](../CLAUDE.md) | 面向开发 agent 的代码库说明 |
+| [config_templates/README.md](../config_templates/README.md) | 默认模板的使用方式 |
 
 ## 安全说明
 
@@ -387,7 +387,7 @@ tests/                        unittest 测试集
 本项目 fork 自 [Open-LLM-VTuber](https://github.com/Open-LLM-VTuber/Open-LLM-VTuber)，并保留其模块化
 引擎设计。感谢上游作者与贡献者。
 
-代码以 [MIT License](./LICENSE) 发布。
+代码以 [MIT License](../LICENSE) 发布。
 
 ### Live2D 样本模型声明
 

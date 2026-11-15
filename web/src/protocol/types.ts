@@ -1,4 +1,4 @@
-// WebSocket 协议类型，与 BACKEND_API.md 附录 B 逐条对应。
+// WebSocket 协议类型，与 docs/BACKEND_API.md 附录 B 逐条对应。
 
 export type ImageSource = 'camera' | 'screen' | 'shared' | 'clipboard' | 'upload';
 

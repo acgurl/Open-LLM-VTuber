@@ -210,7 +210,7 @@ async def store_interrupted_reply(
 def _to_image_data(img: dict[str, Any]) -> ImageData:
     """Wire payload -> ImageData.
 
-    The WebSocket contract sends raw base64 in `data` (BACKEND_API.md), while
+    The WebSocket contract sends raw base64 in `data` (docs/BACKEND_API.md), while
     agents hand the value to OpenAI-style `image_url` blocks, which need a data
     URL. Older clients already send a full data URL, so keep those untouched.
     """
