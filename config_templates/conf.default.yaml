@@ -132,7 +132,8 @@ character_config:
         # Method for segmenting sentences: 'regex' or 'pysbd'
         segment_method: 'pysbd'
         # Use MCP (Model Context Protocol) Plus to let the LLM have the ability to use tools (default: False)
-        # 'Plus' means that it has the ability to call tools by using OpenAI API.
+        # 'Plus' means tools are called through the LLM API's native tool calling,
+        # with a prompt-based fallback for models that refuse tools.
         use_mcpp: False
         mcp_enabled_servers: ["time", "ddg-search"] # Enabled MCP servers
         # Max LLM requests per user turn while the model keeps calling tools
@@ -143,9 +144,6 @@ character_config:
         host: 'api.hume.ai' # Do not change this in most cases
         config_id: '' # Optional
         idle_timeout: 15 # How many seconds to wait before disconnecting
-
-      # MemGPT Configurations: MemGPT is temporarily removed
-      ##
 
     llm_configs:
       # a configuration pool for the credentials and connection details for

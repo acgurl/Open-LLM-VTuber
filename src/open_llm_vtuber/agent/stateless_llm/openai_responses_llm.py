@@ -15,6 +15,7 @@ from .stateless_llm_interface import (
     StatelessLLMInterface,
     content_text,
     generation_error,
+    tool_specs,
 )
 from ...mcpp.types import ToolCallObject
 
@@ -81,24 +82,18 @@ def response_input(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return items
 
 
-def response_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Function tools in the flat shape the Responses API uses."""
-    converted = []
-    for tool in tools:
-        function = tool.get("function") if isinstance(tool, dict) else None
-        if not isinstance(function, dict) or not function.get("name"):
-            continue
-        converted.append(
-            {
-                "type": "function",
-                "name": function["name"],
-                "description": function.get("description", ""),
-                "parameters": function.get("parameters")
-                or {"type": "object", "properties": {}},
-                "strict": False,
-            }
-        )
-    return converted
+def response_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Function tools of a Responses request."""
+    return [
+        {
+            "type": "function",
+            "name": name,
+            "description": description,
+            "parameters": schema,
+            "strict": False,
+        }
+        for name, description, schema in tool_specs(tools)
+    ]
 
 
 class OpenAIResponsesLLM(StatelessLLMInterface):
@@ -190,7 +185,7 @@ class OpenAIResponsesLLM(StatelessLLMInterface):
     ) -> AsyncIterator[str | list[ToolCallObject]]:
         items = response_input(messages)
         logger.debug(f"Sending {len(items)} input items to {self.model}")
-        function_tools = response_tools(tools) if tools else []
+        function_tools = response_tools(tools)
 
         stream = None
         try:

@@ -403,8 +403,8 @@ class PromptModeRoundTests(unittest.IsolatedAsyncioTestCase):
 
 
 class _FakeToolManager:
-    def get_formatted_tools(self, _mode):
-        return [{"type": "function", "function": {"name": "search"}}]
+    def get_formatted_tools(self):
+        return [{"name": "search", "description": "", "input_schema": {}}]
 
 
 class ToolModeSelectionTests(unittest.IsolatedAsyncioTestCase):
@@ -433,7 +433,7 @@ class ToolModeSelectionTests(unittest.IsolatedAsyncioTestCase):
         _messages, system, tools = llm.requests[0]
         self.assertFalse(agent.prompt_mode_flag)
         self.assertNotIn("MCP PROMPT", system)
-        self.assertEqual(tools, _FakeToolManager().get_formatted_tools("OpenAI"))
+        self.assertEqual(tools, _FakeToolManager().get_formatted_tools())
 
     async def test_refused_tools_start_later_turns_in_prompt_mode(self):
         llm = _RefusingLLM()

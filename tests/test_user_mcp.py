@@ -762,7 +762,7 @@ class ToolNamespaceTests(unittest.IsolatedAsyncioTestCase):
         adapter = ToolAdapter(registry)
 
         with patch.object(tool_adapter_module, "MCPClient", FakeClient):
-            prompt, _, _, raw, _ = await adapter.build_tools(["cuc-kb", "user:abc"])
+            prompt, _, raw, _ = await adapter.build_tools(["cuc-kb", "user:abc"])
 
         self.assertIn("kb_search", raw)
         self.assertEqual(raw["kb_search"].related_server, "cuc-kb")
@@ -809,7 +809,7 @@ class ToolNamespaceTests(unittest.IsolatedAsyncioTestCase):
         )
         adapter = ToolAdapter(registry)
         with patch.object(tool_adapter_module, "MCPClient", FakeClient):
-            _, _, _, raw, _ = await adapter.build_tools(["user:abc"])
+            _, _, raw, _ = await adapter.build_tools(["user:abc"])
 
         self.assertEqual(len(raw), 64)
 
@@ -840,7 +840,7 @@ class UserServerSessionInitTests(unittest.IsolatedAsyncioTestCase):
                 registry_cls.return_value
             )
             adapter_cls.return_value.build_tools = AsyncMock(
-                return_value=("prompt", ["openai"], ["claude"], {"raw": {}}, "")
+                return_value=("prompt", ["tool"], {"raw": {}}, "")
             )
 
             await context._init_mcp_components(False, [])

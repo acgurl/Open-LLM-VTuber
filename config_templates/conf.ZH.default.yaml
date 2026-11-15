@@ -125,7 +125,7 @@ character_config:
         # 句子分割方法：'regex' 或 'pysbd'
         segment_method: 'pysbd'
         # 是否使用 MCP（Model Context Protocol） Plus 以使 LLM 获得使用工具的能力（默认：False）
-        # 'Plus' 意味着它包含了通过 OpenAI API 调用工具的能力。
+        # 'Plus' 指通过 LLM API 的原生工具调用来使用工具；模型拒绝工具时回退到提示词模式。
         use_mcpp: False
         mcp_enabled_servers: ["time", "ddg-search"] # 启用的 MCP 服务器
         # 单轮对话中模型连续调用工具时最多请求 LLM 的次数，超过后停止本轮
@@ -136,9 +136,6 @@ character_config:
         host: 'api.hume.ai' # 一般无需更改
         config_id: '' # 可选
         idle_timeout: 15 # 空闲超时断开连接的秒数
-
-      # MemGPT 配置：MemGPT 暂时被移除
-      ##
 
     llm_configs:
       # 一个配置池，用于不同代理中使用的所有无状态 llm 提供商的凭据和连接详细信息

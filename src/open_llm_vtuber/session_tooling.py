@@ -167,8 +167,7 @@ class SessionTooling:
         try:
             (
                 mcp_prompt_string,
-                openai_tools,
-                claude_tools,
+                formatted_tools,
                 raw_tools_dict,
                 instructions_prompt,
             ) = await self.tool_adapter.build_tools(enabled_servers)
@@ -181,13 +180,9 @@ class SessionTooling:
             logger.info(
                 f"Dynamically generated MCP prompt string (length: {len(self.mcp_prompt)})."
             )
-            logger.info(
-                f"Dynamically formatted tools - OpenAI: {len(openai_tools)}, "
-                f"Claude: {len(claude_tools)}."
-            )
+            logger.info(f"Dynamically formatted {len(formatted_tools)} tools.")
             self.tool_manager = self._factories.ToolManager(
-                formatted_tools_openai=openai_tools,
-                formatted_tools_claude=claude_tools,
+                formatted_tools=formatted_tools,
                 initial_tools_dict=raw_tools_dict,
                 server_instructions=instructions_prompt,
             )
@@ -373,10 +368,8 @@ class SessionTooling:
         )
 
         if merged:
-            openai_tools, claude_tools = adapter.format_tools_for_api(merged)
             self.tool_manager = self._factories.ToolManager(
-                formatted_tools_openai=openai_tools,
-                formatted_tools_claude=claude_tools,
+                formatted_tools=adapter.format_tools_for_api(merged),
                 initial_tools_dict=merged,
                 server_instructions=self._base_mcp_instructions,
             )

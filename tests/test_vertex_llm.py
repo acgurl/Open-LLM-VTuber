@@ -234,12 +234,9 @@ class VertexLLMTestCase(unittest.IsolatedAsyncioTestCase):
                 system="persona",
                 tools=[
                     {
-                        "type": "function",
-                        "function": {
-                            "name": "lookup",
-                            "description": "Look something up",
-                            "parameters": {"type": "object", "properties": {}},
-                        },
+                        "name": "lookup",
+                        "description": "Look something up",
+                        "input_schema": {"type": "object", "properties": {}},
                     }
                 ],
             )

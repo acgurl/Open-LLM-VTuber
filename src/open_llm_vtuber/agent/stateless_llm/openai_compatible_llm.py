@@ -28,6 +28,7 @@ from .stateless_llm_interface import (
     content_text,
     generation_error,
     rate_limit_error,
+    tool_specs,
 )
 from ...mcpp.types import ToolCallObject
 
@@ -98,6 +99,21 @@ def _chat_messages(
         else:
             converted.append({"role": role, "content": message.get("content")})
     return converted
+
+
+def chat_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Function tools of a Chat Completions request."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": name,
+                "description": description,
+                "parameters": schema,
+            },
+        }
+        for name, description, schema in tool_specs(tools)
+    ]
 
 
 class OpenAICompatibleLLM(StatelessLLMInterface):
@@ -187,11 +203,12 @@ class OpenAICompatibleLLM(StatelessLLMInterface):
         tools: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[str | list[ToolCallObject]]:
         request_messages = _chat_messages(messages, system)
+        function_tools = chat_tools(tools)
         logger.debug(f"Sending {len(request_messages)} messages to {self.model}")
 
         stream = None
         try:
-            async with openai_errors(self.model, self.base_url, bool(tools)):
+            async with openai_errors(self.model, self.base_url, bool(function_tools)):
                 stream = await self.client.chat.completions.create(
                     messages=request_messages,
                     model=self.model,
@@ -199,7 +216,7 @@ class OpenAICompatibleLLM(StatelessLLMInterface):
                     temperature=(
                         NOT_GIVEN if self.temperature is None else self.temperature
                     ),
-                    tools=tools or NOT_GIVEN,
+                    tools=function_tools or NOT_GIVEN,
                 )
                 async for item in self._stream_chunks(stream):
                     yield item

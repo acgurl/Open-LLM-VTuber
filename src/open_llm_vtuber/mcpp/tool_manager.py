@@ -1,39 +1,32 @@
 from loguru import logger
-from typing import Any, Literal
+from typing import Any
 
 from .types import FormattedTool
 
 
 class ToolManager:
-    """Tool Manager for managing pre-formatted tools for different LLM APIs."""
+    """Holds a session's tools: raw info plus the definitions sent to the LLM."""
 
     def __init__(
         self,
-        formatted_tools_openai: list[dict[str, Any]] | None = None,
-        formatted_tools_claude: list[dict[str, Any]] | None = None,
+        formatted_tools: list[dict[str, Any]] | None = None,
         initial_tools_dict: dict[str, FormattedTool] | None = None,
         server_instructions: str = "",
     ) -> None:
-        """Initialize the Tool Manager with pre-formatted tool lists.
+        """
+        ``formatted_tools`` are the MCP tool definitions offered to the LLM
+        (see ``agent/stateless_llm/stateless_llm_interface``); each backend
+        places them in its API's own tool field.
 
         ``server_instructions`` is the system-prompt section built from the
         MCP servers' ``instructions``; the agent appends it while tools are on.
         """
         self.server_instructions: str = server_instructions or ""
-        # Store the raw tool data (optional, for get_tool)
+        # Raw tool data, for get_tool.
         self.tools: dict[str, FormattedTool] = initial_tools_dict or {}
+        self._formatted_tools: list[dict[str, Any]] = formatted_tools or []
 
-        # Store the pre-formatted lists
-        self._formatted_tools_openai: list[dict[str, Any]] = (
-            formatted_tools_openai or []
-        )
-        self._formatted_tools_claude: list[dict[str, Any]] = (
-            formatted_tools_claude or []
-        )
-
-        logger.info(
-            f"ToolManager initialized with {len(self._formatted_tools_openai)} OpenAI tools and {len(self._formatted_tools_claude)} Claude tools."
-        )
+        logger.info(f"ToolManager initialized with {len(self._formatted_tools)} tools.")
 
     def get_tool(self, tool_name: str) -> FormattedTool | None:
         """Get a tool's raw information by its name."""
@@ -45,12 +38,6 @@ class ToolManager:
         )
         return None
 
-    def get_formatted_tools(
-        self, mode: Literal["OpenAI", "Claude"]
-    ) -> list[dict[str, Any]] | Any:
-        """Get the pre-formatted list of tools for the specified API mode."""
-
-        if mode == "OpenAI":
-            return self._formatted_tools_openai
-        if mode == "Claude":
-            return self._formatted_tools_claude
+    def get_formatted_tools(self) -> list[dict[str, Any]]:
+        """The tool definitions offered to the LLM."""
+        return self._formatted_tools
