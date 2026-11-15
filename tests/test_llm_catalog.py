@@ -9,7 +9,8 @@ from loguru import logger
 from open_llm_vtuber import llm_catalog
 from open_llm_vtuber.llm_catalog import LLMModelCatalog, parse_models
 
-SECRET = "sk-very-secret-key"
+# A made-up value: nothing here is a real credential.
+FAKE_KEY = "fake-key-for-tests"
 
 CATALOG = f"""
 models:
@@ -18,12 +19,12 @@ models:
     description: For everyone
     provider: openai_compatible_llm
     base_url: https://llm.example/v1
-    llm_api_key: {SECRET}
+    llm_api_key: {FAKE_KEY}
     model: public-1
   - id: private-model
     name: Private Model
     provider: deepseek_llm
-    llm_api_key: {SECRET}
+    llm_api_key: {FAKE_KEY}
     model: private-1
     interrupt_method: system
     allowed_users:
@@ -48,7 +49,7 @@ class ParseModelsTests(unittest.TestCase):
             "id": "m1",
             "provider": "openai_compatible_llm",
             "base_url": "https://llm.example/v1",
-            "llm_api_key": SECRET,
+            "llm_api_key": FAKE_KEY,
             "model": "m-1",
         }
         entry.update(overrides)
@@ -102,11 +103,11 @@ class ParseModelsTests(unittest.TestCase):
         self.assertEqual(entries["m1"].name, "first")
 
     def test_invalid_settings_are_skipped_without_logging_values(self):
-        entries = self.parse([self.entry(temperature=SECRET)])
+        entries = self.parse([self.entry(temperature=FAKE_KEY)])
         self.assertEqual(entries, {})
         logged = "\n".join(self.messages)
         self.assertIn("temperature", logged)
-        self.assertNotIn(SECRET, logged)
+        self.assertNotIn(FAKE_KEY, logged)
 
     def test_malformed_allowed_users_denies_everyone(self):
         entry = self.parse([self.entry(allowed_users={"u1": True})])["m1"]
@@ -182,7 +183,7 @@ class CatalogFileTests(unittest.TestCase):
 
     def test_environment_variables_are_substituted(self):
         with patch.dict(os.environ, {"TEST_CATALOG_KEY": "from-env"}):
-            self.write(CATALOG.replace(SECRET, "${TEST_CATALOG_KEY}"))
+            self.write(CATALOG.replace(FAKE_KEY, "${TEST_CATALOG_KEY}"))
             entry = self.catalog.resolve("public-model", "u1", None)
         self.assertEqual(dict(entry.settings)["llm_api_key"], "from-env")
 
@@ -202,7 +203,7 @@ class CatalogFileTests(unittest.TestCase):
             provider, kwargs = created[0]
             self.assertEqual(provider, "openai_compatible_llm")
             self.assertEqual(kwargs["model"], "public-1")
-            self.assertEqual(kwargs["llm_api_key"], SECRET)
+            self.assertEqual(kwargs["llm_api_key"], FAKE_KEY)
             self.assertNotIn("interrupt_method", kwargs)
 
             self.write(CATALOG.replace("public-1", "public-2"))
