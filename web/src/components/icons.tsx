@@ -130,6 +130,38 @@ export function SparkIcon() {
   );
 }
 
+// 思考按钮：灯泡，开启时灯丝点亮
+export function BulbIcon({ lit = false }: { lit?: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+      <path
+        d="M9 17.5h6M10 21h4M8.2 14.6A6.5 6.5 0 1 1 15.8 14.6c-.6.5-.8 1.1-.8 1.8v1.1H9v-1.1c0-.7-.2-1.3-.8-1.8Z"
+        fill={lit ? 'currentColor' : 'none'}
+        fillOpacity={lit ? 0.16 : 0}
+      />
+      {lit && <path d="M10.5 12.5 12 9.5l1.5 3" />}
+    </svg>
+  );
+}
+
+// 输入条左侧的加号：图片来源与思考设置都收在它的菜单里
+export function AddIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+export function ScreenShareIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="12" rx="2" />
+      <path d="M8 20h8M12 16v4" />
+    </svg>
+  );
+}
+
 export function ArrowDownIcon() {
   return (
     <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

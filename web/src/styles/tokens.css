@@ -130,15 +130,17 @@ html[data-theme='light'] {
   --muted: #5b5d68;
   --faint: #70727c;
 
-  --line: rgba(20, 22, 30, 0.09);
-  --line-strong: rgba(20, 22, 30, 0.17);
+  --line: rgba(20, 22, 30, 0.11);
+  --line-strong: rgba(20, 22, 30, 0.19);
 
-  --glass-strong: rgba(255, 255, 255, 0.84);
-  --glass-solid: rgba(255, 255, 255, 0.97);
+  /* 浅色下玻璃要比深色更透才看得出折射：底色压到六成左右并掺一点主色相，
+     与近白的舞台拉开色差；受光感交给上沿的 --sheen 与阴影里的亮/暗边线。 */
+  --glass-strong: color-mix(in oklab, var(--accent) 6%, rgba(255, 255, 255, 0.58));
+  --glass-solid: color-mix(in oklab, var(--accent) 4%, rgba(255, 255, 255, 0.9));
   --chip: rgba(20, 22, 30, 0.04);
   --chip-hover: rgba(20, 22, 30, 0.07);
   --inset: rgba(20, 22, 30, 0.045);
-  --sheen: rgba(255, 255, 255, 0.62);
+  --sheen: rgba(255, 255, 255, 0.55);
   --mask: rgba(222, 226, 236, 0.55);
 
   --accent: oklch(54% 0.16 var(--hue));
@@ -161,17 +163,23 @@ html[data-theme='light'] {
   --ok: #1b7f57;
   --pending: #9b6b11;
 
-  --bubble-ai: rgba(255, 255, 255, 0.8);
-  --bubble-human: color-mix(in oklab, var(--accent) 12%, rgba(255, 255, 255, 0.82));
+  /* 气泡承载正文，比顶栏/输入框的玻璃略实一点，保住压在人物上的可读性 */
+  --bubble-ai: color-mix(in oklab, var(--accent) 4%, rgba(255, 255, 255, 0.66));
+  --bubble-human: color-mix(in oklab, var(--accent) 16%, rgba(255, 255, 255, 0.66));
   --bubble-human-line: color-mix(in oklab, var(--accent) 28%, transparent);
 
   --stage-glow: color-mix(in oklab, var(--accent) 11%, transparent);
   --stage-glow-2: color-mix(in oklab, var(--secondary) 9%, transparent);
 
-  --shadow-float: 0 30px 60px -36px rgba(25, 30, 48, 0.4), 0 1px 0 #fff inset;
-  --shadow-soft: 0 14px 30px -26px rgba(25, 30, 48, 0.32);
-  --shadow-btn: 0 8px 20px -12px rgba(25, 30, 48, 0.35), inset 0 1px 0 #fff;
-  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  /* 白底上纯白内描边看不见：上沿亮线配下沿浅暗线，才读得出玻璃的厚度 */
+  --shadow-float:
+    0 26px 54px -30px rgba(25, 30, 48, 0.5), 0 3px 10px -6px rgba(25, 30, 48, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 0 rgba(25, 30, 48, 0.07);
+  --shadow-soft: 0 14px 30px -22px rgba(25, 30, 48, 0.42), 0 2px 6px -4px rgba(25, 30, 48, 0.1);
+  --shadow-btn:
+    0 8px 20px -12px rgba(25, 30, 48, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(25, 30, 48, 0.07);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 -1px 0 rgba(25, 30, 48, 0.06);
   --edge-hi: rgba(255, 255, 255, 0.95);
   --scroll-thumb: rgba(20, 22, 30, 0.18);
   --text-shadow: 0 1px 10px rgba(255, 255, 255, 0.8);

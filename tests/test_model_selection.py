@@ -6,9 +6,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import yaml
+
 from open_llm_vtuber import llm_catalog
 from open_llm_vtuber.agent.agents.basic_memory_agent import BasicMemoryAgent
-from open_llm_vtuber.llm_catalog import MODEL_SETTING_KEY, LLMModelCatalog
+from open_llm_vtuber.llm_catalog import (
+    MODEL_SETTING_KEY,
+    THINKING_SETTING_PREFIX,
+    LLMModelCatalog,
+    parse_models,
+)
 from open_llm_vtuber.service_context import ServiceContext
 from open_llm_vtuber.storage import SQLiteHistoryRepository
 from open_llm_vtuber.websocket_handler import WebSocketHandler
@@ -29,6 +36,22 @@ models:
     model: vip-1
     interrupt_method: system
     allowed_users: ['alice']
+  - id: thinker
+    name: Thinker
+    provider: openai_compatible_llm
+    base_url: https://llm.example/v1
+    llm_api_key: key
+    model: thinker-1
+    allowed_users: [alice]
+    thinking:
+      default: off
+      levels:
+        - id: off
+          params: {thinking: {type: disabled}}
+        - id: high
+          name: Deep
+          params: {thinking: {type: enabled}, reasoning_effort: high}
+        - max
 """
 
 
@@ -155,7 +178,7 @@ class ServiceContextModelTests(ModelSelectionTestCase):
     async def test_list_only_contains_models_the_user_may_use(self):
         alice = self.make_context("alice").model_list_payload()
         bob = self.make_context("bob").model_list_payload()
-        self.assertEqual([m["id"] for m in alice["models"]], ["open", "vip"])
+        self.assertEqual([m["id"] for m in alice["models"]], ["open", "vip", "thinker"])
         self.assertEqual([m["id"] for m in bob["models"]], ["open"])
         self.assertEqual(set(alice["models"][0]), {"id", "name", "description"})
 
@@ -254,7 +277,7 @@ class ServiceContextModelTests(ModelSelectionTestCase):
         self.assertFalse(await context.select_model("open"))
         self.assertEqual(
             context.model_list_payload(),
-            {"type": "model-list", "models": [], "current": None},
+            {"type": "model-list", "models": [], "current": None, "thinking": None},
         )
 
 
@@ -276,7 +299,9 @@ class ModelWebSocketTests(ModelSelectionTestCase):
         )
 
         (payload,) = websocket.of_type("model-list")
-        self.assertEqual([m["id"] for m in payload["models"]], ["open", "vip"])
+        self.assertEqual(
+            [m["id"] for m in payload["models"]], ["open", "vip", "thinker"]
+        )
         self.assertEqual(payload["current"], "open")
         self.assertNotIn("key", json.dumps(payload))
 
@@ -288,7 +313,10 @@ class ModelWebSocketTests(ModelSelectionTestCase):
             websocket, "client", {"type": "switch-model", "model": "vip"}
         )
 
-        self.assertEqual(websocket.sent, [{"type": "model-switched", "model": "vip"}])
+        self.assertEqual(
+            websocket.sent,
+            [{"type": "model-switched", "model": "vip", "thinking": None}],
+        )
         self.assertEqual(self.llm_name(context), "vip-1")
 
     async def test_switch_to_null_restores_the_character_llm(self):
@@ -300,7 +328,10 @@ class ModelWebSocketTests(ModelSelectionTestCase):
             websocket, "client", {"type": "switch-model", "model": None}
         )
 
-        self.assertEqual(websocket.sent, [{"type": "model-switched", "model": None}])
+        self.assertEqual(
+            websocket.sent,
+            [{"type": "model-switched", "model": None, "thinking": None}],
+        )
         self.assertEqual(self.llm_name(context), "character")
 
     async def test_forbidden_model_returns_error_and_fresh_list(self):
@@ -320,6 +351,185 @@ class ModelWebSocketTests(ModelSelectionTestCase):
         (payload,) = websocket.of_type("model-list")
         self.assertEqual([m["id"] for m in payload["models"]], ["open"])
         self.assertEqual(self.llm_name(context), "character")
+
+
+class ThinkingCatalogTests(unittest.TestCase):
+    def parse(self, provider: str, thinking) -> object:
+        entry = {
+            "id": "m",
+            "provider": provider,
+            "llm_api_key": "key",
+            "model": "m-1",
+            "thinking": thinking,
+        }
+        if provider == "openai_compatible_llm":
+            entry["base_url"] = "https://llm.example/v1"
+        if provider == "vertex_llm":
+            entry = {
+                "id": "m",
+                "provider": provider,
+                "credentials_file": "x.json",
+                "model": "m-1",
+                "thinking": thinking,
+            }
+        return parse_models({"models": [entry]}, "test")["m"]
+
+    def test_explicit_params_and_shorthand(self):
+        entry = parse_models(yaml.safe_load(CATALOG), "test")["thinker"]
+        self.assertEqual(
+            [level.id for level in entry.thinking_levels], ["off", "high", "max"]
+        )
+        self.assertEqual(entry.thinking_default, "off")
+        self.assertEqual(
+            entry.thinking_level("off").params, {"thinking": {"type": "disabled"}}
+        )
+        self.assertEqual(
+            entry.thinking_level("max").params, {"reasoning_effort": "max"}
+        )
+        self.assertEqual(entry.thinking_level("bogus").id, "off")
+        info = entry.public_info()
+        self.assertEqual(
+            info["thinking"],
+            {
+                "levels": [
+                    {"id": "off", "name": ""},
+                    {"id": "high", "name": "Deep"},
+                    {"id": "max", "name": ""},
+                ],
+                "default": "off",
+            },
+        )
+        self.assertNotIn("params", json.dumps(info))
+
+    def test_shorthand_per_provider(self):
+        cases = {
+            "openai_responses_llm": {"reasoning": {"effort": "low"}},
+            "claude_llm": {"output_config": {"effort": "low"}},
+            "vertex_llm": {
+                "generationConfig": {"thinkingConfig": {"thinkingLevel": "low"}}
+            },
+        }
+        for provider, expected in cases.items():
+            entry = self.parse(provider, {"levels": ["off", "low"]})
+            self.assertEqual(entry.thinking_level("low").params, expected, provider)
+            self.assertEqual(entry.thinking_level("off").params, {}, provider)
+
+    def test_invalid_block_keeps_the_model_without_levels(self):
+        for thinking in (
+            {"levels": "high"},
+            {"levels": [{"id": "bad id"}]},
+            {"levels": ["a", "a"]},
+            {"levels": [{"id": "x", "params": 3}]},
+        ):
+            entry = self.parse("claude_llm", thinking)
+            self.assertEqual(entry.thinking_levels, (), thinking)
+            self.assertNotIn("thinking", entry.public_info())
+
+    def test_default_falls_back_to_off(self):
+        entry = self.parse(
+            "claude_llm", {"levels": ["high", {"id": "off", "params": {}}]}
+        )
+        self.assertEqual(entry.thinking_default, "off")
+        entry = self.parse(
+            "claude_llm", {"default": "bogus", "levels": ["low", "none"]}
+        )
+        self.assertEqual(entry.thinking_default, "none")
+        entry = self.parse("claude_llm", {"levels": ["low", "high"]})
+        self.assertEqual(entry.thinking_default, "low")
+
+    def test_single_level_is_not_offered(self):
+        entry = self.parse("claude_llm", {"levels": ["high"]})
+        self.assertEqual(entry.thinking_level(None).id, "high")
+        self.assertNotIn("thinking", entry.public_info())
+
+
+class ThinkingSelectionTests(ModelSelectionTestCase):
+    def make_handler(self, context: ServiceContext) -> WebSocketHandler:
+        handler = WebSocketHandler(SimpleNamespace())
+        handler.client_contexts["client"] = context
+        return handler
+
+    async def test_default_level_is_applied_to_requests(self):
+        context = self.make_context()
+        await context.select_model("thinker")
+        self.assertEqual(context.model_list_payload()["thinking"], "off")
+        self.assertEqual(
+            context.agent_engine.request_options, {"thinking": {"type": "disabled"}}
+        )
+
+    async def test_level_is_stored_per_model_and_applied(self):
+        context = self.make_context()
+        await context.select_model("thinker")
+        self.assertTrue(await context.select_thinking("high"))
+        self.assertEqual(
+            context.agent_engine.request_options,
+            {"thinking": {"type": "enabled"}, "reasoning_effort": "high"},
+        )
+        self.assertEqual(
+            await self.repository.get_user_setting(
+                user_id="alice", key=THINKING_SETTING_PREFIX + "thinker"
+            ),
+            "high",
+        )
+        # A model without levels sends nothing extra.
+        await context.select_model("open")
+        self.assertIsNone(context.agent_engine.request_options)
+        self.assertIsNone(context.model_list_payload()["thinking"])
+        # Another session of the same user gets the stored level back.
+        await self.repository.set_user_setting(
+            user_id="alice", key=MODEL_SETTING_KEY, value="thinker"
+        )
+        other = self.make_context()
+        await other.sync_model_selection()
+        self.assertEqual(other.model_list_payload()["thinking"], "high")
+        self.assertEqual(other.agent_engine.request_options["reasoning_effort"], "high")
+
+    async def test_unknown_level_or_model_without_levels_is_rejected(self):
+        context = self.make_context()
+        self.assertFalse(await context.select_thinking("high"))
+        await context.select_model("thinker")
+        self.assertFalse(await context.select_thinking("ultra"))
+
+    async def test_set_thinking_over_websocket(self):
+        context = self.make_context()
+        await context.select_model("thinker")
+        handler = self.make_handler(context)
+        websocket = FakeWebSocket()
+
+        await handler._route_message(
+            websocket, "client", {"type": "set-thinking", "level": "max"}
+        )
+        await handler._route_message(
+            websocket, "client", {"type": "set-thinking", "level": 5}
+        )
+
+        lists = websocket.of_type("model-list")
+        self.assertEqual([payload["thinking"] for payload in lists], ["max", "max"])
+        self.assertEqual(
+            [error["message"] for error in websocket.of_type("error")],
+            ["Thinking level not available"],
+        )
+        thinker = next(m for m in lists[0]["models"] if m["id"] == "thinker")
+        self.assertEqual(len(thinker["thinking"]["levels"]), 3)
+
+    async def test_switch_model_reports_the_stored_level(self):
+        await self.repository.set_user_setting(
+            user_id="alice", key=THINKING_SETTING_PREFIX + "thinker", value="high"
+        )
+        context = self.make_context()
+        websocket = FakeWebSocket()
+
+        await self.make_handler(context)._route_message(
+            websocket, "client", {"type": "switch-model", "model": "thinker"}
+        )
+
+        self.assertEqual(
+            websocket.sent,
+            [{"type": "model-switched", "model": "thinker", "thinking": "high"}],
+        )
+        self.assertEqual(
+            context.agent_engine.request_options["reasoning_effort"], "high"
+        )
 
 
 if __name__ == "__main__":

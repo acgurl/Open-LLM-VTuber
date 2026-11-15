@@ -82,6 +82,15 @@ export function switchModel(id: string | null) {
   wsClient.send({ type: 'switch-model', model: id });
 }
 
+// 当前模型的思考档位，从下一次请求起生效（正在生成的这一轮不受影响）。
+// 先本地更新让按钮立即响应，服务端随后回一份 model-list 作为准信。
+export function setThinking(level: string) {
+  const models = useModels.getState();
+  if (models.switching || level === models.thinking) return;
+  models.setThinking(level);
+  wsClient.send({ type: 'set-thinking', level });
+}
+
 export function fetchBackgrounds() {
   wsClient.send({ type: 'fetch-backgrounds' });
 }

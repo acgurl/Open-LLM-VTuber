@@ -11,7 +11,8 @@ import { fileToBase64 } from '../utils/base64';
 import { captureCamera, captureScreen } from '../utils/capture';
 import { LIMITS, type ImagePayload, type ImageSource } from '../protocol/types';
 import { usePresence } from '../hooks/usePresence';
-import { ImageIcon, MicIcon, StopIcon, SendIcon } from './icons';
+import { AddIcon, CamIcon, ImageIcon, MicIcon, ScreenShareIcon, StopIcon, SendIcon } from './icons';
+import { ThinkingControls, useThinking } from './ThinkingControls';
 
 interface PendingImage {
   id: number;
@@ -31,6 +32,7 @@ export function InputBar() {
   const [micStarting, setMicStarting] = useState(false);
   const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
   const mediaMenuPresence = usePresence(mediaMenuOpen, 140);
+  const thinking = useThinking();
   const fileRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -173,6 +175,10 @@ export function InputBar() {
     setMicStarting(false);
   };
 
+  const thinkingName = thinking.active
+    ? thinking.active.name || t(`thinking.level.${thinking.active.id}`, { defaultValue: thinking.active.id })
+    : '';
+
   // 群聊中一轮未结束时禁发
   const sendDisabled = inGroup && busy;
   const hasContent = text.trim().length > 0 || images.length > 0;
@@ -200,26 +206,39 @@ export function InputBar() {
       <div className={`input-row${hasContent ? ' filled' : ''}`}>
         <div className="media-anchor" ref={anchorRef}>
           <button
-            className="icon-btn"
-            title={t('input.uploadImage')}
-            aria-label={t('input.uploadImage')}
+            className={`icon-btn plus-btn${mediaMenuOpen ? ' open' : ''}${thinking.on ? ' thinking-on' : ''}`}
+            title={thinking.on ? t('input.moreThinking', { name: thinkingName }) : t('input.more')}
+            aria-label={thinking.on ? t('input.moreThinking', { name: thinkingName }) : t('input.more')}
+            aria-haspopup="menu"
             aria-expanded={mediaMenuOpen}
             onClick={() => setMediaMenuOpen((v) => !v)}
           >
-            <ImageIcon />
+            <AddIcon />
+            {thinking.on && <span className="plus-badge" aria-hidden="true" />}
           </button>
           {mediaMenuPresence.mounted && (
-            <div className={`media-menu${mediaMenuPresence.closing ? ' closing' : ''}`}>
-              <button
-                onClick={() => {
-                  setMediaMenuOpen(false);
-                  fileRef.current?.click();
-                }}
-              >
-                {t('input.sourceUpload')}
-              </button>
-              <button onClick={() => void grabAndAdd('camera')}>{t('input.sourceCamera')}</button>
-              <button onClick={() => void grabAndAdd('screen')}>{t('input.sourceScreen')}</button>
+            <div className={`media-menu composer-menu${mediaMenuPresence.closing ? ' closing' : ''}`} role="menu">
+              <div className="composer-menu-group">
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    setMediaMenuOpen(false);
+                    fileRef.current?.click();
+                  }}
+                >
+                  <ImageIcon />
+                  <span>{t('input.sourceUpload')}</span>
+                </button>
+                <button role="menuitem" onClick={() => void grabAndAdd('camera')}>
+                  <CamIcon />
+                  <span>{t('input.sourceCamera')}</span>
+                </button>
+                <button role="menuitem" onClick={() => void grabAndAdd('screen')}>
+                  <ScreenShareIcon />
+                  <span>{t('input.sourceScreen')}</span>
+                </button>
+              </div>
+              <ThinkingControls />
             </div>
           )}
         </div>

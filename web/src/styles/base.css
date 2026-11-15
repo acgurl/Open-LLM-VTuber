@@ -149,9 +149,9 @@ button {
 html[data-theme='light'] .bg-layer::after {
   background: linear-gradient(
     180deg,
-    rgba(247, 248, 251, 0.58),
-    rgba(247, 248, 251, 0.08) 40%,
-    rgba(247, 248, 251, 0.62)
+    rgba(247, 248, 251, 0.42),
+    rgba(247, 248, 251, 0.05) 40%,
+    rgba(247, 248, 251, 0.46)
   );
 }
 

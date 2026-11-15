@@ -4,6 +4,7 @@ Covers every endpoint that speaks the protocol: OpenAI, DeepSeek, Gemini's
 OpenAI layer, Zhipu, Groq, Mistral, Ollama, LM Studio, vLLM, gateways.
 """
 
+from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -70,8 +71,14 @@ async def openai_errors(model: str, base_url: str, has_tools: bool):
         raise generation_error() from error
 
 
+# Tool-calling turns whose reasoning is kept while their calls are answered.
+_MAX_KEPT_REASONING = 256
+
+
 def _chat_messages(
-    messages: list[dict[str, Any]], system: str | None
+    messages: list[dict[str, Any]],
+    system: str | None,
+    reasoning: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """The request's ``messages``: the internal format minus internal keys."""
     converted: list[dict[str, Any]] = []
@@ -89,13 +96,17 @@ def _chat_messages(
                 }
             )
         elif role == "assistant" and message.get("tool_calls"):
-            converted.append(
-                {
-                    "role": "assistant",
-                    "content": message.get("content") or None,
-                    "tool_calls": message["tool_calls"],
-                }
-            )
+            assistant = {
+                "role": "assistant",
+                "content": message.get("content") or None,
+                "tool_calls": message["tool_calls"],
+            }
+            # Thinking models (DeepSeek) want the reasoning of a tool-calling
+            # turn back while its results are being answered.
+            kept = (reasoning or {}).get(message["tool_calls"][0].get("id"))
+            if kept:
+                assistant["reasoning_content"] = kept
+            converted.append(assistant)
         else:
             converted.append({"role": role, "content": message.get("content")})
     return converted
@@ -143,6 +154,8 @@ class OpenAICompatibleLLM(StatelessLLMInterface):
             project=project_id or None,
             api_key=llm_api_key,
         )
+        # reasoning_content of tool-calling turns, by their first call id.
+        self._reasoning: OrderedDict[str, str] = OrderedDict()
         logger.info(f"Initialized OpenAICompatibleLLM: {self.base_url}, {self.model}")
 
     @staticmethod
@@ -176,6 +189,7 @@ class OpenAICompatibleLLM(StatelessLLMInterface):
     ) -> AsyncIterator[str | list[ToolCallObject]]:
         """Text as it arrives, then the merged tool calls of the response."""
         accumulated: dict[int, dict[str, Any]] = {}
+        reasoning: list[str] = []
         async for chunk in stream:
             # Some servers (e.g. OpenWebUI) send chunks without choices.
             if not chunk.choices:
@@ -184,6 +198,9 @@ class OpenAICompatibleLLM(StatelessLLMInterface):
             delta_tool_calls = getattr(delta, "tool_calls", None)
             if delta_tool_calls:
                 self._merge_tool_call_deltas(accumulated, delta_tool_calls)
+            thought = getattr(delta, "reasoning_content", None)
+            if isinstance(thought, str) and thought:
+                reasoning.append(thought)
             content = getattr(delta, "content", None)
             if content:
                 yield content
@@ -193,6 +210,10 @@ class OpenAICompatibleLLM(StatelessLLMInterface):
                 ToolCallObject.from_dict(accumulated[index])
                 for index in sorted(accumulated)
             ]
+            if reasoning and calls[0].id:
+                self._reasoning[calls[0].id] = "".join(reasoning)
+                while len(self._reasoning) > _MAX_KEPT_REASONING:
+                    self._reasoning.popitem(last=False)
             logger.info(f"Tool calls requested: {[c.function.name for c in calls]}")
             yield calls
 
@@ -201,8 +222,9 @@ class OpenAICompatibleLLM(StatelessLLMInterface):
         messages: list[dict[str, Any]],
         system: str | None = None,
         tools: list[dict[str, Any]] | None = None,
+        options: dict[str, Any] | None = None,
     ) -> AsyncIterator[str | list[ToolCallObject]]:
-        request_messages = _chat_messages(messages, system)
+        request_messages = _chat_messages(messages, system, self._reasoning)
         function_tools = chat_tools(tools)
         logger.debug(f"Sending {len(request_messages)} messages to {self.model}")
 
@@ -217,6 +239,7 @@ class OpenAICompatibleLLM(StatelessLLMInterface):
                         NOT_GIVEN if self.temperature is None else self.temperature
                     ),
                     tools=function_tools or NOT_GIVEN,
+                    extra_body=options or None,
                 )
                 async for item in self._stream_chunks(stream):
                     yield item

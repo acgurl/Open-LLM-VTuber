@@ -76,8 +76,9 @@
   --sheen-spot: color-mix(in oklab, var(--accent) 9%, rgba(255, 255, 255, 0.06));
 }
 
+/* 浅色玻璃上纯白光斑读不出来（白叠白），改用主色相的浅亮调，和深色下一样是一团带色的柔光 */
 html[data-theme='light'] .sheen-on {
-  --sheen-spot: color-mix(in oklab, var(--accent) 8%, rgba(255, 255, 255, 0.7));
+  --sheen-spot: color-mix(in oklab, oklch(88% 0.1 var(--hue)) 26%, rgba(255, 255, 255, 0.34));
 }
 
 /* 所有消息卡统一占满消息列，宽度不再随内容长短变化；说话人靠色相区分 */

@@ -11,6 +11,7 @@ from loguru import logger
 from openai import NOT_GIVEN, AsyncOpenAI
 
 from .openai_compatible_llm import openai_errors
+from ...utils.dicts import deep_merge
 from .stateless_llm_interface import (
     StatelessLLMInterface,
     content_text,
@@ -182,10 +183,22 @@ class OpenAIResponsesLLM(StatelessLLMInterface):
         messages: list[dict[str, Any]],
         system: str | None = None,
         tools: list[dict[str, Any]] | None = None,
+        options: dict[str, Any] | None = None,
     ) -> AsyncIterator[str | list[ToolCallObject]]:
         items = response_input(messages)
         logger.debug(f"Sending {len(items)} input items to {self.model}")
         function_tools = response_tools(tools)
+
+        reasoning: Any = (
+            {"effort": self.reasoning_effort} if self.reasoning_effort else NOT_GIVEN
+        )
+        extra = dict(options or {})
+        if isinstance(extra.get("reasoning"), dict):
+            # A thinking level refines the configured reasoning settings.
+            reasoning = deep_merge(
+                reasoning if isinstance(reasoning, dict) else {},
+                extra.pop("reasoning"),
+            )
 
         stream = None
         try:
@@ -198,14 +211,11 @@ class OpenAIResponsesLLM(StatelessLLMInterface):
                     temperature=(
                         NOT_GIVEN if self.temperature is None else self.temperature
                     ),
-                    reasoning=(
-                        {"effort": self.reasoning_effort}
-                        if self.reasoning_effort
-                        else NOT_GIVEN
-                    ),
+                    reasoning=reasoning,
                     max_output_tokens=self.max_output_tokens or NOT_GIVEN,
                     store=False,
                     stream=True,
+                    extra_body=extra or None,
                 )
                 async for item in self._stream_events(stream):
                     yield item

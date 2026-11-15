@@ -56,6 +56,9 @@ class BasicMemoryAgent(AgentInterface):
     # The prompt as given to set_system, before the interrupt note is added.
     _base_system: str = _system
     _max_tool_rounds: int = DEFAULT_MAX_TOOL_ROUNDS
+    # Extra request-body fields of every completion (the thinking level of a
+    # catalog model); set by the session, not by the character preset.
+    request_options: dict[str, Any] | None = None
 
     def __init__(
         self,
@@ -119,6 +122,10 @@ class BasicMemoryAgent(AgentInterface):
     def _formatted_tools(tool_manager: ToolManager | None) -> list[dict[str, Any]]:
         """The MCP tool definitions; each LLM backend sends them natively."""
         return tool_manager.get_formatted_tools() if tool_manager else []
+
+    def _request_kwargs(self) -> dict[str, Any]:
+        """``options`` for ``chat_completion``, only when there are any."""
+        return {"options": self.request_options} if self.request_options else {}
 
     def _set_llm(self, llm: StatelessLLMInterface):
         """Set the LLM for chat completion."""
@@ -507,7 +514,9 @@ class BasicMemoryAgent(AgentInterface):
         prompt mode the text is scanned for tool JSON instead.
         """
         system_prompt, tools_for_api = self._round_request(tools)
-        stream = self._llm.chat_completion(messages, system_prompt, tools=tools_for_api)
+        stream = self._llm.chat_completion(
+            messages, system_prompt, tools=tools_for_api, **self._request_kwargs()
+        )
         try:
             async for event in stream:
                 if isinstance(event, str):
@@ -660,7 +669,9 @@ class BasicMemoryAgent(AgentInterface):
     ) -> AsyncIterator[str | dict[str, Any]]:
         """Stream a completion without tools and remember the reply."""
         logger.info("Starting simple chat completion.")
-        token_stream = self._llm.chat_completion(messages, self._system_with_time())
+        token_stream = self._llm.chat_completion(
+            messages, self._system_with_time(), **self._request_kwargs()
+        )
         complete_response = ""
         try:
             async for event in token_stream:

@@ -125,10 +125,21 @@ export interface ConfigFileEntry {
 }
 
 /** 后台 llm_models.yaml 里当前账号可选的一个模型（不含地址与密钥）。 */
+export interface ThinkingLevel {
+  id: string; // 例如 off / low / high；off 表示不思考
+  name: string; // 后台配置的显示名，空时前端按 id 翻译
+}
+
+export interface ThinkingInfo {
+  levels: ThinkingLevel[];
+  default: string;
+}
+
 export interface ModelEntry {
   id: string;
   name: string;
   description: string;
+  thinking?: ThinkingInfo; // 可选思考档位；没有时不显示思考按钮
 }
 
 export type ControlText =
@@ -149,8 +160,13 @@ export type ServerMessage =
   | { type: 'config-switched'; message: string }
   | { type: 'config-files'; configs: ConfigFileEntry[] }
   | { type: 'background-files'; files: string[] }
-  | { type: 'model-list'; models: ModelEntry[]; current: string | null }
-  | { type: 'model-switched'; model: string | null }
+  | {
+      type: 'model-list';
+      models: ModelEntry[];
+      current: string | null;
+      thinking?: string | null; // 当前模型的思考档位
+    }
+  | { type: 'model-switched'; model: string | null; thinking?: string | null }
   | { type: 'control'; text: ControlText | string }
   | {
       type: 'text-delta';
@@ -205,6 +221,7 @@ export type ClientMessage =
   | { type: 'switch-config'; file: string }
   | { type: 'fetch-models' }
   | { type: 'switch-model'; model: string | null }
+  | { type: 'set-thinking'; level: string }
   | { type: 'request-init-config' }
   | { type: 'fetch-backgrounds' }
   | { type: 'heartbeat' }
