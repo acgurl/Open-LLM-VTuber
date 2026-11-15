@@ -54,8 +54,14 @@ models:
     thinking:
       default: off
       levels:
+        # DeepSeek's documented reasoning_effort values are low / high / max
+        # (medium is folded into high server-side, so it is not offered).
+        # DeepSeek 文档的 reasoning_effort 取值为 low / high / max（medium 会被服务端并入 high，故不列出）。
         - id: off
           params: {thinking: {type: disabled}}
+        - id: low
+          name: 轻度思考
+          params: {thinking: {type: enabled}, reasoning_effort: low}
         - id: high
           name: 深度思考 # optional; known ids are translated by the UI
           params: {thinking: {type: enabled}, reasoning_effort: high}
@@ -68,6 +74,14 @@ models:
     provider: claude_llm
     llm_api_key: ${ANTHROPIC_API_KEY}
     model: claude-sonnet-5-5
+    # Claude's output_config.effort: low / medium / high / xhigh / max (xhigh and
+    # max are per-model; Sonnet 5.5 documents xhigh). Omitted = the model's
+    # default (high). `off` adds nothing, so thinking stays off.
+    # Claude 的 output_config.effort 取值 low / medium / high / xhigh / max（xhigh、max 按模型支持；
+    # Sonnet 5.5 支持 xhigh）。不设即模型默认（high）；`off` 不加任何字段，即关闭思考。
+    thinking:
+      default: off
+      levels: [off, low, medium, high, xhigh]
     # Only these accounts see and can use the model. Same rule as a character
     # preset's `allowed_users`: internal user ids (Settings → Account) or
     # verified login emails; display names are never matched. Omit the key, or

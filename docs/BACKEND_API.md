@@ -1531,7 +1531,7 @@ models:
 
 ### 24.5 思考档位（2026-11-15）
 
-目录模型可以在 `llm_models.yaml` 里声明思考档位，用户在输入框左侧的思考按钮里选择。没有声明档位的模型（以及角色预设自带的 LLM）不显示按钮，请求不带任何额外字段，行为与之前一致。
+目录模型可以在 `llm_models.yaml` 里声明思考档位，用户在输入框左侧的思考按钮里选择。没有声明档位的模型（以及角色预设自带的 LLM）请求不带任何额外字段，行为与之前一致；前端仍显示思考按钮但置灰锁定。
 
 ```yaml
   - id: deepseek-flash
@@ -1552,12 +1552,12 @@ models:
 
 - `params` 是**请求体的额外字段**，按各 API 自己的字段名书写，深合并进每次请求（Chat Completions / Responses / Messages 走 SDK 的 `extra_body`，Vertex 合并进 JSON 请求体）。因此任何厂商的开关都能表达：DeepSeek `thinking.type` + `reasoning_effort`、百炼/Qwen `enable_thinking`、OpenAI `reasoning_effort`、Claude `output_config.effort`、Gemini `generationConfig.thinkingConfig` 等。
 - 不写 `params` 的简写：`off` 不加任何字段；其他 id 按 provider 映射为 `openai_compatible_llm` → `reasoning_effort: <id>`，`openai_responses_llm` → `reasoning.effort`（与该模型配置的 `reasoning_effort` 深合并），`claude_llm` → `output_config.effort`，`vertex_llm` → `generationConfig.thinkingConfig.thinkingLevel`。**模型默认就会思考时（如 DeepSeek 新模型、Claude Opus 5.5），`off` 必须写明关闭用的 `params`**，否则“不思考”档实际仍按模型默认。
-- 校验：档位最多 8 个；id 非法、重复、`params` 不是映射、或没有简写可用时，整个 `thinking` 块忽略并记 ERROR，模型本身照常可用。只有一个档位时按该档请求但不显示按钮。YAML 的裸 `off` 会被解析成布尔 false，代码已按 `off` 处理。
+- 校验：档位最多 8 个；id 非法、重复、`params` 不是映射、或没有简写可用时，整个 `thinking` 块忽略并记 ERROR，模型本身照常可用。只有一个档位时按该档请求，`model-list` 仍下发这一档（前端据此把思考按钮显示为锁定：始终思考或不支持思考）。YAML 的裸 `off` 会被解析成布尔 false，代码已按 `off` 处理。
 - 选择**按账号、按模型**保存：`user_settings` 键 `llm_thinking:<model_id>`。换到别的模型再换回来时恢复上次的档位；无效值回落到 `default`。每轮开始前随 `sync_model_selection` 一起重新读取。
 - `set-thinking` 不打断正在进行的一轮：已发出的请求不变，同一轮之后的工具调用轮次与下一轮使用新档位；群聊轮次进行中时只保存，该成员下一轮生效。
 - 思考过程（`reasoning_content` / thinking 块）**不显示、不朗读、不写入历史**。例外：`openai_compatible_llm` 在模型发起工具调用时，按首个 tool_call id 暂存该轮 `reasoning_content`，在回传工具结果的后续请求里随 assistant 消息带回（DeepSeek 思考模式的工具调用要求如此）；`claude_llm` 原本就原样保留含工具调用的 assistant 块。
 
-前端：输入条左侧的加号按钮（`InputBar.tsx`）展开菜单，上半是图片来源（上传 / 拍照 / 截屏），下半是 `ThinkingControls.tsx` 的思考区：一行“思考”开关，开启后在下方出现强度分段（只列非 off 档）；重新开启时回到本标签页上次用过的强度，没有则用最轻的一档。没有 off 档的模型只显示强度分段。思考开着时加号上有一颗主题色小点。状态在 `web/src/stores/models.ts` 的 `thinking`，点选后先本地更新，再以服务端回的 `model-list` 为准。
+前端：输入条左侧的加号按钮（`InputBar.tsx`）展开菜单，上半是图片来源（上传 / 拍照 / 截屏），下半是 `ThinkingControls.tsx` 的思考区：一行“思考”开关，开启后在下方展开强度分段（只列非 off 档，选中块在档位间滑动）；重新开启时回到本标签页上次用过的强度，没有则用最轻的一档。没有 off 档的模型开关恒亮并锁定、只调强度；只有一档或没有声明档位的模型开关置灰锁定（始终思考 / 不支持思考 / 不可调整）。思考开着时加号上有一颗主题色小点。状态在 `web/src/stores/models.ts` 的 `thinking`，点选后先本地更新，再以服务端回的 `model-list` 为准。
 
 ---
 

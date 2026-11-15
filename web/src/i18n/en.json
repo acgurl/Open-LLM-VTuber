@@ -219,7 +219,11 @@
       "max": "Max"
     },
     "descOn": "Thinks before answering; slower",
-    "descOff": "Answers directly; fastest"
+    "descOff": "Answers directly; fastest",
+    "descAlways": "This model always thinks; can't be turned off",
+    "descAlwaysPick": "This model always thinks; pick the depth",
+    "descUnsupported": "This model doesn't think",
+    "descUnknown": "Thinking can't be adjusted for this model"
   },
   "server": {
     "Server is busy, please try again shortly": "Server is busy, please retry shortly",
