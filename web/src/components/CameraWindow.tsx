@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useCamera } from '../stores/camera';
 import { camera } from '../services/camera';
 import { readSetting, writeSetting } from '../utils/storage';
-import { CamIcon } from './icons';
+import { CamIcon, CloseIcon } from './icons';
 
 const EDGE = 8;
 const DRAG_THRESHOLD = 4;
@@ -166,7 +166,7 @@ export function CameraWindow() {
             aria-label={t('camera.stop')}
             onClick={() => camera.stop()}
           >
-            ×
+            <CloseIcon size={14} />
           </button>
         </>
       )}

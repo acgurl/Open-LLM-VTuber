@@ -169,6 +169,7 @@
     "error": "Failed"
   },
   "think": {
+    "title": "Reasoning",
     "label": "Thinking",
     "active": "Thinking",
     "done": "Thought for {{seconds}}s"

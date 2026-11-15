@@ -15,16 +15,38 @@
 }
 
 .group-label {
+  flex: none;
   color: var(--muted);
   font-size: 0.8rem;
+  white-space: nowrap;
 }
 
 .group-uid {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: var(--inset);
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-members .group-uid,
+.group-peers .group-uid {
+  flex: 0 1 auto;
+}
+
+.group-row .mini-btn {
+  flex: none;
+}
+
+.group-members .group-row .mini-btn:last-child,
+.group-peers .group-row .mini-btn:last-child {
+  margin-left: auto;
 }
 
 .group-input {
@@ -101,6 +123,46 @@
   transform: scale(0.97);
 }
 
+.mini-btn.icon-only {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 28px;
+  padding: 0;
+  color: var(--muted);
+}
+
+@media (hover: hover) {
+  .mini-btn.icon-only:hover:not(:disabled) {
+    color: var(--ink);
+  }
+}
+
+.mini-btn.icon-only > svg {
+  animation: dot-pop 320ms var(--ease-spring);
+}
+
+.mini-btn.copied,
+.mini-btn.copied:hover {
+  color: var(--accent) !important;
+  border-color: var(--accent-line) !important;
+  background: var(--accent-soft) !important;
+}
+
+.mini-btn.primary {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+@media (hover: hover) {
+  .mini-btn.primary:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--accent) 22%, transparent);
+    border-color: var(--accent);
+  }
+}
+
 .mini-btn.danger {
   background: var(--danger-soft);
   border-color: var(--danger-line);
@@ -117,4 +179,13 @@
 .mini-btn:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* 输入框旁的按钮与输入框等高 */
+.group-row:has(> .group-input) {
+  align-items: stretch;
+}
+
+.group-row > .group-input + .mini-btn {
+  padding-inline: 14px;
 }

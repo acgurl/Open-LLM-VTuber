@@ -103,6 +103,12 @@ button {
   touch-action: manipulation;
 }
 
+/* 全局细滚动条：未单独设置的滚动容器（代码块、编辑器等）也不露出系统粗滚动条 */
+:where(*) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+
 :where(button, a, input, textarea, select):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;

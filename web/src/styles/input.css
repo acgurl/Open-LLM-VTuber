@@ -336,9 +336,10 @@
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(0, 0, 0, 0.68);
   color: #fff;
+  display: grid;
+  place-items: center;
+  padding: 0;
   cursor: pointer;
-  line-height: 1;
-  font-size: 12px;
   transition:
     background 150ms,
     transform 180ms var(--ease-spring);

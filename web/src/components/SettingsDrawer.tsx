@@ -21,6 +21,9 @@ import { usePresence } from '../hooks/usePresence';
 import { useDialog } from '../hooks/useDialog';
 import { McpPanel } from './McpPanel';
 import { ConnectorPanel } from './ConnectorPanel';
+import { Segmented } from './Segmented';
+import { CopyButton } from './CopyButton';
+import { CloseIcon, MonitorIcon, MoonIcon, SunIcon } from './icons';
 
 // 预设色相：默认蓝紫，其余覆盖常见角色主题色
 const HUE_PRESETS = [220.44, 265, 320, 12, 150, 190];
@@ -86,7 +89,7 @@ export function SettingsDrawer() {
         <div className="drawer-head">
           <span>{t('settings.title')}</span>
           <button className="icon-btn" aria-label={t('drawer.close')} onClick={() => setOpen(false)}>
-            ×
+            <CloseIcon />
           </button>
         </div>
         <div className="drawer-body">
@@ -142,17 +145,19 @@ export function SettingsDrawer() {
 
           <section>
             <h3>{t('settings.appearance')}</h3>
-            <label className="setting-row">
+            <div className="setting-row">
               <span>{t('settings.theme')}</span>
-              <select
+              <Segmented<ThemeMode>
+                label={t('settings.theme')}
                 value={themeMode}
-                onChange={(e) => setThemeMode(e.target.value as ThemeMode, e.currentTarget)}
-              >
-                <option value="auto">{t('settings.themeAuto')}</option>
-                <option value="light">{t('settings.themeLight')}</option>
-                <option value="dark">{t('settings.themeDark')}</option>
-              </select>
-            </label>
+                onChange={(mode, origin) => setThemeMode(mode, origin)}
+                options={[
+                  { value: 'auto', label: t('settings.themeAuto'), icon: <MonitorIcon /> },
+                  { value: 'light', label: t('settings.themeLight'), icon: <SunIcon /> },
+                  { value: 'dark', label: t('settings.themeDark'), icon: <MoonIcon /> },
+                ]}
+              />
+            </div>
             <div className="hue-setting">
               <span>{t('settings.accent')}</span>
               <div className="hue-row" role="group" aria-label={t('settings.accent')}>
@@ -197,16 +202,18 @@ export function SettingsDrawer() {
 
           <section>
             <h3>{t('settings.title')}</h3>
-            <label className="setting-row">
+            <div className="setting-row">
               <span>{t('settings.language')}</span>
-              <select
-                value={i18n.language}
-                onChange={(e) => setLanguage(e.target.value)}
-              >
-                <option value="zh">中文</option>
-                <option value="en">English</option>
-              </select>
-            </label>
+              <Segmented
+                label={t('settings.language')}
+                value={i18n.language.startsWith('en') ? 'en' : 'zh'}
+                onChange={(lang) => setLanguage(lang)}
+                options={[
+                  { value: 'zh', label: '中文' },
+                  { value: 'en', label: 'English' },
+                ]}
+              />
+            </div>
             <button className="drawer-action" onClick={proactiveSpeak}>
               {t('settings.proactiveSpeak')}
             </button>
@@ -227,15 +234,11 @@ export function SettingsDrawer() {
                 <code className="group-uid" title={userId}>
                   {userId}
                 </code>
-                <button
-                  type="button"
-                  className="mini-btn"
-                  aria-label={t('settings.copyUserId')}
-                  title={t('settings.copyUserId')}
-                  onClick={() => void navigator.clipboard?.writeText(userId)}
-                >
-                  ⧉
-                </button>
+                <CopyButton
+                  text={userId}
+                  label={t('settings.copyUserId')}
+                  copiedLabel={t('chat.copied')}
+                />
               </div>
             )}
             <button className="drawer-action danger" onClick={logout}>
@@ -265,17 +268,10 @@ function GroupPanel() {
       <h3>{t('group.title')}</h3>
       <div className="group-row">
         <span className="group-label">{t('group.thisId')}</span>
-        <code className="group-uid">{clientUid ?? '—'}</code>
-        <button
-          type="button"
-          className="mini-btn"
-          aria-label={t('group.copyId')}
-          title={t('group.copyId')}
-          disabled={!clientUid}
-          onClick={() => clientUid && void navigator.clipboard?.writeText(clientUid)}
-        >
-          ⧉
-        </button>
+        <code className="group-uid" title={clientUid ?? undefined}>
+          {clientUid ?? '—'}
+        </code>
+        <CopyButton text={clientUid} label={t('group.copyId')} copiedLabel={t('chat.copied')} />
       </div>
 
       {!inGroup && <div className="group-hint">{t('group.inviteHint')}</div>}

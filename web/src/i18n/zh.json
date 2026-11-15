@@ -169,6 +169,7 @@
     "error": "出错"
   },
   "think": {
+    "title": "深度思考",
     "label": "思考过程",
     "active": "思考中",
     "done": "已思考 {{seconds}} 秒"
