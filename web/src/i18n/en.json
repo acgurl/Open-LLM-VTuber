@@ -169,7 +169,9 @@
     "error": "Failed"
   },
   "think": {
-    "label": "Thinking"
+    "label": "Thinking",
+    "active": "Thinking",
+    "done": "Thought for {{seconds}}s"
   },
   "theme": {
     "toLight": "Switch to light mode",

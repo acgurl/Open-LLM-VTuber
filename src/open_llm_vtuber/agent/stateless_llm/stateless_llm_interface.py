@@ -31,6 +31,44 @@ from ...mcpp.types import ToolCallObject
 
 _ERROR_PREFIX = "Error calling the chat endpoint: "
 
+THINK_OPEN = "<think>"
+THINK_CLOSE = "</think>"
+
+
+class ReasoningText(str):
+    """Streamed text of the model's reasoning, or its ``<think>`` markers.
+
+    A backend that receives reasoning apart from the answer yields it wrapped
+    as ``ReasoningText("<think>")``, the reasoning chunks, then
+    ``ReasoningText("</think>")``. Agents show it (the client folds it, TTS
+    skips it) but never store it as what the assistant said.
+    """
+
+    __slots__ = ()
+
+
+class ThinkMarkers:
+    """Wraps one response's reasoning chunks in ``<think>`` markers."""
+
+    def __init__(self) -> None:
+        self.open = False
+
+    def thought(self, text: str) -> list[ReasoningText]:
+        """The chunks to yield for one piece of reasoning."""
+        if not text:
+            return []
+        chunks = [] if self.open else [ReasoningText(THINK_OPEN)]
+        self.open = True
+        chunks.append(ReasoningText(text))
+        return chunks
+
+    def close(self) -> list[ReasoningText]:
+        """The closing marker, when reasoning is open; yield before an answer."""
+        if not self.open:
+            return []
+        self.open = False
+        return [ReasoningText(THINK_CLOSE)]
+
 
 class LLMError(Exception):
     """A completion failed.

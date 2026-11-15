@@ -26,6 +26,7 @@ from ...utils.dicts import deep_merge
 from .stateless_llm_interface import (
     LLMError,
     StatelessLLMInterface,
+    ThinkMarkers,
     authentication_error,
     connection_error,
     content_text,
@@ -399,6 +400,7 @@ class VertexLLM(StatelessLLMInterface):
         tool_calls: list[ToolCallObject] = []
         produced_text = False
         finish_reason = None
+        think = ThinkMarkers()
 
         async for line in response.aiter_lines():
             if not line.startswith("data:"):
@@ -417,13 +419,22 @@ class VertexLLM(StatelessLLMInterface):
                 finish_reason = candidate.get("finishReason") or finish_reason
                 for part in (candidate.get("content") or {}).get("parts") or []:
                     if part.get("thought"):
+                        # Thought summaries, sent when ``includeThoughts`` is on.
+                        for item in think.thought(part.get("text") or ""):
+                            yield item
                         continue
                     if part.get("functionCall"):
+                        for item in think.close():
+                            yield item
                         tool_calls.append(self._tool_call(part, len(tool_calls)))
                     elif part.get("text"):
+                        for item in think.close():
+                            yield item
                         produced_text = True
                         yield part["text"]
 
+        for item in think.close():
+            yield item
         if tool_calls:
             logger.info(f"Complete tool calls: {tool_calls}")
             yield tool_calls
@@ -442,6 +453,17 @@ class VertexLLM(StatelessLLMInterface):
         body = self._request_body(messages, system, tools)
         if options:
             body = deep_merge(body, options)
+        thinking_config = (body.get("generationConfig") or {}).get("thinkingConfig")
+        if (
+            isinstance(thinking_config, dict)
+            and "includeThoughts" not in thinking_config
+        ):
+            # Gemini sends its thought summaries only when asked; an explicit
+            # ``includeThoughts: false`` is kept.
+            body = deep_merge(
+                body,
+                {"generationConfig": {"thinkingConfig": {"includeThoughts": True}}},
+            )
         logger.debug(f"Sending {len(body['contents'])} contents to {self.model}")
 
         try:

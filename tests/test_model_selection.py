@@ -404,7 +404,10 @@ class ThinkingCatalogTests(unittest.TestCase):
     def test_shorthand_per_provider(self):
         cases = {
             "openai_responses_llm": {"reasoning": {"effort": "low"}},
-            "claude_llm": {"output_config": {"effort": "low"}},
+            "claude_llm": {
+                "thinking": {"type": "adaptive"},
+                "output_config": {"effort": "low"},
+            },
             "vertex_llm": {
                 "generationConfig": {"thinkingConfig": {"thinkingLevel": "low"}}
             },

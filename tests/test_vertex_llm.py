@@ -15,6 +15,7 @@ from open_llm_vtuber.agent.stateless_llm.openai_compatible_llm import (
 )
 from open_llm_vtuber.agent.stateless_llm.stateless_llm_interface import (
     LLMError,
+    ReasoningText,
     StatelessLLMInterface,
 )
 from open_llm_vtuber.agent.stateless_llm.vertex_llm import (
@@ -315,8 +316,10 @@ class VertexLLMTestCase(unittest.IsolatedAsyncioTestCase):
 
         first = await self.collect(llm.chat_completion(messages))
 
-        self.assertEqual(first[0], "Checking. ")
-        (call,) = first[1]
+        # The thought part is shown folded, closed before the call.
+        self.assertEqual(first[:4], ["Checking. ", "<think>", "hidden", "</think>"])
+        self.assertTrue(all(isinstance(i, ReasoningText) for i in first[1:4]))
+        (call,) = first[4]
         self.assertIsInstance(call, ToolCallObject)
         self.assertEqual(call.function.name, "lookup")
         self.assertEqual(json.loads(call.function.arguments), {"q": "天气"})
@@ -366,6 +369,24 @@ class VertexLLMTestCase(unittest.IsolatedAsyncioTestCase):
                     ],
                 },
             ],
+        )
+
+    async def test_thinking_config_asks_for_thoughts(self):
+        google = _Google([httpx.Response(200, content=_sse(_text_chunk("Hi.")))])
+        llm = self.make_llm(google)
+        options = {"generationConfig": {"thinkingConfig": {"thinkingLevel": "low"}}}
+
+        await self.collect(
+            llm.chat_completion([{"role": "user", "content": "x"}], options=options)
+        )
+
+        self.assertEqual(
+            google.body()["generationConfig"]["thinkingConfig"],
+            {"thinkingLevel": "low", "includeThoughts": True},
+        )
+        # The level's params are shared; they stay as written.
+        self.assertEqual(
+            options, {"generationConfig": {"thinkingConfig": {"thinkingLevel": "low"}}}
         )
 
     async def test_api_errors_raise_llm_errors(self):

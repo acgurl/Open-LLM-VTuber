@@ -24,6 +24,7 @@ from .stateless_llm_interface import (
     LLMError,
     LLMToolsUnsupportedError,
     StatelessLLMInterface,
+    ThinkMarkers,
     authentication_error,
     connection_error,
     content_text,
@@ -190,6 +191,7 @@ class OpenAICompatibleLLM(StatelessLLMInterface):
         """Text as it arrives, then the merged tool calls of the response."""
         accumulated: dict[int, dict[str, Any]] = {}
         reasoning: list[str] = []
+        think = ThinkMarkers()
         async for chunk in stream:
             # Some servers (e.g. OpenWebUI) send chunks without choices.
             if not chunk.choices:
@@ -198,12 +200,24 @@ class OpenAICompatibleLLM(StatelessLLMInterface):
             delta_tool_calls = getattr(delta, "tool_calls", None)
             if delta_tool_calls:
                 self._merge_tool_call_deltas(accumulated, delta_tool_calls)
-            thought = getattr(delta, "reasoning_content", None)
+            # DeepSeek/Qwen send ``reasoning_content``; vLLM and some gateways
+            # ``reasoning``.
+            thought = getattr(delta, "reasoning_content", None) or getattr(
+                delta, "reasoning", None
+            )
             if isinstance(thought, str) and thought:
                 reasoning.append(thought)
+                for item in think.thought(thought):
+                    yield item
             content = getattr(delta, "content", None)
+            if content or delta_tool_calls:
+                for item in think.close():
+                    yield item
             if content:
                 yield content
+
+        for item in think.close():
+            yield item
 
         if accumulated:
             calls = [

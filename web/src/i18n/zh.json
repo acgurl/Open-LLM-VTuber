@@ -169,7 +169,9 @@
     "error": "出错"
   },
   "think": {
-    "label": "思考过程"
+    "label": "思考过程",
+    "active": "思考中",
+    "done": "已思考 {{seconds}} 秒"
   },
   "theme": {
     "toLight": "切换到白天模式",
