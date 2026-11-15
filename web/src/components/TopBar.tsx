@@ -4,6 +4,7 @@ import { useSettings } from '../stores/settings';
 import { useTheme } from '../stores/theme';
 import { audioPlayer } from '../services/audioPlayer';
 import { newHistory } from '../services/actions';
+import { ModelPicker } from './ModelPicker';
 import { MenuIcon, NewChatIcon, VolumeIcon, SunIcon, MoonIcon, GearIcon } from './icons';
 
 const DOT_CLASS: Record<string, string> = {
@@ -66,6 +67,7 @@ export function TopBar() {
             )}
           </span>
         </div>
+        <ModelPicker />
         <button
           className={`icon-btn tts-toggle${ttsOn ? '' : ' off'}`}
           aria-label={t(ttsOn ? 'settings.ttsOn' : 'settings.ttsOff')}

@@ -16,6 +16,7 @@ class SystemConfig(I18nMixin):
     config_alts_dir: str = Field(..., alias="config_alts_dir")
     tool_prompts: dict[str, str] = Field(..., alias="tool_prompts")
     enable_proxy: bool = Field(False, alias="enable_proxy")
+    llm_models_file: str = Field("llm_models.yaml", alias="llm_models_file")
     storage: StorageConfig = Field(default_factory=StorageConfig, alias="storage")
     auth: AuthConfig = Field(default_factory=AuthConfig, alias="auth")
     connectors: ConnectorsConfig = Field(
@@ -36,6 +37,11 @@ class SystemConfig(I18nMixin):
         "enable_proxy": Description(
             en="Enable proxy mode for multiple clients",
             zh="启用代理模式以支持多个客户端使用一个 ws 连接",
+        ),
+        "llm_models_file": Description(
+            en="YAML file listing the LLM models users may pick in the web UI "
+            "(missing file: every session uses its character's LLM)",
+            zh="列出用户可在网页端选择的 LLM 模型的 YAML 文件（文件不存在时一律使用角色自带的 LLM）",
         ),
         "storage": Description(
             en="Chat history storage settings",

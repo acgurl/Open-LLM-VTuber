@@ -185,6 +185,7 @@ through a reverse proxy.
 | `characters/*.yaml` | Character presets (persona, model name, avatar, optional engine overrides and `allowed_users`) | Mostly no |
 | `model_dict.json` | Live2D model metadata: URL, scale, lip-sync gain, emotion/motion maps | No |
 | `mcp_servers.json` | Deployment-managed MCP servers; may contain tokens | No |
+| `llm_models.yaml` | Optional list of LLM models users may pick in the web UI, with per-model `allowed_users`; holds API keys | No |
 | `web/` | Frontend source; `npm run build` emits `web/dist` | Yes |
 | `data/storage/` | SQLite history and legacy import/archive data | No |
 | `avatars/`, `backgrounds/`, `live2d-models/`, `models/` | Runtime assets; only a subset is tracked | Partly |
@@ -342,6 +343,41 @@ Settings → Account) or verified login emails (display names are not matched); 
 not listed neither see nor can switch to it.
 Each preset is checked on its own, and the default character in `conf.yaml` stays available to
 everyone.
+
+### Letting users pick the LLM
+
+By default a session answers with the LLM its character preset names
+(`agent_config.agent_settings.basic_memory_agent.llm_provider`). To let users choose, copy
+`config_templates/llm_models.example.yaml` to `llm_models.yaml` in the project root (in Docker:
+`conf/llm_models.yaml`) and list the models there:
+
+```yaml
+models:
+  - id: deepseek-chat
+    name: DeepSeek Chat
+    provider: deepseek_llm          # any provider of agent_config.llm_configs
+    llm_api_key: ${DEEPSEEK_API_KEY}
+    model: deepseek-chat
+  - id: claude
+    name: Claude
+    provider: claude_llm
+    llm_api_key: ${ANTHROPIC_API_KEY}
+    model: claude-sonnet-5-5
+    allowed_users: [alice@example.com]   # only these accounts see and can use it
+```
+
+- The top bar then shows a model picker. The choice is stored per account, survives character
+  switches and reconnects, and also applies to that user's message-connector chats.
+  "Character default" returns to the preset's own LLM.
+- `allowed_users` follows the same rule as for character presets (internal user ids or verified
+  login emails). It is enforced on the server when the list is sent, when a model is selected and
+  again before every turn, so removing someone takes effect on their next message.
+- Endpoints and API keys never leave the server; the browser only receives `id`, `name` and
+  `description`.
+- Edits to the file are picked up within a few seconds. A file that fails to parse keeps the
+  previous list.
+- Only `basic_memory_agent` characters are affected; a `hume_ai_agent` character keeps its own
+  model.
 
 ## Development
 

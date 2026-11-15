@@ -6,6 +6,7 @@ import numpy as np
 
 from .conversation_utils import (
     bind_turn_history,
+    sync_turn_model,
     run_agent_turn,
     send_conversation_start_signals,
     process_user_input,
@@ -47,6 +48,7 @@ async def process_single_conversation(
     full_response = ""
 
     try:
+        await sync_turn_model(context)
         turn_history_uid = bind_turn_history(context, metadata)
 
         # Send initial signals

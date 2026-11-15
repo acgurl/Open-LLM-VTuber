@@ -76,5 +76,7 @@ conf.yaml.backup
 tmp/
 private/
 mcp_servers.json
+# user-selectable LLM models; holds API keys
+llm_models.yaml
 
 .vscode/

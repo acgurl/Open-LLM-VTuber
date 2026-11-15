@@ -5,6 +5,9 @@ system_config:
   port: 12393
   # New setting for alternative configurations
   config_alts_dir: 'characters'
+  # Models users may pick in the web UI instead of their character's LLM.
+  # See config_templates/llm_models.example.yaml; a missing file turns it off.
+  llm_models_file: 'llm_models.yaml'
   # Tool prompts that will be appended to the persona prompt
   tool_prompts:
     # This will be appended to the end of system prompt to let LLM include keywords to control facial expressions.

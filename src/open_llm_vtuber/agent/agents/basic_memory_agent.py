@@ -53,6 +53,8 @@ class BasicMemoryAgent(AgentInterface):
     """Agent with basic chat memory and tool calling support."""
 
     _system: str = "You are a helpful assistant."
+    # The prompt as given to set_system, before the interrupt note is added.
+    _base_system: str = _system
     _max_tool_rounds: int = DEFAULT_MAX_TOOL_ROUNDS
 
     def __init__(
@@ -128,6 +130,22 @@ class BasicMemoryAgent(AgentInterface):
         self._llm = llm
         self.chat = self._chat_function_factory()
 
+    @property
+    def llm(self) -> StatelessLLMInterface:
+        return self._llm
+
+    def use_llm(
+        self,
+        llm: StatelessLLMInterface,
+        interrupt_method: Literal["system", "user"] = "user",
+    ) -> None:
+        """Answer with another LLM from the next turn on; memory is kept."""
+        self._set_llm(llm)
+        self.prompt_mode_flag = False
+        if interrupt_method != self.interrupt_method:
+            self.interrupt_method = interrupt_method
+            self.set_system(self._base_system)
+
     def clone_for_session(
         self,
         system: str,
@@ -184,6 +202,7 @@ class BasicMemoryAgent(AgentInterface):
     def set_system(self, system: str):
         """Set the system prompt."""
         logger.debug(f"Memory Agent: Setting system prompt: '''{system}'''")
+        self._base_system = system
 
         if self.interrupt_method == "user":
             system = f"{system}\n\nIf you received `[interrupted by user]` signal, you were interrupted."

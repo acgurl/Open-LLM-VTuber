@@ -1,6 +1,6 @@
 # Open-LLM-VTuber 后端接口文档（面向新前端实现）
 
-基线：本仓库 `main` 分支，2026-10-23 代码状态（父仓库提交 `32840ac`），**2026-10-25 增加按用户 MCP 与浏览器本地 MCP**（见[第 22 节](#22-用户-mcp-与浏览器本地-mcp2026-10-25)）。
+基线：本仓库 `main` 分支，2026-10-23 代码状态（父仓库提交 `32840ac`），**2026-10-25 增加按用户 MCP 与浏览器本地 MCP**（见[第 22 节](#22-用户-mcp-与浏览器本地-mcp2026-10-25)），**2026-11-15 增加用户可选 LLM 模型**（见[第 24 节](#24-用户可选-llm-模型2026-11-15)）。
 读者：要从零写一个 Web/桌面前端的人。本文只描述**后端对外契约**，不描述现有 React 前端的实现。
 所有字段名、常量、路径均与源码逐条核对，引用格式为 `文件:行号`。**2026-10-25 的用户/本地 MCP 改动在部分文件顶部新增了 import、常量和 schema，旧章节的行号可能整体偏移；字段与常量语义未变，行号以当前源码为准。**
 
@@ -31,6 +31,7 @@
 21. [最小可用客户端伪代码](#21-最小可用客户端伪代码)
 22. [用户 MCP 与浏览器本地 MCP（2026-10-25）](#22-用户-mcp-与浏览器本地-mcp2026-10-25)
 23. [消息平台连接器（全局 QQ 机器人，2026-11-03）](#23-消息平台连接器全局-qq-机器人2026-11-03)
+24. [用户可选 LLM 模型（2026-11-15）](#24-用户可选-llm-模型2026-11-15)
 - [附录 A：常量索引](#附录-a常量索引)
 - [附录 B：消息类型总索引](#附录-b消息类型总索引)
 
@@ -266,6 +267,8 @@ Cookie（`auth/manager.py`）：
 | --- | --- | --- |
 | `fetch-configs` | 无 | `config-files`（已按当前用户的角色权限过滤） |
 | `switch-config` | `file`: string（**键名是 `file`**，不是 `config`/`name`；缺失则静默无响应） | `set-model-and-conf` + `config-switched`，或 `error`（无权限时为 `Character not available`）。单聊中有正在进行的一轮时先按 `interrupt-signal`（`text:""`）打断，见 13.2 |
+| `fetch-models` | 无 | `model-list`（已按当前用户的模型权限过滤），见第 24 节 |
+| `switch-model` | `model`: string \| null（`null` = 回到角色预设自带的 LLM） | `model-switched`，或 `error`（`Model not available`）+ `model-list`。对话记忆与历史不变；单聊中有正在进行的一轮时先打断，见 24.2 |
 | `request-init-config` | 无 | `set-model-and-conf`（含 `client_uid`） |
 | `fetch-backgrounds` | 无 | `background-files` |
 | `heartbeat` | 无 | `heartbeat-ack` |
@@ -338,9 +341,13 @@ Cookie（`auth/manager.py`）：
 
 **`background-files`** — `{ "type":"background-files", "files":["bg1.png", ...] }`（`websocket_handler.py:766-768`）。只有 basename，需自己拼 `/bg/`。
 
+**`model-list`** — `{ "type":"model-list", "models":[{"id":"deepseek-chat","name":"DeepSeek Chat","description":"..."}], "current":"deepseek-chat" }`。当前账号可选的 LLM 模型和正在使用的那个（`current: null` = 角色预设自带的 LLM）；连接建立时推送一次，之后响应 `fetch-models`。`models` 为空表示后台没有开启模型选择。详见第 24 节。
+
+**`model-switched`** — `{ "type":"model-switched", "model":"deepseek-chat" }`（或 `"model": null`），`switch-model` 成功的回执。
+
 **`heartbeat-ack`** — `{ "type":"heartbeat-ack" }`，无其它字段。
 
-**`error`** — `{ "type":"error", "message":"<英文文案>" }`。来源：非法请求、音频超限、输入校验失败、服务繁忙、对话异常、配置切换失败、无权使用该角色（`Character not available`）；群聊中的错误是**群播**（`group_conversation.py:314-326`）。字段名是 `message`，不是 `text`。
+**`error`** — `{ "type":"error", "message":"<英文文案>" }`。来源：非法请求、音频超限、输入校验失败、服务繁忙、对话异常、配置切换失败、无权使用该角色（`Character not available`）、模型不存在或无权使用（`Model not available`）；群聊中的错误是**群播**（`group_conversation.py:314-326`）。字段名是 `message`，不是 `text`。
 
 ### 6.2 轮次控制
 
@@ -555,8 +562,9 @@ Cookie（`auth/manager.py`）：
 
 1. `{"type":"full-text","text":"Connection established"}`
 2. `{"type":"set-model-and-conf", ..., "client_uid":"<uid>"}`
-3. `{"type":"group-update", ...}`
-4. `{"type":"group-update", ...}`（重复一次，来自 `_store_client_data` 与 `_send_initial_messages` 各调一次；无害，前端做幂等处理即可）
+3. `{"type":"model-list", "models":[...], "current":...}`（见第 24 节；未配置模型目录时 `models` 为空）
+4. `{"type":"group-update", ...}`
+5. `{"type":"group-update", ...}`（重复一次，来自 `_store_client_data` 与 `_send_initial_messages` 各调一次；无害，前端做幂等处理即可）
 
 拿到第 2 条后就可以用 `client_uid` 去连 `/audio-ws`。
 
@@ -1092,6 +1100,7 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 - [ ] 切换 / 新建历史或角色前，若本轮仍在生成或播放，先发 `interrupt-signal` 并停止本地音频、口型，避免旧轮串台
 - [ ] 新建 / 删除历史
 - [ ] 角色切换：`fetch-configs` → `switch-config`，切换后重新选/建历史，并**保留旧的 `client_uid`**
+- [ ] 模型选择（可选）：`model-list.models` 非空时显示选择器，`switch-model` 后等 `model-switched` / `error`；切换不清空聊天、不重建历史
 - [ ] 背景：`fetch-backgrounds` → `/bg/<file>`
 - [ ] 头像：`/avatars/<avatar>`
 
@@ -1405,6 +1414,7 @@ remote 服务器失败（DNS、TLS、超时、401）只影响该服务器：会�
 - **每个机器人有自己的角色和提示词**：启动时用 `ServiceContext.load_headless` 建一个纯文本的基础上下文（只有 MCP 和 agent，没有 Live2D、ASR、TTS、翻译），会话从它克隆。实例的 `character` 合并到默认角色上（建议单独设 `conf_uid`，机器人历史就不会出现在网页角色的历史列表里）；`tool_prompts` 整体替换系统的附加提示词，不写则沿用系统提示词、只去掉 `live2d_expression_prompt`。仓库自带 `prompts/utils/chat_platform_prompt.txt`（纯文本、简短）。
 - 回复以流式 `text-delta` 的累积文本为准（保留模型原有的换行；按句切分后的 `full_response` 会丢换行），去掉 `<think>` 块、Live2D 标签和常见 Markdown（标题、粗体、行内代码、引用、代码围栏、`* ` 列表改为 `- `、链接改成"文字 网址"），再按平台长度切分（QQ：每段 1500 字、每条消息最多回复 4 段）。历史里存的仍是模型原文。
 - QQ 的「单聊」（普通好友私聊机器人）和群消息只在订阅 `group_and_c2c` 时推送；只订阅 `direct_message` 收到的是**频道私信**。漏订阅时网关照样 READY，但收不到消息、也没有报错。
+- 连接器会话同样使用绑定用户在网页端选择的 LLM 模型（第 24 节）：每轮开始前重新读取选择并校验权限；机器人里没有切换模型的指令。
 - 用户侧连接器（例如每个用户自己的微信）尚未实现；它不走 23.3 的绑定流程。
 
 ### 23.2 会话与历史
@@ -1464,6 +1474,58 @@ system_config:
 
 ---
 
+## 24. 用户可选 LLM 模型（2026-11-15）
+
+默认每个会话用角色预设指定的 LLM（`agent_config.agent_settings.basic_memory_agent.llm_provider` → `llm_configs`）。部署方在 `llm_models.yaml` 里声明模型目录后，用户可以在网页端自己选模型；选择按账号保存，与角色预设解耦。实现在 `llm_catalog.py`、`service_context.py`（`sync_model_selection` / `select_model` / `model_list_payload`）和 `websocket_handler.py`（`_handle_fetch_models` / `_handle_model_switch`）。
+
+### 24.1 配置文件
+
+路径由 `system_config.llm_models_file` 指定（默认 `llm_models.yaml`，相对工作目录；Docker 镜像启动时把 `/app/conf/llm_models.yaml` 链接过来）。模板见 `config_templates/llm_models.example.yaml`。
+
+```yaml
+models:
+  - id: deepseek-chat          # 稳定键：字母数字和 . _ : -，最长 64；保存为用户的选择
+    name: DeepSeek Chat        # 选择器里显示的名字（缺省用 id，最长 80）
+    description: 响应快        # 可选，显示在名字下方（最长 200）
+    provider: deepseek_llm     # agent_config.llm_configs 里的任一 provider
+    llm_api_key: ${DEEPSEEK_API_KEY}
+    model: deepseek-chat
+    allowed_users:             # 可选；不写或为空 = 所有人可用
+      - alice@example.com
+```
+
+- 除 `id` / `name` / `description` / `provider` / `allowed_users` 外的键就是该 provider 在 `llm_configs` 里的设置（含 `interrupt_method`），用同一套 pydantic 类校验；支持 `${ENV}` 替换。
+- `allowed_users` 与角色预设完全同一规则（`config_manager/access.py`）：内部 user_id 或已验证的登录邮箱，大小写不敏感，**不匹配显示名**。写成非字符串列表的条目对所有人不可用。
+- **文件不存在 = 功能关闭**，行为与之前完全一致。文件每 5 秒内按 mtime 重新加载，不用重启；解析失败时沿用上一份目录（不会因为笔误放宽或丢失权限），单个条目非法只跳过该条并记 ERROR（日志只写出错的字段名，不写值）。
+- 该文件含密钥：已加入 `.gitignore` / `.dockerignore`，生产上权限设为 600。
+
+### 24.2 消息
+
+| 方向 | type | 字段 | 说明 |
+| --- | --- | --- | --- |
+| C→S | `fetch-models` | 无 | 回 `model-list`。同时重新读取该用户保存的选择并应用 |
+| C→S | `switch-model` | `model`: string \| null | `null` = 回到角色预设自带的 LLM。成功回 `model-switched`；模型不存在或无权限回 `error`（`Model not available`）并紧跟一条最新的 `model-list` |
+| S→C | `model-list` | `models`: `[{id,name,description}]`，`current`: string \| null | 只含当前账号可用的模型；`current` 是此刻实际在用的目录模型，`null` 表示在用角色预设的 LLM。**连接建立时主动推送一次**（见 7.4）。`models` 为空时前端不应显示选择器 |
+| S→C | `model-switched` | `model`: string \| null | 切换已生效 |
+
+- **`base_url`、API key、上游模型名永远不下发**，前端只拿到 `id` / `name` / `description`。
+- 权限在服务端三处校验：下发列表时、`switch-model` 时、**每一轮对话开始前**（`conversation_utils.sync_turn_model`）。所以把某人从 `allowed_users` 移除、删除模型或改了模型配置，都在对方下一条消息生效，不需要重连；失去权限的会话自动回落到角色预设的 LLM，保存的选择保留（权限恢复后自动生效）。
+- 切换**只替换 agent 使用的 LLM 客户端**：对话记忆、当前历史、工具（MCP）和系统提示词不变，`history_uid` 不变，不需要重建历史。`interrupt_method` 跟随所选模型。
+- 单聊中有一轮正在进行时，`switch-model` 先按 `interrupt-signal`（`text:""`）打断，语义同 13.2 的 `switch-config`（没有回执，前端自己停播放、收气泡）。群聊轮次进行中时只保存选择，该成员的下一轮生效，此时 `model-switched.model` 是刚保存的值。
+- 目录模型的 LLM 客户端按模型 id 全局共享（与角色 LLM 客户端被各会话共享相同），首次使用时创建；创建失败则回落到角色 LLM，`model-list.current` 为 `null`。
+
+### 24.3 存储与作用域
+
+- 选择按**账号**保存一份（不分角色、不分设备）：SQLite schema **v8** 新增 `user_settings(user_id, key, value, updated_at)`，键 `llm_model`；`HistoryRepository.get_user_setting` / `set_user_setting`。`null` 选择即删除该行。
+- 作用于该账号的所有会话：网页端各标签页（其它标签页在下一轮或下次 `fetch-models` 时跟上）、`switch-config` 换角色之后、以及消息连接器（QQ 等）会话。single 模式下账号是 `storage.default_user_id`。
+- 只对 `basic_memory_agent` 生效；`hume_ai_agent` 角色忽略选择，`model-list.current` 恒为 `null`。
+
+### 24.4 前端参考实现
+
+`web/src/components/ModelPicker.tsx`：顶栏配置名大岛右侧的独立小岛（≤520px 时降到第二行左侧的小胶囊），点开下拉列出"角色默认" + `models`；每次打开发一次 `fetch-models`。状态在 `web/src/stores/models.ts`，`switch-model` 发出后等 `model-switched` 或 `error` 再解除 loading。
+
+---
+
 ## 附录 A：常量索引
 
 | 常量 | 值 | 位置 |
@@ -1496,11 +1558,11 @@ system_config:
 
 **客户端 → 服务端（`/client-ws`）**
 
-`text-input`、`mic-audio-data`、`mic-audio-end`、`interrupt-signal`、`frontend-playback-complete`、`ai-speak-signal`、`audio-play-start`、`fetch-configs`、`switch-config`、`request-init-config`、`fetch-backgrounds`、`fetch-history-list`、`fetch-and-set-history`、`create-new-history`、`delete-history`、`add-client-to-group`、`remove-client-from-group`、`request-group-info`、`heartbeat`、`register-local-mcp`、`unregister-local-mcp`、`local-tool-result`
+`text-input`、`mic-audio-data`、`mic-audio-end`、`interrupt-signal`、`frontend-playback-complete`、`ai-speak-signal`、`audio-play-start`、`fetch-configs`、`switch-config`、`fetch-models`、`switch-model`、`request-init-config`、`fetch-backgrounds`、`fetch-history-list`、`fetch-and-set-history`、`create-new-history`、`delete-history`、`add-client-to-group`、`remove-client-from-group`、`request-group-info`、`heartbeat`、`register-local-mcp`、`unregister-local-mcp`、`local-tool-result`
 
 **服务端 → 客户端（`/client-ws` 文本通道）**
 
-`full-text`、`set-model-and-conf`、`config-switched`、`config-files`、`background-files`、`control`、`text-delta`、`tool_call_status`、`local-mcp-config`、`local-tool-call`、`local-mcp-registered`、`local-mcp-unregistered`、`local-mcp-error`、`user-input-transcription`、`force-new-message`、`interrupt-signal`、`group-update`、`group-operation-result`、`history-list`、`history-data`、`new-history-created`、`history-deleted`、`heartbeat-ack`、`error`
+`full-text`、`set-model-and-conf`、`config-switched`、`config-files`、`model-list`、`model-switched`、`background-files`、`control`、`text-delta`、`tool_call_status`、`local-mcp-config`、`local-tool-call`、`local-mcp-registered`、`local-mcp-unregistered`、`local-mcp-error`、`user-input-transcription`、`force-new-message`、`interrupt-signal`、`group-update`、`group-operation-result`、`history-list`、`history-data`、`new-history-created`、`history-deleted`、`heartbeat-ack`、`error`
 
 **服务端 → 客户端（音频通道：`/audio-ws`，未连接时回落 `/client-ws`）**
 

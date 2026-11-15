@@ -14,6 +14,7 @@ from .conversations.types import OutboundChannels
 from .mcpp.user_servers import split_user_mcp_servers
 from .config_manager import validate_config
 from .service_context import ServiceContext, deep_merge
+from .llm_catalog import LLMModelCatalog
 from .storage import HistoryRepository
 
 
@@ -75,6 +76,7 @@ async def build_connector_base_context(
     # user and never stores history.
     context.set_history_storage(default_context_cache.history_repository, None)
     await context.load_headless(config)
+    context.llm_catalog = getattr(default_context_cache, "llm_catalog", None)
     return context
 
 
@@ -128,4 +130,9 @@ async def build_session_context(
     )
     # Each session needs its own agent state; the LLM client stays shared.
     await session_service_context.init_session_agent(default_context_cache.agent_engine)
+    # The user's chosen model replaces the character's LLM for this session.
+    catalog = getattr(default_context_cache, "llm_catalog", None)
+    if isinstance(catalog, LLMModelCatalog):
+        session_service_context.llm_catalog = catalog
+        await session_service_context.sync_model_selection()
     return session_service_context

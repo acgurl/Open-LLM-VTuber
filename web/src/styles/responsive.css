@@ -71,6 +71,33 @@
     max-width: 44vw;
   }
 
+  /* 手机顶栏一行放不下模型名：模型小岛降到第二行左侧做成一枚小胶囊，
+     右侧留给摄像头胶囊，两者不相撞 */
+  .model-picker {
+    position: absolute;
+    top: calc(var(--island-h) + 8px);
+    left: 0;
+  }
+
+  .model-pill {
+    height: 30px;
+    padding: 0 9px 0 10px;
+    gap: 5px;
+    font-size: 0.78rem;
+  }
+
+  .model-pill-name {
+    max-width: calc(100vw - 215px);
+  }
+
+  .model-menu {
+    top: calc(100% + 8px);
+    left: 0;
+    --menu-shift: 0;
+    transform-origin: top left;
+    max-width: calc(100vw - 24px);
+  }
+
   .drawer-body {
     padding: 12px 12px calc(24px + env(safe-area-inset-bottom, 0px));
   }

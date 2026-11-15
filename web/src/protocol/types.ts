@@ -124,6 +124,13 @@ export interface ConfigFileEntry {
   name: string;
 }
 
+/** 后台 llm_models.yaml 里当前账号可选的一个模型（不含地址与密钥）。 */
+export interface ModelEntry {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export type ControlText =
   | 'conversation-chain-start'
   | 'conversation-chain-end';
@@ -142,6 +149,8 @@ export type ServerMessage =
   | { type: 'config-switched'; message: string }
   | { type: 'config-files'; configs: ConfigFileEntry[] }
   | { type: 'background-files'; files: string[] }
+  | { type: 'model-list'; models: ModelEntry[]; current: string | null }
+  | { type: 'model-switched'; model: string | null }
   | { type: 'control'; text: ControlText | string }
   | {
       type: 'text-delta';
@@ -194,6 +203,8 @@ export type ClientMessage =
   | { type: 'delete-history'; history_uid: string }
   | { type: 'fetch-configs' }
   | { type: 'switch-config'; file: string }
+  | { type: 'fetch-models' }
+  | { type: 'switch-model'; model: string | null }
   | { type: 'request-init-config' }
   | { type: 'fetch-backgrounds' }
   | { type: 'heartbeat' }

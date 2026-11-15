@@ -142,6 +142,19 @@ class HistoryRepository(ABC):
         never values supplied by a connector or the browser.
         """
 
+    # Small per-user preferences (e.g. the chosen LLM model). Values are
+    # opaque strings; the caller validates what they mean.
+
+    @abstractmethod
+    async def get_user_setting(self, *, user_id: str, key: str) -> str | None:
+        """Return this user's value for ``key``, or None when unset."""
+
+    @abstractmethod
+    async def set_user_setting(
+        self, *, user_id: str, key: str, value: str | None
+    ) -> None:
+        """Store this user's value for ``key``; None removes it."""
+
     @abstractmethod
     async def list_conf_uids(self, *, user_id: str) -> list[str]:
         """Return every character config that has histories for this user."""

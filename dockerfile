@@ -62,6 +62,11 @@ RUN printf '%s\n' \
   '  ln -sf /app/conf/model_dict.json /app/model_dict.json' \
   'fi' \
   '' \
+  '# 2b) llm_models.yaml (optional: user-selectable LLM models)' \
+  'if [ -f "/app/conf/llm_models.yaml" ]; then' \
+  '  ln -sf /app/conf/llm_models.yaml /app/llm_models.yaml' \
+  'fi' \
+  '' \
   '# 3) live2d-models' \
   'if [ -d "/app/conf/live2d-models" ]; then' \
   '  rm -rf /app/live2d-models && ln -s /app/conf/live2d-models /app/live2d-models' \
