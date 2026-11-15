@@ -3,11 +3,13 @@
   border-radius: 14px;
   border: 1px solid transparent;
   margin-bottom: 6px;
-  background: var(--chip);
+  background-color: var(--chip);
+  background-image: radial-gradient(200px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%);
   transition:
-    background 180ms,
+    background-color 180ms,
     border-color 180ms,
-    transform 220ms var(--ease-spring);
+    transform 220ms var(--ease-spring),
+    --sheen-spot 360ms ease;
 }
 
 .history-open {
@@ -29,14 +31,14 @@
 
 @media (hover: hover) {
   .history-item:hover {
-    background: var(--chip-hover);
+    background-color: var(--chip-hover);
     transform: translateX(2px);
   }
 }
 
 .history-item.current {
   border-color: var(--accent-line);
-  background: var(--accent-soft);
+  background-color: var(--accent-soft);
 }
 
 /* 当前会话在左侧立一条发光短杠，比只换底色更容易一眼定位 */

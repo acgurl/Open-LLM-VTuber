@@ -24,6 +24,7 @@
   font-size: 0.88rem;
   border-radius: 999px;
   background:
+    radial-gradient(140px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
     linear-gradient(180deg, var(--sheen), transparent 72%),
     var(--glass-strong);
   border: 1px solid var(--line);
@@ -38,7 +39,8 @@
   transition:
     transform 200ms var(--ease-spring),
     border-color 200ms var(--ease-snap),
-    box-shadow 200ms var(--ease-snap);
+    box-shadow 200ms var(--ease-snap),
+    --sheen-spot 360ms ease;
 }
 
 @media (hover: hover) {
