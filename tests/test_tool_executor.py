@@ -25,9 +25,9 @@ class ToolStatusTests(unittest.TestCase):
         self.assertEqual(status["browser_view"], {"url": "x"})
         self.assertTrue(status["timestamp"].endswith("Z"))
 
-    def test_claude_gets_image_blocks(self):
+    def test_native_result_keeps_images_as_parts(self):
         status_content, llm_content = ToolExecutor._split_image_content(
-            "Claude",
+            "Native",
             "look",
             [{"type": "image", "data": "abc", "mimeType": "image/png"}],
         )
@@ -38,19 +38,15 @@ class ToolStatusTests(unittest.TestCase):
             [
                 {"type": "text", "text": "look"},
                 {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/png",
-                        "data": "abc",
-                    },
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64,abc"},
                 },
             ],
         )
 
-    def test_openai_uses_text_with_image_count(self):
+    def test_prompt_mode_uses_text_with_image_count(self):
         status_content, llm_content = ToolExecutor._split_image_content(
-            "OpenAI",
+            "Prompt",
             "look",
             [{"type": "image", "data": "abc", "mimeType": "image/png"}],
         )
@@ -60,8 +56,23 @@ class ToolStatusTests(unittest.TestCase):
 
     def test_text_only_content_is_unchanged(self):
         self.assertEqual(
-            ToolExecutor._split_image_content("Claude", "plain", []),
+            ToolExecutor._split_image_content("Native", "plain", []),
             ("plain", "plain"),
+        )
+
+    def test_native_result_is_a_tool_message(self):
+        executor = object.__new__(ToolExecutor)
+        self.assertEqual(
+            executor.format_tool_result("Native", "call-1", "done", False),
+            {
+                "role": "tool",
+                "tool_call_id": "call-1",
+                "content": "done",
+                "is_error": False,
+            },
+        )
+        self.assertTrue(
+            executor.format_tool_result("Native", "call-1", "boom", True)["is_error"]
         )
 
 
@@ -99,7 +110,7 @@ class ExecuteToolsConcurrencyTests(unittest.IsolatedAsyncioTestCase):
         executor = self._make_executor(run_single_tool)
         calls = [self._call("slow", "slow-id"), self._call("fast", "fast-id")]
 
-        updates = [update async for update in executor.execute_tools(calls, "Claude")]
+        updates = [update async for update in executor.execute_tools(calls, "Native")]
 
         completed = [
             update["tool_id"]
@@ -130,7 +141,7 @@ class ExecuteToolsConcurrencyTests(unittest.IsolatedAsyncioTestCase):
 
         with patch.object(tool_executor_module, "MAX_CONCURRENT_TOOL_CALLS", 2):
             updates = [
-                update async for update in executor.execute_tools(calls, "OpenAI")
+                update async for update in executor.execute_tools(calls, "Native")
             ]
 
         self.assertEqual(peak, 2)

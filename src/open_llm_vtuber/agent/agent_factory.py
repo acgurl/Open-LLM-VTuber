@@ -37,9 +37,7 @@ def _build_basic_memory_agent(
         "interrupt_method", "user"
     )
 
-    llm = StatelessLLMFactory.create_llm(
-        llm_provider=llm_provider, system_prompt=system_prompt, **llm_config
-    )
+    llm = StatelessLLMFactory.create_llm(llm_provider=llm_provider, **llm_config)
 
     tool_prompts = kwargs.get("system_config", {}).get("tool_prompts", {})
     tool_manager: ToolManager | None = kwargs.get("tool_manager")

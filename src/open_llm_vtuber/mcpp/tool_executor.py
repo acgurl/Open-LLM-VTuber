@@ -48,7 +48,7 @@ class ToolExecutor:
         self._local_bridge = local_bridge
 
     def parse_tool_call(self, call: dict[str, Any] | ToolCallObject) -> ParsedToolCall:
-        """Parse a tool call from either provider's wire format."""
+        """Parse a native ``ToolCallObject`` or a prompt-mode tool dict."""
         tool_name: str = ""
         tool_id: str = ""
         tool_input: Any = None
@@ -62,9 +62,7 @@ class ToolExecutor:
             try:
                 tool_input = json.loads(call.function.arguments)
             except json.JSONDecodeError:
-                logger.error(
-                    f"Failed to decode OpenAI tool arguments for '{tool_name}'"
-                )
+                logger.error(f"Failed to decode tool arguments for '{tool_name}'")
                 result_content = (
                     f"Error: Invalid arguments format for tool '{tool_name}'."
                 )
@@ -103,43 +101,29 @@ class ToolExecutor:
 
     def format_tool_result(
         self,
-        caller_mode: Literal["Claude", "OpenAI", "Prompt"],
+        caller_mode: Literal["Native", "Prompt"],
         tool_id: str,
         result_content: str | list[dict[str, Any]],
         is_error: bool,
     ) -> dict[str, Any] | None:
-        """Format tool result for LLM API."""
-        if caller_mode == "Claude":
-            # Claude expects content as a list of blocks or a simple string
-            # We will return a list if there are multiple items or non-text items
-            if isinstance(result_content, list):
-                # Already formatted as list of blocks
-                content_to_send = result_content
-            elif isinstance(result_content, str) and result_content:
-                # Simple text result
-                content_to_send = result_content
-            elif not result_content and is_error:
-                # Error case, send error message as string
-                content_to_send = "Error occurred during tool execution."
-            else:
-                # Fallback for empty or unexpected content
-                content_to_send = ""
+        """Shape a tool result for the agent's next request.
 
-            return {
-                "type": "tool_result",
-                "tool_use_id": tool_id,
-                "content": content_to_send,
-                "is_error": is_error,
-            }
-        if caller_mode == "OpenAI":
-            # OpenAI expects content as a string
+        ``Native`` is a tool message in the LLM layer's format (see
+        ``stateless_llm_interface``): its content is text, or text and image
+        parts when the tool returned images.
+        """
+        if caller_mode == "Native":
             return {
                 "role": "tool",
                 "tool_call_id": tool_id,
-                "content": str(result_content),
+                "content": (
+                    result_content
+                    if isinstance(result_content, list)
+                    else str(result_content)
+                ),
+                "is_error": is_error,
             }
         if caller_mode == "Prompt":
-            # Prompt mode also expects a string content for now
             return {
                 "tool_id": tool_id,
                 "content": str(result_content),
@@ -232,25 +216,23 @@ class ToolExecutor:
         status_content = (
             f"{text_content}\n[Tool returned {len(image_items)} image(s)]".strip()
         )
-        if caller_mode != "Claude":
+        if caller_mode != "Native":
             return status_content, status_content
 
-        claude_blocks = []
+        parts: list[dict[str, Any]] = []
         if text_content:
-            claude_blocks.append({"type": "text", "text": text_content})
-        for item in content_items:
-            if item.get("type") == "image" and "data" in item and "mimeType" in item:
-                claude_blocks.append(
+            parts.append({"type": "text", "text": text_content})
+        for item in image_items:
+            if "data" in item and "mimeType" in item:
+                parts.append(
                     {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": item["mimeType"],
-                            "data": item["data"],
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{item['mimeType']};base64,{item['data']}"
                         },
                     }
                 )
-        return status_content, claude_blocks if claude_blocks else ""
+        return status_content, parts if parts else ""
 
     def _scoped_status_extra(self, tool_name: str) -> dict[str, Any]:
         """Mark status events group chat must keep on the owner's socket."""
@@ -273,7 +255,7 @@ class ToolExecutor:
     def _report_parse_error(
         self,
         parsed: ParsedToolCall,
-        caller_mode: Literal["Claude", "OpenAI", "Prompt"],
+        caller_mode: Literal["Native", "Prompt"],
         scoped_extra: dict[str, Any],
     ) -> tuple[dict[str, Any], dict[str, Any] | None]:
         logger.warning(
@@ -316,7 +298,7 @@ class ToolExecutor:
     async def execute_tools(
         self,
         tool_calls: list[dict[str, Any]] | list[ToolCallObject],
-        caller_mode: Literal["Claude", "OpenAI", "Prompt"],
+        caller_mode: Literal["Native", "Prompt"],
     ) -> AsyncIterator[dict[str, Any]]:
         """Execute tools concurrently and yield status updates.
 

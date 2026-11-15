@@ -9,8 +9,9 @@ from open_llm_vtuber.agent.agents.basic_memory_agent import (
     BasicMemoryAgent,
 )
 from open_llm_vtuber.agent.input_types import BatchInput, TextData, TextSource
-from open_llm_vtuber.agent.stateless_llm.openai_compatible_llm import (
-    AsyncLLM as OpenAICompatibleAsyncLLM,
+from open_llm_vtuber.agent.stateless_llm.stateless_llm_interface import (
+    LLMError,
+    LLMToolsUnsupportedError,
 )
 from open_llm_vtuber.config_manager.agent import BasicMemoryAgentConfig
 from open_llm_vtuber.mcpp.json_detector import StreamJSONDetector
@@ -54,7 +55,7 @@ class DrainToolExecutorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(results, [])
 
 
-class _ClaudeLLM:
+class _TextThenToolLLM:
     def __init__(self):
         self.calls = 0
 
@@ -63,18 +64,18 @@ class _ClaudeLLM:
         if self.calls == 1:
 
             async def first_round():
-                yield {"type": "text_delta", "text": "A"}
-                yield {
-                    "type": "tool_use_complete",
-                    "data": {"name": "tool", "id": "1", "input": {}},
-                }
-                yield {"type": "message_stop"}
+                yield "A"
+                yield [
+                    ToolCallObject(
+                        id="1",
+                        function=ToolCallFunctionObject(name="tool", arguments="{}"),
+                    )
+                ]
 
             return first_round()
 
         async def second_round():
-            yield {"type": "text_delta", "text": "B"}
-            yield {"type": "message_stop"}
+            yield "B"
 
         return second_round()
 
@@ -90,19 +91,23 @@ class ToolLoopStateTests(unittest.IsolatedAsyncioTestCase):
         self.agent = BasicMemoryAgent.__new__(BasicMemoryAgent)
         self.agent._system = "system"
         self.agent._tool_executor = _ToolExecutor()
+        self.agent.prompt_mode_flag = False
+        self.agent._mcp_prompt_string = ""
+        self.agent._json_detector = StreamJSONDetector()
+        self.agent._tool_manager = None
         self.added = []
         self.agent._add_message = lambda content, role: self.added.append(
             (content, role)
         )
 
-    async def test_claude_loop_resets_text_between_tool_rounds(self):
-        self.agent._llm = _ClaudeLLM()
+    async def test_text_is_reset_between_tool_rounds(self):
+        self.agent._llm = _TextThenToolLLM()
 
-        _ = [item async for item in self.agent._claude_tool_interaction_loop([], [])]
+        _ = [item async for item in self.agent._tool_interaction_loop([], [])]
 
         self.assertEqual(self.added, [("A", "assistant"), ("B", "assistant")])
 
-    async def test_openai_native_tool_round_feeds_results_back(self):
+    async def test_native_tool_round_feeds_results_back(self):
         agent = self.agent
         agent.prompt_mode_flag = False
         agent._mcp_prompt_string = ""
@@ -113,7 +118,7 @@ class ToolLoopStateTests(unittest.IsolatedAsyncioTestCase):
 
         _ = [
             item
-            async for item in agent._openai_tool_interaction_loop(
+            async for item in agent._tool_interaction_loop(
                 [{"role": "user", "content": "hi"}], []
             )
         ]
@@ -136,10 +141,30 @@ class ToolLoopStateTests(unittest.IsolatedAsyncioTestCase):
         agent._tool_manager = object()
         agent._llm = _UnsupportedToolsLLM()
 
-        _ = [item async for item in agent._openai_tool_interaction_loop([], [])]
+        _ = [item async for item in agent._tool_interaction_loop([], [])]
 
         self.assertTrue(agent.prompt_mode_flag)
+        self.assertTrue(agent._native_tools_refused)
         self.assertIn(("hello", "assistant"), self.added)
+
+    async def test_llm_error_is_shown_but_not_remembered(self):
+        agent = self.agent
+        agent._llm = _FailingLLM()
+
+        items = [item async for item in agent._tool_interaction_loop([], [])]
+
+        self.assertEqual(items, ["partial", "Error calling the chat endpoint: boom"])
+        self.assertEqual(agent._llm.calls, 1)
+        self.assertEqual(self.added, [])
+
+    async def test_simple_chat_shows_llm_error_and_keeps_partial_reply(self):
+        agent = self.agent
+        agent._llm = _FailingLLM()
+
+        items = [item async for item in agent._simple_chat([])]
+
+        self.assertEqual(items[-1], "Error calling the chat endpoint: boom")
+        self.assertEqual(self.added, [("partial", "assistant")])
 
     async def test_prompt_mode_resets_json_detector_after_success(self):
         agent = self.agent
@@ -150,7 +175,7 @@ class ToolLoopStateTests(unittest.IsolatedAsyncioTestCase):
         agent._llm = _PromptModeLLM()
         agent._tool_executor = _PromptModeToolExecutor()
 
-        _ = [item async for item in agent._openai_tool_interaction_loop([], [])]
+        _ = [item async for item in agent._tool_interaction_loop([], [])]
 
         self.assertEqual(agent._json_detector.completed_jsons, [])
         self.assertNotIn("tool", agent._json_detector.buffer)
@@ -217,7 +242,8 @@ class _UnsupportedToolsLLM:
         if self.calls == 1:
 
             async def unsupported():
-                yield "__API_NOT_SUPPORT_TOOLS__"
+                raise LLMToolsUnsupportedError("no tools")
+                yield  # pragma: no cover - makes this an async generator
 
             return unsupported()
 
@@ -225,6 +251,20 @@ class _UnsupportedToolsLLM:
             yield "hello"
 
         return text_round()
+
+
+class _FailingLLM:
+    def __init__(self):
+        self.calls = 0
+
+    def chat_completion(self, _messages, _system, tools=None):
+        self.calls += 1
+
+        async def stream():
+            yield "partial"
+            raise LLMError("Error calling the chat endpoint: boom")
+
+        return stream()
 
 
 class _AlwaysToolLLM:
@@ -259,20 +299,20 @@ class ToolLoopTerminationTests(unittest.IsolatedAsyncioTestCase):
         agent._add_message = lambda _content, _role: None
         return agent
 
-    async def test_openai_loop_stops_without_tool_executor(self):
+    async def test_loop_stops_without_tool_executor(self):
         llm = _AlwaysToolLLM()
         agent = self._agent(llm, None)
 
-        items = [item async for item in agent._openai_tool_interaction_loop([], [])]
+        items = [item async for item in agent._tool_interaction_loop([], [])]
 
         self.assertEqual(llm.calls, 1)
         self.assertIn("not configured", items[-1])
 
-    async def test_openai_loop_is_bounded(self):
+    async def test_loop_is_bounded(self):
         llm = _AlwaysToolLLM()
         agent = self._agent(llm, _ToolExecutor())
 
-        items = [item async for item in agent._openai_tool_interaction_loop([], [])]
+        items = [item async for item in agent._tool_interaction_loop([], [])]
 
         self.assertEqual(llm.calls, DEFAULT_MAX_TOOL_ROUNDS)
         self.assertEqual(items[-1], TOOL_ROUND_LIMIT_NOTICE)
@@ -282,7 +322,7 @@ class ToolLoopTerminationTests(unittest.IsolatedAsyncioTestCase):
         agent = self._agent(llm, _ToolExecutor())
         agent._max_tool_rounds = 3
 
-        items = [item async for item in agent._openai_tool_interaction_loop([], [])]
+        items = [item async for item in agent._tool_interaction_loop([], [])]
 
         self.assertEqual(llm.calls, 3)
         self.assertEqual(items[-1], TOOL_ROUND_LIMIT_NOTICE)
@@ -341,7 +381,7 @@ class PromptModeRoundTests(unittest.IsolatedAsyncioTestCase):
 
         _ = [
             item
-            async for item in agent._openai_tool_interaction_loop(
+            async for item in agent._tool_interaction_loop(
                 [{"role": "user", "content": "hi"}], []
             )
         ]
@@ -356,7 +396,7 @@ class PromptModeRoundTests(unittest.IsolatedAsyncioTestCase):
         llm = _ScriptedPromptLLM([['{"not": "a tool call"}']])
         agent = self._agent(llm, _PromptToolExecutor([]))
 
-        items = [item async for item in agent._openai_tool_interaction_loop([], [])]
+        items = [item async for item in agent._tool_interaction_loop([], [])]
 
         self.assertEqual(len(llm.requests), 1)
         self.assertNotIn(TOOL_ROUND_LIMIT_NOTICE, items)
@@ -380,40 +420,76 @@ class ToolModeSelectionTests(unittest.IsolatedAsyncioTestCase):
             **kwargs,
         )
 
-    @staticmethod
-    def _openai_llm(support_tools):
-        llm = OpenAICompatibleAsyncLLM.__new__(OpenAICompatibleAsyncLLM)
-        llm.model = "m"
-        llm.support_tools = support_tools
-        scripted = _ScriptedPromptLLM([["hello"]])
-        llm.chat_completion = scripted.chat_completion
-        return llm, scripted
-
     async def _chat(self, agent):
         batch = BatchInput(texts=[TextData(source=TextSource.INPUT, content="hi")])
         return [item async for item in agent.chat(batch)]
 
-    async def test_tools_unsupported_llm_starts_in_prompt_mode(self):
-        llm, scripted = self._openai_llm(support_tools=False)
+    async def test_first_turn_offers_native_tools(self):
+        llm = _ScriptedPromptLLM([["hello"]])
         agent = self._agent(llm)
 
         await self._chat(agent)
 
-        _messages, system, tools = scripted.requests[0]
-        self.assertTrue(agent.prompt_mode_flag)
-        self.assertIn("MCP PROMPT", system)
-        self.assertIsNone(tools)
-
-    async def test_tools_supported_llm_starts_native(self):
-        llm, scripted = self._openai_llm(support_tools=True)
-        agent = self._agent(llm)
-
-        await self._chat(agent)
-
-        _messages, system, tools = scripted.requests[0]
+        _messages, system, tools = llm.requests[0]
         self.assertFalse(agent.prompt_mode_flag)
         self.assertNotIn("MCP PROMPT", system)
         self.assertEqual(tools, _FakeToolManager().get_formatted_tools("OpenAI"))
+
+    async def test_refused_tools_start_later_turns_in_prompt_mode(self):
+        llm = _RefusingLLM()
+        agent = self._agent(llm)
+
+        await self._chat(agent)
+        await self._chat(agent)
+
+        # Turn one: native request refused, then a prompt-mode retry.
+        # Turn two: prompt mode from the start, no second refusal.
+        self.assertEqual(
+            [tools is not None for _m, _s, tools in llm.requests],
+            [True, False, False],
+        )
+        self.assertIn("MCP PROMPT", llm.requests[2][1])
+
+    async def test_refusal_is_remembered_per_agent_not_on_the_shared_llm(self):
+        llm = _RefusingLLM()
+        first = self._agent(llm)
+        await self._chat(first)
+        requests_before = len(llm.requests)
+
+        second = self._agent(llm)
+        await self._chat(second)
+
+        # Another session on the same client decides for itself.
+        self.assertIsNotNone(llm.requests[requests_before][2])
+        self.assertFalse(hasattr(llm, "support_tools"))
+
+    async def test_switching_llm_forgets_the_refusal(self):
+        agent = self._agent(_RefusingLLM())
+        await self._chat(agent)
+        other = _ScriptedPromptLLM([["hello"]])
+
+        agent.use_llm(other)
+        await self._chat(agent)
+
+        self.assertIsNotNone(other.requests[0][2])
+
+
+class _RefusingLLM:
+    """Rejects any request that carries tools, as some local models do."""
+
+    def __init__(self):
+        self.requests = []
+
+    def chat_completion(self, messages, system, tools=None):
+        self.requests.append(([dict(m) for m in messages], system, tools))
+        refuse = tools is not None
+
+        async def stream():
+            if refuse:
+                raise LLMToolsUnsupportedError("no tools")
+            yield "hello"
+
+        return stream()
 
 
 class McpComponentWarningTests(unittest.TestCase):
@@ -432,10 +508,12 @@ class McpComponentWarningTests(unittest.TestCase):
 
 class MaxToolRoundsConfigTests(unittest.TestCase):
     def test_default_and_validation(self):
-        config = BasicMemoryAgentConfig(llm_provider="openai_llm")
+        config = BasicMemoryAgentConfig(llm_provider="openai_compatible_llm")
         self.assertEqual(config.max_tool_rounds, DEFAULT_MAX_TOOL_ROUNDS)
         with self.assertRaises(ValidationError):
-            BasicMemoryAgentConfig(llm_provider="openai_llm", max_tool_rounds=0)
+            BasicMemoryAgentConfig(
+                llm_provider="openai_compatible_llm", max_tool_rounds=0
+            )
 
     def test_clone_for_session_keeps_limit(self):
         agent = BasicMemoryAgent(

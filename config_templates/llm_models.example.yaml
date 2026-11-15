@@ -25,7 +25,10 @@ models:
     description: 响应快，适合日常对话 # optional, shown under the name
     # Any provider of `agent_config.llm_configs` in conf.yaml. The remaining
     # keys are that provider's settings, exactly as in conf.yaml.
-    provider: deepseek_llm
+    # Providers: openai_compatible_llm (Chat Completions), openai_responses_llm
+    # (Responses API), claude_llm, vertex_llm.
+    provider: openai_compatible_llm
+    base_url: https://api.deepseek.com/v1
     llm_api_key: ${DEEPSEEK_API_KEY}
     model: deepseek-chat
     temperature: 1.0
@@ -46,6 +49,23 @@ models:
     allowed_users:
       - alice@example.com
       - 0123456789abcdef0123456789abcdef
+
+  - id: gpt
+    name: GPT
+    provider: openai_responses_llm # OpenAI Responses API
+    llm_api_key: ${OPENAI_API_KEY}
+    model: gpt-5
+    reasoning_effort: low
+
+  - id: gemini-flash
+    name: Gemini Flash
+    provider: vertex_llm
+    # Service-account key file from the Google Cloud console. In the Docker
+    # image, put it in the mounted conf directory: /app/conf/vertex_credentials.json
+    # Google Cloud 控制台下载的服务账号密钥文件；Docker 部署时放进挂载的 conf 目录。
+    credentials_file: vertex_credentials.json
+    model: gemini-3-flash-preview
+    location: global
 
   - id: local-qwen
     name: 本地 Qwen

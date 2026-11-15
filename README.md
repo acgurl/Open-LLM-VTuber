@@ -355,7 +355,8 @@ By default a session answers with the LLM its character preset names
 models:
   - id: deepseek-chat
     name: DeepSeek Chat
-    provider: deepseek_llm          # any provider of agent_config.llm_configs
+    provider: openai_compatible_llm # any provider of agent_config.llm_configs
+    base_url: https://api.deepseek.com/v1
     llm_api_key: ${DEEPSEEK_API_KEY}
     model: deepseek-chat
   - id: claude
@@ -366,6 +367,12 @@ models:
     allowed_users: [alice@example.com]   # only these accounts see and can use it
 ```
 
+- Providers are one per wire protocol: `openai_compatible_llm` (Chat Completions: OpenAI,
+  DeepSeek, Ollama, LM Studio, Gemini, Zhipu, Groq, Mistral, ...), `openai_responses_llm`
+  (OpenAI Responses API), `claude_llm` (Anthropic) and `vertex_llm` (Google Vertex AI). The
+  former per-vendor names (`deepseek_llm`, `ollama_llm`, `openai_llm`, ...) still load: they
+  are mapped to `openai_compatible_llm` with their old default `base_url`, and a warning asks
+  you to rename them.
 - The top bar then shows a model picker. The choice is stored per account, survives character
   switches and reconnects, and also applies to that user's message-connector chats.
   "Character default" returns to the preset's own LLM.

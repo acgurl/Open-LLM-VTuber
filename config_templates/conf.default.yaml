@@ -120,11 +120,12 @@ character_config:
         # The Basic AI Agent. Nothing fancy.
         # choose one of the llm provider from the llm_config
         # and set the required parameters in the corresponding field
-        # examples:
-        # 'openai_compatible_llm', 'claude_llm', 'ollama_llm'
-        # 'openai_llm', 'gemini_llm', 'zhipu_llm', 'deepseek_llm', 'groq_llm'
-        # 'mistral_llm', 'lmstudio_llm', and more
-        llm_provider: 'ollama_llm'
+        # options:
+        # 'openai_compatible_llm' (OpenAI Chat Completions protocol: OpenAI, DeepSeek,
+        #   Ollama, LM Studio, Gemini, Zhipu, Groq, Mistral and every compatible endpoint)
+        # 'openai_responses_llm' (OpenAI Responses protocol)
+        # 'claude_llm' (Anthropic native protocol), 'vertex_llm' (Google Vertex AI native protocol)
+        llm_provider: 'openai_compatible_llm'
         # let ai speak as soon as the first comma is received on the first sentence
         # to reduced latency.
         faster_first_response: True
@@ -150,78 +151,61 @@ character_config:
       # a configuration pool for the credentials and connection details for
       # all of the stateless llm providers that will be used in different agents
 
-      # Stateless LLM with Template (For Non-ChatML LLMs, usually not needed)
-      stateless_llm_with_template:
-        base_url: 'http://localhost:8080/v1'
-        llm_api_key: 'somethingelse'
-        organization_id: null
-        project_id: null
-        model: 'qwen2.5:latest'
-        template: 'CHATML'
-        temperature: 1.0 # value between 0 to 2
-        interrupt_method: 'user'
+      # One entry per protocol. The former 'deepseek_llm', 'ollama_llm', 'openai_llm'
+      # and the like were OpenAI-compatible settings with another default base_url and
+      # are now part of 'openai_compatible_llm'; old files still load and are mapped
+      # automatically at startup, with a notice to rename.
 
-      # OpenAI Compatible inference backend
+      # OpenAI Chat Completions protocol (/v1/chat/completions): OpenAI and every
+      # compatible endpoint
       openai_compatible_llm:
+        # Common base_url values:
+        #   Ollama     http://localhost:11434/v1
+        #   LM Studio  http://localhost:1234/v1
+        #   OpenAI     https://api.openai.com/v1
+        #   DeepSeek   https://api.deepseek.com/v1
+        #   Gemini     https://generativelanguage.googleapis.com/v1beta/openai/
+        #   Zhipu      https://open.bigmodel.cn/api/paas/v4/
+        #   Groq       https://api.groq.com/openai/v1
+        #   Mistral    https://api.mistral.ai/v1
         base_url: 'http://localhost:11434/v1'
-        llm_api_key: 'somethingelse'
+        llm_api_key: 'somethingelse' # any non-empty text for a local server
         organization_id: null
         project_id: null
         model: 'qwen2.5:latest'
-        temperature: 1.0 # value between 0 to 2
+        temperature: 1.0 # value between 0 to 2; null leaves the API default
         interrupt_method: 'user'
         # This is the method to use for prompting the interruption signal.
         # If the provider supports inserting system prompt anywhere in the chat memory, use 'system'.
         # Otherwise, use 'user'. You don't usually need to change this setting.
 
-      # Claude API Configuration
+      # OpenAI Responses protocol (/v1/responses)
+      openai_responses_llm:
+        base_url: 'https://api.openai.com/v1'
+        llm_api_key: 'Your Open AI API key'
+        organization_id: null
+        project_id: null
+        model: 'gpt-5'
+        temperature: null # reasoning models reject it; keep null
+        reasoning_effort: null # e.g. 'low', 'medium', 'high'; null is the API default
+        max_output_tokens: null # cap on generated tokens, reasoning included; null: no cap
+        interrupt_method: 'system'
+
+      # Claude (Anthropic's native Messages API)
       claude_llm:
         base_url: 'https://api.anthropic.com'
         llm_api_key: 'YOUR API KEY HERE'
-        model: 'claude-3-haiku-20240307'
+        model: 'claude-opus-5-5'
+        max_tokens: 16000 # maximum tokens of one response
+        temperature: null # current Claude models reject it; keep null
 
-      ollama_llm:
-        base_url: 'http://localhost:11434/v1'
-        model: 'qwen2.5:latest'
-        temperature: 1.0 # value between 0 to 2
-        # seconds to keep the model in memory after inactivity.
-        # set to -1 to keep the model in memory forever (even after exiting open llm vtuber)
-        keep_alive: -1
-        unload_at_exit: True # unload the model from memory at exit
-
-      lmstudio_llm:
-        base_url: 'http://localhost:1234/v1'
-        model: 'qwen2.5:latest'
-        temperature: 1.0 # value between 0 to 2
-
-      openai_llm:
-        llm_api_key: 'Your Open AI API key'
-        model: 'gpt-4o'
-        temperature: 1.0 # value between 0 to 2
-
-      gemini_llm:
-        llm_api_key: 'Your Gemini API Key'
-        model: 'gemini-2.0-flash-exp'
-        temperature: 1.0 # value between 0 to 2
-
-      zhipu_llm:
-        llm_api_key: 'Your ZhiPu AI API key'
-        model: 'glm-4-flash'
-        temperature: 1.0 # value between 0 to 2
-
-      deepseek_llm:
-        llm_api_key: 'Your DeepSeek API key'
-        model: 'deepseek-chat'
-        temperature: 0.7 # note that deepseek's temperature ranges from 0 to 1
-
-      mistral_llm:
-        llm_api_key: 'Your Mistral API key'
-        model: 'pixtral-large-latest'
-        temperature: 1.0 # value between 0 to 2
-
-      groq_llm:
-        llm_api_key: 'your groq API key'
-        model: 'llama-3.3-70b-versatile'
+      # Vertex AI (Google Cloud), native API. Authenticates with the
+      # service-account key file downloaded from the Google Cloud console.
+      vertex_llm:
+        credentials_file: 'vertex_credentials.json' # path of the key file; keep it out of git
+        model: 'gemini-3-flash-preview'
+        location: 'global' # or a region such as 'us-central1'
+        project_id: null # null: use the project of the key file
         temperature: 1.0 # value between 0 to 2
 
   # === Automatic Speech Recognition ===

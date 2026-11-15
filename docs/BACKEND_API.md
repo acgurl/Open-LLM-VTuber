@@ -1487,7 +1487,8 @@ models:
   - id: deepseek-chat          # 稳定键：字母数字和 . _ : -，最长 64；保存为用户的选择
     name: DeepSeek Chat        # 选择器里显示的名字（缺省用 id，最长 80）
     description: 响应快        # 可选，显示在名字下方（最长 200）
-    provider: deepseek_llm     # agent_config.llm_configs 里的任一 provider
+    provider: openai_compatible_llm  # agent_config.llm_configs 里的任一 provider
+    base_url: https://api.deepseek.com/v1
     llm_api_key: ${DEEPSEEK_API_KEY}
     model: deepseek-chat
     allowed_users:             # 可选；不写或为空 = 所有人可用
@@ -1495,6 +1496,8 @@ models:
 ```
 
 - 除 `id` / `name` / `description` / `provider` / `allowed_users` 外的键就是该 provider 在 `llm_configs` 里的设置（含 `interrupt_method`），用同一套 pydantic 类校验；支持 `${ENV}` 替换。
+- **provider 按协议只有 4 个（2026-11-15）**：`openai_compatible_llm`（Chat Completions，OpenAI / DeepSeek / Ollama / LM Studio / Gemini / 智谱 / Groq / Mistral 等所有兼容端点）、`openai_responses_llm`（OpenAI Responses API，`/v1/responses`）、`claude_llm`（Anthropic Messages）、`vertex_llm`（Vertex AI 原生）。旧的 `openai_llm` / `ollama_llm` / `lmstudio_llm` / `gemini_llm` / `zhipu_llm` / `deepseek_llm` / `groq_llm` / `mistral_llm` / `stateless_llm_with_template` 已删除，但在 `conf.yaml`、角色文件和 `llm_models.yaml` 里仍可加载：校验时自动映射为 `openai_compatible_llm` 并补上原来的默认 `base_url`（及 Ollama / LM Studio 的占位 key、原默认 `interrupt_method`），日志给一次 WARNING 提示改名，磁盘文件不改写（`config_manager/llm_migration.py`）。角色选中的旧 provider 会成为 `openai_compatible_llm` 小节；未被选中的旧小节被忽略。`keep_alive` / `unload_at_exit` / `template` 不再生效。
+- LLM 出错（连不上、限流、鉴权失败等）时后端抛 `LLMError`，Agent 把它的提示文本（`Error calling the chat endpoint: ...`）作为本轮回复发给前端并朗读，但**不写入对话记忆和历史上下文**；WS 消息形状不变。
 - `allowed_users` 与角色预设完全同一规则（`config_manager/access.py`）：内部 user_id 或已验证的登录邮箱，大小写不敏感，**不匹配显示名**。写成非字符串列表的条目对所有人不可用。
 - **文件不存在 = 功能关闭**，行为与之前完全一致。文件每 5 秒内按 mtime 重新加载，不用重启；解析失败时沿用上一份目录（不会因为笔误放宽或丢失权限），单个条目非法只跳过该条并记 ERROR（日志只写出错的字段名，不写值）。
 - 该文件含密钥：已加入 `.gitignore` / `.dockerignore`，生产上权限设为 600。

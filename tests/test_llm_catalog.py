@@ -72,13 +72,40 @@ class ParseModelsTests(unittest.TestCase):
         self.assertEqual(settings["model"], "m-1")
         self.assertEqual(settings["temperature"], 1.0)
 
-    def test_provider_defaults_apply(self):
+    def test_removed_provider_is_mapped_with_its_default_url(self):
         raw = self.entry(provider="deepseek_llm")
         del raw["base_url"]
         entry = self.parse([raw])["m1"]
+        self.assertEqual(entry.provider, "openai_compatible_llm")
         self.assertEqual(
             dict(entry.settings)["base_url"], "https://api.deepseek.com/v1"
         )
+
+    def test_removed_local_provider_gets_a_placeholder_key(self):
+        entry = self.parse(
+            [{"id": "m1", "provider": "ollama_llm", "model": "qwen", "keep_alive": -1}]
+        )["m1"]
+        settings = dict(entry.settings)
+        self.assertEqual(entry.provider, "openai_compatible_llm")
+        self.assertEqual(settings["base_url"], "http://localhost:11434/v1")
+        self.assertEqual(settings["llm_api_key"], "default_api_key")
+        self.assertEqual(entry.interrupt_method, "system")
+        self.assertNotIn("keep_alive", settings)
+
+    def test_responses_provider_is_accepted(self):
+        entry = self.parse(
+            [
+                {
+                    "id": "m1",
+                    "provider": "openai_responses_llm",
+                    "llm_api_key": FAKE_KEY,
+                    "model": "gpt-test",
+                }
+            ]
+        )["m1"]
+        settings = dict(entry.settings)
+        self.assertEqual(settings["base_url"], "https://api.openai.com/v1")
+        self.assertIsNone(settings["temperature"])
 
     def test_public_info_never_exposes_the_endpoint_or_key(self):
         info = self.parse([self.entry(name="Nice", description="Fast")])["m1"]

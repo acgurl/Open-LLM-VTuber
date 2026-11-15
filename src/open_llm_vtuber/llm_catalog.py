@@ -9,7 +9,8 @@ models:
   - id: deepseek-chat            # stable key, stored as the user's choice
     name: DeepSeek Chat          # shown in the picker
     description: Fast, general   # optional, shown under the name
-    provider: deepseek_llm       # any agent_config.llm_configs provider
+    provider: openai_compatible_llm  # any agent_config.llm_configs provider
+    base_url: https://api.deepseek.com/v1
     llm_api_key: ${DEEPSEEK_API_KEY}
     model: deepseek-chat
     allowed_users:               # optional; empty or missing means everyone
@@ -45,6 +46,7 @@ from .config_manager.access import (
     parse_allowed_users,
     warn_unmatched_allowlist_entries,
 )
+from .config_manager.llm_migration import migrate_model_entry
 from .config_manager.stateless_llm import StatelessLLMConfigs
 from .config_manager.utils import read_yaml
 
@@ -110,7 +112,9 @@ def _parse_entry(raw: Any, source: str) -> LLMModelEntry | None:
         )
         return None
 
-    provider = raw.get("provider")
+    settings = {key: value for key, value in raw.items() if key not in _ENTRY_KEYS}
+    # Providers that were folded into openai_compatible_llm still load.
+    provider, settings = migrate_model_entry(raw.get("provider"), settings, source)
     config_class = (
         _PROVIDER_CONFIGS.get(provider) if isinstance(provider, str) else None
     )
@@ -134,7 +138,6 @@ def _parse_entry(raw: Any, source: str) -> LLMModelEntry | None:
     else:
         warn_unmatched_allowlist_entries(allowed_users, f"{source} ({model_id})")
 
-    settings = {key: value for key, value in raw.items() if key not in _ENTRY_KEYS}
     try:
         validated = config_class.model_validate(settings)
     except ValidationError as error:
@@ -289,7 +292,6 @@ class LLMModelCatalog:
                 return cached[1]
             llm = LLMFactory.create_llm(
                 llm_provider=entry.provider,
-                system_prompt="",
                 **{
                     key: value
                     for key, value in entry.settings
@@ -298,3 +300,14 @@ class LLMModelCatalog:
             )
             self._clients[entry.id] = (entry, llm)
             return llm
+
+    async def close(self) -> None:
+        """Close every client; for server shutdown, when no session uses them."""
+        with self._lock:
+            clients = [llm for _entry, llm in self._clients.values()]
+            self._clients.clear()
+        for llm in clients:
+            try:
+                await llm.close()
+            except Exception as error:
+                logger.warning(f"Closing an LLM client failed ({type(error).__name__})")

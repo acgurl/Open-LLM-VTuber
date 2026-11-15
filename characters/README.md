@@ -57,9 +57,11 @@ character_config:
   agent_config:
     agent_settings:
       basic_memory_agent:
-        llm_provider: 'openai_llm' # Specify OpenAI for this character
+        llm_provider: 'openai_compatible_llm' # OpenAI-compatible endpoint for this character
     llm_configs:
-      openai_llm:
+      openai_compatible_llm:
+        base_url: 'https://api.openai.com/v1'
+        llm_api_key: 'Your Open AI API key'
         model: 'gpt-4o-mini' # Use a faster model
         temperature: 0.5
 ```

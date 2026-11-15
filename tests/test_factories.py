@@ -121,10 +121,21 @@ class FactoryRegistryTests(unittest.TestCase):
         )
         self.assertTrue(choices <= set(_LLM_BUILDERS))
 
-    def test_openai_compatible_aliases_share_builder(self):
+    def test_llm_registry_has_one_builder_per_protocol(self):
+        self.assertEqual(
+            set(_LLM_BUILDERS),
+            {
+                "openai_compatible_llm",
+                "openai_responses_llm",
+                "claude_llm",
+                "vertex_llm",
+            },
+        )
+
+    def test_openai_compatible_builder_passes_settings(self):
         with patch.object(stateless_llm_factory, "OpenAICompatibleLLM") as llm:
             LLMFactory.create_llm(
-                "deepseek_llm",
+                "openai_compatible_llm",
                 model="model",
                 base_url="url",
                 llm_api_key="key",
@@ -142,17 +153,45 @@ class FactoryRegistryTests(unittest.TestCase):
             temperature=0.7,
         )
 
-    def test_template_llm_receives_temperature(self):
-        with patch.object(stateless_llm_factory, "StatelessLLMWithTemplate") as llm:
+    def test_responses_builder_passes_settings(self):
+        with patch.object(stateless_llm_factory, "OpenAIResponsesLLM") as llm:
             LLMFactory.create_llm(
-                "stateless_llm_with_template",
+                "openai_responses_llm",
                 model="model",
                 base_url="url",
-                template="CHATML",
-                temperature=0.3,
+                llm_api_key="key",
+                reasoning_effort="low",
             )
 
-        self.assertEqual(llm.call_args.kwargs["temperature"], 0.3)
+        kwargs = llm.call_args.kwargs
+        self.assertEqual(kwargs["model"], "model")
+        self.assertEqual(kwargs["base_url"], "url")
+        self.assertEqual(kwargs["reasoning_effort"], "low")
+        self.assertIsNone(kwargs["temperature"])
+
+    def test_claude_builder_passes_max_tokens_and_temperature(self):
+        with patch.object(stateless_llm_factory, "ClaudeLLM") as llm:
+            LLMFactory.create_llm(
+                "claude_llm",
+                model="model",
+                llm_api_key="key",
+                base_url="url",
+                max_tokens=2048,
+                temperature=0.5,
+            )
+
+        llm.assert_called_once_with(
+            model="model",
+            llm_api_key="key",
+            base_url="url",
+            max_tokens=2048,
+            temperature=0.5,
+        )
+
+    def test_removed_provider_names_are_not_built(self):
+        for name in ("deepseek_llm", "ollama_llm", "stateless_llm_with_template"):
+            with self.assertRaises(ValueError):
+                LLMFactory.create_llm(name)
 
     def test_unknown_llm_choice_raises(self):
         with self.assertRaises(ValueError):
