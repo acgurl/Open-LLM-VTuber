@@ -86,6 +86,7 @@
   border-radius: 999px;
   border: 1px solid var(--line);
   background:
+    radial-gradient(90px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
     linear-gradient(180deg, var(--sheen), transparent 72%),
     var(--glass-strong);
   color: var(--muted);
@@ -99,7 +100,8 @@
   transition:
     color 160ms,
     border-color 160ms,
-    transform 200ms var(--ease-spring);
+    transform 200ms var(--ease-spring),
+    --sheen-spot 360ms ease;
 }
 
 @keyframes jump-in {
@@ -162,6 +164,7 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   background:
+    radial-gradient(120px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
     linear-gradient(180deg, var(--sheen), transparent 70%),
     var(--bubble-ai);
   backdrop-filter: blur(14px) saturate(1.15);
@@ -176,7 +179,8 @@
     color 180ms var(--ease-snap),
     border-color 180ms var(--ease-snap),
     background-color 180ms var(--ease-snap),
-    transform 260ms var(--ease-spring);
+    transform 260ms var(--ease-spring),
+    --sheen-spot 360ms ease;
 }
 
 @keyframes starter-in {

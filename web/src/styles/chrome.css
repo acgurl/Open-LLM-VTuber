@@ -98,6 +98,7 @@
   padding: 0 17px;
   border-radius: 999px;
   background:
+    radial-gradient(160px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
     linear-gradient(180deg, var(--sheen), transparent 72%),
     var(--glass-strong);
   border: 1px solid var(--line);
@@ -108,7 +109,8 @@
   overflow: hidden;
   transition:
     border-color 240ms var(--ease-snap),
-    box-shadow 240ms var(--ease-snap);
+    box-shadow 240ms var(--ease-snap),
+    --sheen-spot 360ms ease;
 }
 
 .topbar-center.busy {
@@ -221,6 +223,7 @@
   border-radius: 999px;
   border: 1px solid var(--line);
   background:
+    radial-gradient(120px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
     linear-gradient(180deg, var(--sheen), transparent 72%),
     var(--glass-strong);
   color: var(--ink);
@@ -235,7 +238,8 @@
   transition:
     border-color 200ms var(--ease-snap),
     box-shadow 200ms var(--ease-snap),
-    transform 220ms var(--ease-spring);
+    transform 220ms var(--ease-spring),
+    --sheen-spot 360ms ease;
 }
 
 .model-pill > svg {
@@ -313,6 +317,7 @@
   border-radius: 18px;
   border: 1px solid var(--line);
   background:
+    radial-gradient(200px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
     linear-gradient(180deg, var(--sheen), transparent 38%),
     var(--glass-solid);
   backdrop-filter: blur(var(--blur)) saturate(1.2);
@@ -323,6 +328,7 @@
   transform: translateX(var(--menu-shift));
   transform-origin: top center;
   animation: model-menu-in 220ms var(--ease-spring);
+  transition: --sheen-spot 360ms ease;
 }
 
 /* 菜单展开时顶栏整体抬一层，压过同层级的摄像头胶囊 */
@@ -466,6 +472,7 @@
   border-radius: 50%;
   border: 1px solid var(--line);
   background:
+    radial-gradient(56px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
     linear-gradient(180deg, var(--sheen), transparent 72%),
     var(--glass-strong);
   color: var(--ink);
@@ -478,7 +485,8 @@
     color 160ms var(--ease-snap),
     border-color 200ms var(--ease-snap),
     box-shadow 200ms var(--ease-snap),
-    transform 220ms var(--ease-spring);
+    transform 220ms var(--ease-spring),
+    --sheen-spot 360ms ease;
   flex: none;
 }
 

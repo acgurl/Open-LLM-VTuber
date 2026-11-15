@@ -4,7 +4,9 @@
   top: calc(74px + env(safe-area-inset-top, 0px));
   right: calc(16px + env(safe-area-inset-right, 0px));
   border-radius: 18px;
-  background: var(--glass-strong);
+  background:
+    radial-gradient(200px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
+    var(--glass-strong);
   border: 1px solid var(--line);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -16,7 +18,8 @@
   -webkit-user-select: none;
   transition:
     box-shadow 240ms var(--ease-snap),
-    border-color 240ms var(--ease-snap);
+    border-color 240ms var(--ease-snap),
+    --sheen-spot 360ms ease;
 }
 
 .cam-window:hover {
@@ -28,13 +31,15 @@
   height: 44px;
   border-radius: 999px;
   background:
+    radial-gradient(120px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
     linear-gradient(180deg, var(--sheen), transparent 72%),
     var(--glass-strong);
   box-shadow: var(--shadow-btn);
   transition:
     box-shadow 200ms var(--ease-snap),
     border-color 200ms var(--ease-snap),
-    transform 220ms var(--ease-spring);
+    transform 220ms var(--ease-spring),
+    --sheen-spot 360ms ease;
 }
 
 @media (hover: hover) {

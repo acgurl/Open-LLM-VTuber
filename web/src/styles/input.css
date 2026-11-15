@@ -419,6 +419,7 @@
   padding: 7px;
   border-radius: 22px;
   background:
+    radial-gradient(200px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
     radial-gradient(140% 70% at 0% 0%, var(--sheen), transparent 62%),
     linear-gradient(180deg, var(--sheen), transparent 40%), var(--glass-strong);
   backdrop-filter: blur(28px) saturate(1.6) brightness(1.04);
@@ -427,7 +428,9 @@
   overflow: visible;
   transform-origin: 20px calc(100% + 24px);
   animation: composer-in 300ms var(--ease-spring);
-  transition: box-shadow 360ms var(--ease-snap);
+  transition:
+    box-shadow 360ms var(--ease-snap),
+    --sheen-spot 360ms ease;
 }
 
 /* 思考开着时菜单带一圈很淡的主题色光晕，跟加号上的小点呼应 */
