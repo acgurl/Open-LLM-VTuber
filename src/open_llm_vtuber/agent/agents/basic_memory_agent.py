@@ -117,8 +117,8 @@ class BasicMemoryAgent(AgentInterface):
 
     @staticmethod
     def _formatted_tools(tool_manager: ToolManager | None) -> list[dict[str, Any]]:
-        """The tools as function definitions, the format every LLM takes."""
-        return tool_manager.get_formatted_tools("OpenAI") if tool_manager else []
+        """The MCP tool definitions; each LLM backend sends them natively."""
+        return tool_manager.get_formatted_tools() if tool_manager else []
 
     def _set_llm(self, llm: StatelessLLMInterface):
         """Set the LLM for chat completion."""

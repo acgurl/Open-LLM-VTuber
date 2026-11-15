@@ -31,6 +31,7 @@ from .stateless_llm_interface import (
     generation_error,
     rate_limit_error,
     split_data_url,
+    tool_specs,
 )
 from ...mcpp.types import ToolCallObject
 
@@ -203,18 +204,13 @@ def _content_parts(content: Any) -> list[dict[str, Any]]:
 
 
 def _function_declarations(
-    tools: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None,
 ) -> list[dict[str, Any]]:
     declarations = []
-    for tool in tools:
-        function = tool.get("function") if isinstance(tool, dict) else None
-        if not isinstance(function, dict) or not function.get("name"):
-            continue
-        declaration: dict[str, Any] = {"name": function["name"]}
-        if function.get("description"):
-            declaration["description"] = function["description"]
-        if function.get("parameters"):
-            declaration["parametersJsonSchema"] = function["parameters"]
+    for name, description, schema in tool_specs(tools):
+        declaration: dict[str, Any] = {"name": name, "parametersJsonSchema": schema}
+        if description:
+            declaration["description"] = description
         declarations.append(declaration)
     return declarations
 

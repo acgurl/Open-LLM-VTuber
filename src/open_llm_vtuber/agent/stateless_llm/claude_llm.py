@@ -16,6 +16,7 @@ from .stateless_llm_interface import (
     generation_error,
     rate_limit_error,
     split_data_url,
+    tool_specs,
 )
 from ...mcpp.types import ToolCallObject
 
@@ -72,22 +73,12 @@ def _tool_result_block(message: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def claude_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Function tools in Claude's ``input_schema`` shape."""
-    converted = []
-    for tool in tools:
-        function = tool.get("function") if isinstance(tool, dict) else None
-        if not isinstance(function, dict) or not function.get("name"):
-            continue
-        converted.append(
-            {
-                "name": function["name"],
-                "description": function.get("description", ""),
-                "input_schema": function.get("parameters")
-                or {"type": "object", "properties": {}},
-            }
-        )
-    return converted
+def claude_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """Tools of a Messages request."""
+    return [
+        {"name": name, "description": description, "input_schema": schema}
+        for name, description, schema in tool_specs(tools)
+    ]
 
 
 class ClaudeLLM(StatelessLLMInterface):
@@ -213,7 +204,7 @@ class ClaudeLLM(StatelessLLMInterface):
                 max_tokens=self.max_tokens,
                 system=system or NOT_GIVEN,
                 messages=request_messages,
-                tools=claude_tools(tools) if tools else NOT_GIVEN,
+                tools=claude_tools(tools) or NOT_GIVEN,
                 temperature=(
                     NOT_GIVEN if self.temperature is None else self.temperature
                 ),

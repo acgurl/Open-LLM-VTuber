@@ -4,8 +4,8 @@
 each call answers from its arguments alone. Agents add memory, prompts and
 tools on top.
 
-One message and tool format goes in, whatever the wire protocol behind it
-(the OpenAI Chat Completions shape, which is also what the agent stores):
+One message format goes in, whatever the wire protocol behind it (the
+OpenAI Chat Completions shape, which is also what the agent stores):
 
 - ``{"role": "user" | "system", "content": str | parts}`` where a part is
   ``{"type": "text", "text": ...}`` or
@@ -15,10 +15,12 @@ One message and tool format goes in, whatever the wire protocol behind it
   (``arguments`` is a JSON string)
 - ``{"role": "tool", "tool_call_id", "content": str | parts, "is_error": bool}``
 
-Tools are OpenAI function definitions:
-``{"type": "function", "function": {"name", "description", "parameters"}}``.
+Tools are the MCP definitions as their servers publish them:
+``{"name", "description", "input_schema"}``. ``input_schema`` is the server's
+JSON Schema, untouched; every backend places it in its API's own tool field,
+so the model sees the schema the server wrote.
 
-Each backend converts these to its own protocol and back.
+Each backend converts the messages to its own protocol and back.
 """
 
 import abc
@@ -102,6 +104,26 @@ def content_text(content: Any) -> str:
     if images:
         texts.append(f"[{images} image(s) omitted]")
     return "\n".join(texts)
+
+
+_EMPTY_SCHEMA: dict[str, Any] = {"type": "object", "properties": {}}
+
+
+def tool_specs(tools: Any) -> list[tuple[str, str, dict[str, Any]]]:
+    """``(name, description, input schema)`` of each usable tool definition."""
+    specs = []
+    for tool in tools or []:
+        if not isinstance(tool, dict) or not tool.get("name"):
+            continue
+        schema = tool.get("input_schema")
+        specs.append(
+            (
+                tool["name"],
+                tool.get("description") or "",
+                schema if isinstance(schema, dict) and schema else _EMPTY_SCHEMA,
+            )
+        )
+    return specs
 
 
 class StatelessLLMInterface(metaclass=abc.ABCMeta):

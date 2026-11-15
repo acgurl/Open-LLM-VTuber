@@ -23,7 +23,7 @@ class McpInitializationTests(unittest.IsolatedAsyncioTestCase):
             patch.object(service_context_module, "ToolExecutor") as tool_executor,
         ):
             tool_adapter.return_value.build_tools = AsyncMock(
-                return_value=("prompt", ["openai"], ["claude"], {"raw": {}}, "")
+                return_value=("prompt", ["tool"], {"raw": {}}, "")
             )
             await context._init_mcp_components(True, ["server"])
 
@@ -31,8 +31,7 @@ class McpInitializationTests(unittest.IsolatedAsyncioTestCase):
         tool_adapter.return_value.build_tools.assert_awaited_once_with(["server"])
         self.assertEqual(context.mcp_prompt, "prompt")
         tool_manager.assert_called_once_with(
-            formatted_tools_openai=["openai"],
-            formatted_tools_claude=["claude"],
+            formatted_tools=["tool"],
             initial_tools_dict={"raw": {}},
             server_instructions="",
         )
@@ -53,7 +52,7 @@ class McpInitializationTests(unittest.IsolatedAsyncioTestCase):
             patch.object(service_context_module, "ToolExecutor"),
         ):
             tool_adapter.return_value.build_tools = AsyncMock(
-                return_value=("prompt", [], [], {}, "")
+                return_value=("prompt", [], {}, "")
             )
             await context._init_mcp_components(True, ["server"])
 

@@ -29,13 +29,28 @@ from open_llm_vtuber.mcpp.types import ToolCallObject
 FAKE_KEY = "fake-key-for-tests"
 PNG = "data:image/png;base64,QUJD"
 
-TOOLS = [
+# An MCP tool definition; the nested schema must reach every API untouched.
+SCHEMA = {
+    "type": "object",
+    "properties": {
+        "q": {"type": "string"},
+        "filter": {
+            "type": "object",
+            "properties": {"tags": {"type": "array", "items": {"type": "string"}}},
+            "required": ["tags"],
+        },
+        "limit": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+    },
+    "required": ["q"],
+}
+TOOLS = [{"name": "lookup", "description": "Look something up", "input_schema": SCHEMA}]
+CHAT_TOOLS = [
     {
         "type": "function",
         "function": {
             "name": "lookup",
             "description": "Look something up",
-            "parameters": {"type": "object", "properties": {"q": {"type": "string"}}},
+            "parameters": SCHEMA,
         },
     }
 ]
@@ -159,7 +174,7 @@ class OpenAICompatibleTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(stream.closed)
         request = completions.requests[0]
         self.assertEqual(request["temperature"], 0.3)
-        self.assertEqual(request["tools"], TOOLS)
+        self.assertEqual(request["tools"], CHAT_TOOLS)
         messages = request["messages"]
         self.assertEqual(messages[0], {"role": "system", "content": "SYS"})
         # Internal keys are not sent, and tool results are text.
@@ -220,7 +235,7 @@ class OpenAICompatibleTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(hasattr(llm, "support_tools"))
         with self.assertRaises(LLMToolsUnsupportedError):
             await _collect(llm.chat_completion(messages, tools=TOOLS))
-        self.assertEqual(completions.requests[1]["tools"], TOOLS)
+        self.assertEqual(completions.requests[1]["tools"], CHAT_TOOLS)
 
         # Without tools in the request the same text is an ordinary failure.
         with self.assertRaises(LLMError) as raised:
@@ -286,12 +301,26 @@ class OpenAIResponsesTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-    def test_tools_are_flattened(self):
-        (tool,) = response_tools(TOOLS)
-        self.assertEqual(tool["type"], "function")
-        self.assertEqual(tool["name"], "lookup")
-        self.assertEqual(tool["parameters"], TOOLS[0]["function"]["parameters"])
-        self.assertNotIn("function", tool)
+    def test_tools_carry_the_schema_untouched(self):
+        self.assertEqual(
+            response_tools(TOOLS),
+            [
+                {
+                    "type": "function",
+                    "name": "lookup",
+                    "description": "Look something up",
+                    "parameters": SCHEMA,
+                    "strict": False,
+                }
+            ],
+        )
+
+    def test_definitions_without_a_name_are_skipped(self):
+        self.assertEqual(response_tools([{"description": "x"}, "junk"]), [])
+
+    def test_missing_schema_becomes_an_empty_object(self):
+        (tool,) = response_tools([{"name": "ping"}])
+        self.assertEqual(tool["parameters"], {"type": "object", "properties": {}})
 
     async def test_stream_yields_text_then_tool_calls(self):
         call = SimpleNamespace(
@@ -445,17 +474,8 @@ class ClaudeTests(unittest.IsolatedAsyncioTestCase):
             "Error occurred during tool execution.",
         )
 
-    def test_tools_use_input_schema(self):
-        self.assertEqual(
-            claude_tools(TOOLS),
-            [
-                {
-                    "name": "lookup",
-                    "description": "Look something up",
-                    "input_schema": TOOLS[0]["function"]["parameters"],
-                }
-            ],
-        )
+    def test_tools_are_the_mcp_definitions(self):
+        self.assertEqual(claude_tools(TOOLS), TOOLS)
 
     async def test_request_uses_configured_limits(self):
         final = SimpleNamespace(stop_reason="end_turn", content=[])

@@ -94,7 +94,7 @@ class ToolAdapterInstructionsTests(unittest.IsolatedAsyncioTestCase):
             "cuc-kb": "newer_version 表示有更新一期",
             "user:abc": "Always pass absolute paths.",
         }
-        _, _, _, raw, section = await self.build(tools, instructions)
+        _, _, raw, section = await self.build(tools, instructions)
 
         user_tool = next(n for n, t in raw.items() if t.related_server == "user:abc")
         self.assertTrue(section.startswith("## 工具服务说明"))
@@ -106,16 +106,16 @@ class ToolAdapterInstructionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("silent", section)
 
     async def test_no_instructions_yields_empty_section(self):
-        _, _, _, _, section = await self.build({"cuc-kb": [_tool("kb_search")]}, {})
+        _, _, _, section = await self.build({"cuc-kb": [_tool("kb_search")]}, {})
         self.assertEqual(section, "")
 
     async def test_server_without_tools_is_omitted(self):
-        _, _, _, _, section = await self.build({"cuc-kb": []}, {"cuc-kb": "rules"})
+        _, _, _, section = await self.build({"cuc-kb": []}, {"cuc-kb": "rules"})
         self.assertEqual(section, "")
 
     async def test_user_instructions_are_capped(self):
         long_text = "x" * (MAX_USER_SERVER_INSTRUCTIONS_CHARS + 500)
-        _, _, _, _, section = await self.build(
+        _, _, _, section = await self.build(
             {"user:abc": [_tool("read_file")]}, {"user:abc": long_text}
         )
         self.assertIn("x" * MAX_USER_SERVER_INSTRUCTIONS_CHARS, section)

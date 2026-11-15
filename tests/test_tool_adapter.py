@@ -2,6 +2,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from open_llm_vtuber.mcpp.tool_adapter import ToolAdapter
+from open_llm_vtuber.mcpp.types import FormattedTool
 
 
 class ToolAdapterTests(unittest.IsolatedAsyncioTestCase):
@@ -25,24 +26,45 @@ class ToolAdapterTests(unittest.IsolatedAsyncioTestCase):
             patch.object(
                 self.adapter,
                 "format_tools_for_api",
-                return_value=(["openai"], ["claude"]),
+                return_value=["tool"],
             ),
         ):
             result = await self.adapter.build_tools(["server"])
 
-        self.assertEqual(result, ("prompt", ["openai"], ["claude"], raw_tools, ""))
+        self.assertEqual(result, ("prompt", ["tool"], raw_tools, ""))
         fetch.assert_awaited_once_with(["server"])
 
-    async def test_get_tools_delegates_to_build_tools(self):
-        with patch.object(
-            self.adapter,
-            "build_tools",
-            new=AsyncMock(return_value=("prompt", ["openai"], ["claude"], {}, "")),
-        ) as build_tools:
-            result = await self.adapter.get_tools(["server"])
+    def test_tools_keep_the_servers_schema(self):
+        schema = {
+            "type": "object",
+            "properties": {
+                "filter": {
+                    "type": "object",
+                    "properties": {"tags": {"type": "array"}},
+                    "required": ["tags"],
+                },
+                "limit": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+            },
+            "required": ["filter"],
+            "$defs": {"x": {"type": "string"}},
+        }
+        tools = self.adapter.format_tools_for_api(
+            {
+                "u_srv_search": FormattedTool(
+                    input_schema=schema,
+                    related_server="user:abc",
+                    description="Search",
+                    remote_name="search",
+                ),
+                "broken": "not a tool",
+            }
+        )
 
-        self.assertEqual(result, ("prompt", ["openai"], ["claude"]))
-        build_tools.assert_awaited_once_with(["server"])
+        self.assertEqual(
+            tools,
+            [{"name": "u_srv_search", "description": "Search", "input_schema": schema}],
+        )
+        self.assertIs(tools[0]["input_schema"], schema)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Constructs prompts for servers and tools, formats tool information for OpenAI API."""
+"""Fetches the tools of MCP servers and builds the prompts describing them."""
 
 import asyncio
 import json
@@ -308,99 +308,34 @@ class ToolAdapter:
 
     def format_tools_for_api(
         self, formatted_tools_dict: dict[str, FormattedTool]
-    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-        """Format tools to OpenAI and Claude function-calling compatible schemas."""
-        openai_tools = []
-        claude_tools = []
+    ) -> list[dict[str, Any]]:
+        """The tool definitions offered to the LLM.
 
-        if not formatted_tools_dict:
-            logger.warning(
-                "MC: Cannot format tools for API, input dictionary is empty."
-            )
-            return openai_tools, claude_tools
-
-        logger.debug(f"MC: Formatting {len(formatted_tools_dict)} tools for API usage.")
-
-        for tool_name, data_object in formatted_tools_dict.items():
+        Each is the MCP definition under the name the model sees; the input
+        schema is the server's own, unmodified (see ``stateless_llm_interface``).
+        """
+        tools: list[dict[str, Any]] = []
+        for tool_name, data_object in (formatted_tools_dict or {}).items():
             if not isinstance(data_object, FormattedTool):
                 logger.warning(f"MC: Skipping invalid tool format for '{tool_name}'")
                 continue
-
-            input_schema = data_object.input_schema
-            properties: dict[str, dict[str, str]] = input_schema.get("properties", {})
-            tool_description = data_object.description or "No description provided."
-            required_params = input_schema.get("required", [])
-
-            # Format for OpenAI
-            openai_function_params = {
-                "type": "object",
-                "properties": {},
-                "required": required_params,
-                "additionalProperties": False,  # Disallow extra properties
-            }
-            for param_name, param_info in properties.items():
-                param_schema = {
-                    "type": param_info.get("type", "string"),
-                    "description": param_info.get("description")
-                    or param_info.get("title", "No description provided."),
-                }
-                # Add enum if present
-                if "enum" in param_info:
-                    param_schema["enum"] = param_info["enum"]
-                # Handle array type correctly
-                if param_schema["type"] == "array" and "items" in param_info:
-                    param_schema["items"] = param_info["items"]
-                elif param_schema["type"] == "array" and "items" not in param_info:
-                    logger.warning(
-                        f"MC: Array parameter '{param_name}' in tool '{tool_name}' is missing 'items' definition. Assuming items are strings."
-                    )
-                    param_schema["items"] = {"type": "string"}  # Default or log warning
-
-                openai_function_params["properties"][param_name] = param_schema
-
-            openai_tools.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool_name,
-                        "description": tool_description,
-                        "parameters": openai_function_params,
-                    },
-                }
-            )
-
-            # Format for Claude
-            claude_input_schema = {
-                "type": "object",
-                "properties": properties,
-                "required": required_params,
-            }
-            claude_tools.append(
+            tools.append(
                 {
                     "name": tool_name,
-                    "description": tool_description,
-                    "input_schema": claude_input_schema,
+                    "description": data_object.description or "",
+                    "input_schema": data_object.input_schema,
                 }
             )
-
-        logger.debug(
-            f"MC: Finished formatting tools. OpenAI: {len(openai_tools)}, Claude: {len(claude_tools)}."
-        )
-        return openai_tools, claude_tools
+        logger.debug(f"MC: {len(tools)} tool definition(s) for the LLM.")
+        return tools
 
     async def build_tools(
         self, enabled_servers: list[str]
-    ) -> tuple[
-        str,
-        list[dict[str, Any]],
-        list[dict[str, Any]],
-        dict[str, FormattedTool],
-        str,
-    ]:
+    ) -> tuple[str, list[dict[str, Any]], dict[str, FormattedTool], str]:
         """Fetch tool info once.
 
-        Returns the prompt-mode tool listing, the OpenAI and Claude schemas,
-        the raw tools, and the server-instructions system-prompt section.
+        Returns the prompt-mode tool listing, the tool definitions for the
+        LLM, the raw tools, and the server-instructions system-prompt section.
         """
         logger.info(
             f"MC: Running dynamic tool construction for servers: {enabled_servers}"
@@ -414,21 +349,6 @@ class ToolAdapter:
         instructions_prompt = self.construct_server_instructions_prompt(
             instructions, servers_info
         )
-        openai_tools, claude_tools = self.format_tools_for_api(formatted_tools_dict)
+        tools = self.format_tools_for_api(formatted_tools_dict)
         logger.info("MC: Dynamic tool construction complete.")
-        return (
-            mcp_prompt_string,
-            openai_tools,
-            claude_tools,
-            formatted_tools_dict,
-            instructions_prompt,
-        )
-
-    async def get_tools(
-        self, enabled_servers: list[str]
-    ) -> tuple[str, list[dict[str, Any]], list[dict[str, Any]]]:
-        """Run the dynamic fetching and formatting process."""
-        mcp_prompt_string, openai_tools, claude_tools, _, _ = await self.build_tools(
-            enabled_servers
-        )
-        return mcp_prompt_string, openai_tools, claude_tools
+        return mcp_prompt_string, tools, formatted_tools_dict, instructions_prompt
