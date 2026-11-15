@@ -24,7 +24,7 @@ alwaysApply: true
 Some key files and directories:
 
 ```
-doc/                 # A deprecated directory
+docs/                # README.CN, BACKEND_API (WS/HTTP contract), HANDOFF (deployment), audits
 frontend/            # Compiled web frontend artifacts (from git submodule)
 config_templates/
     conf.default.yaml    # Configuration template for English users
@@ -40,7 +40,7 @@ conf.yaml            # User's configuration file, generated from a template
 
 - Frontend Repository: The frontend is a React application developed in a separate repository: `Open-LLM-VTuber-Web`. Its built artifacts are integrated into the `frontend/` directory of this backend repository via a git submodule.
 
-- Documentation Repository: The official documentation site is hosted in the `open-llm-vtuber.github.io` repository. When asked to generate documentation, create Markdown files in the project root. The user will be responsible for migrating them to the documentation site.
+- Documentation Repository: The official documentation site is hosted in the `open-llm-vtuber.github.io` repository. When asked to generate documentation, create Markdown files under `docs/`. The user will be responsible for migrating them to the documentation site.
 
 ### 1.2. Configuration Files
 
@@ -103,7 +103,7 @@ conf.yaml            # User's configuration file, generated from a template
   - First, try to solve the problem using the Python standard library or existing project dependencies defined in `pyproject.toml`.
   - If a new dependency is required, it must have a compatible license and be well-maintained.
   - Use `uv add`, `uv remove`, `uv run` instead of pip to manage dependencies. If user uses conda, install uv with pip then.
-  - After adding a new dependency, in addition to `pyproject.toml`, you must add the dependency to `requirements.txt` as well.
+  - `requirements.txt` and `requirements-bilibili.txt` are exported from `uv.lock` by the Sync Requirements workflow; do not edit them by hand (run `uv lock` after changing `pyproject.toml`).
 
 ### 4.2. Cross-Platform Compatibility
 

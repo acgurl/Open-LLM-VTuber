@@ -12,7 +12,7 @@ Open-LLM-VTuber is a voice-interactive AI companion with Live2D avatar support, 
 - **Install dependencies**: `uv sync` (uses uv package manager)
 - **Run server**: `uv run run_server.py`
 - **Run with verbose logging**: `uv run run_server.py --verbose`
-- **Update project**: `uv run upgrade.py`
+- **Update project**: `git pull && uv sync` (production deploys via the CD image)
 
 ### Code Quality
 - **Lint code**: `ruff check .`
@@ -117,6 +117,10 @@ The codebase uses the missing `_cleanup_failed_connection` method pattern - when
 - **Character definitions**: `characters/`
 - **Chat history**: `data/storage/open_llm_vtuber.db` (SQLite; legacy `chat_history/` JSON is imported and moved to `data/storage/legacy_history/` on first start)
 - **Cache**: `cache/` (audio files, temporary data)
+- **Docs**: `docs/` — `BACKEND_API.md` (WS/HTTP contract), `HANDOFF.md` (production deployment + change log), `README.CN.md`, `audits/`
+- **Config upgrade/sync** (runs on every start): `src/open_llm_vtuber/upgrade_codes/`
+- **Utility scripts**: `scripts/` (Bilibili live client, Live2D cache warmer)
+- **Runtime paths kept at the repo root on purpose**: `conf.yaml`, `model_dict.json`, `mcp_servers.json`, `llm_models.yaml`, `characters/`, `avatars/`, `backgrounds/`, `live2d-models/`, `prompts/`, `web_tool/` — the server resolves them relative to the working directory and the container start script symlinks `/app/conf/*` onto them
 
 ## Development Guidelines
 

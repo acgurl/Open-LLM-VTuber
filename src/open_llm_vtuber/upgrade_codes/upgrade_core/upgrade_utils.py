@@ -3,7 +3,10 @@ import platform
 import subprocess
 import sys
 import time
-from upgrade_codes.upgrade_core.constants import TEXTS, TEXTS_COMPARE
+from .constants import (
+    TEXTS,
+    TEXTS_COMPARE,
+)
 from typing import Any
 from collections.abc import Callable
 

@@ -207,7 +207,7 @@ class ToolExecutor:
             "tool_name": tool_name,
             "status": status,
             "content": content,
-            # BACKEND_API.md documents the "...Z" form; isoformat() already
+            # docs/BACKEND_API.md documents the "...Z" form; isoformat() already
             # ends in "+00:00", so appending "Z" would make Date.parse fail.
             "timestamp": datetime.datetime.now(datetime.timezone.utc)
             .isoformat()

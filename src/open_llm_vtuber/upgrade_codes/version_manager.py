@@ -1,8 +1,11 @@
 import json
 from pathlib import Path
 from packaging.version import parse as parse_version
-from upgrade_codes.upgrade_core.constants import USER_CONF, UPGRADE_TEXTS
-from upgrade_codes.from_version.v_1_1_1 import to_v_1_2_1
+from .upgrade_core.constants import (
+    USER_CONF,
+    UPGRADE_TEXTS,
+)
+from .from_version.v_1_1_1 import to_v_1_2_1
 
 
 class VersionUpgradeManager:

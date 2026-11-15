@@ -1,11 +1,11 @@
 from loguru import logger
-from upgrade_codes.upgrade_core.language import select_language
-from upgrade_codes.config_sync import ConfigSynchronizer
-from upgrade_codes.upgrade_core.upgrade_utils import UpgradeUtility
+from .upgrade_core.language import select_language
+from .config_sync import ConfigSynchronizer
+from .upgrade_core.upgrade_utils import UpgradeUtility
 import os
 from datetime import datetime
 import sys
-from upgrade_codes.upgrade_core.constants import USER_CONF, TEXTS
+from .upgrade_core.constants import USER_CONF, TEXTS
 
 
 class UpgradeManager:

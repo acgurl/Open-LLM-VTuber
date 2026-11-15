@@ -101,3 +101,6 @@ dist/
 .ruff_cache/
 .pytest_cache/
 .mypy_cache/
+
+# Documentation is not needed at runtime
+/docs/
