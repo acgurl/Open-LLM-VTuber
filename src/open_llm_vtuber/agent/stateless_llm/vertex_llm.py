@@ -401,6 +401,7 @@ class VertexLLM(StatelessLLMInterface):
         produced_text = False
         finish_reason = None
         think = ThinkMarkers()
+        last_thought = ""
 
         async for line in response.aiter_lines():
             if not line.startswith("data:"):
@@ -420,7 +421,18 @@ class VertexLLM(StatelessLLMInterface):
                 for part in (candidate.get("content") or {}).get("parts") or []:
                     if part.get("thought"):
                         # Thought summaries, sent when ``includeThoughts`` is on.
-                        for item in think.thought(part.get("text") or ""):
+                        # Each one is a section opening with a bold title and
+                        # no trailing newline; keep sections apart.
+                        text = part.get("text") or ""
+                        if (
+                            think.open
+                            and text.startswith("**")
+                            and not last_thought.endswith("\n")
+                        ):
+                            text = "\n\n" + text
+                        if text:
+                            last_thought = text
+                        for item in think.thought(text):
                             yield item
                         continue
                     if part.get("functionCall"):
