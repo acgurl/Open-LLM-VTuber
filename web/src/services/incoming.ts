@@ -170,12 +170,12 @@ export function handleServerMessage(msg: ServerMessage) {
     }
 
     case 'model-list':
-      useModels.getState().setList(msg.models ?? [], msg.current ?? null);
+      useModels.getState().setList(msg.models ?? [], msg.current ?? null, msg.thinking ?? null);
       break;
 
     case 'model-switched': {
       const models = useModels.getState();
-      models.confirmSwitch(msg.model ?? null);
+      models.confirmSwitch(msg.model ?? null, msg.thinking ?? null);
       const name =
         models.models.find((m) => m.id === msg.model)?.name ?? t('model.default');
       toast(t('model.switched', { name }), 'success');

@@ -22,6 +22,7 @@ import httpx
 import jwt
 from loguru import logger
 
+from ...utils.dicts import deep_merge
 from .stateless_llm_interface import (
     LLMError,
     StatelessLLMInterface,
@@ -436,8 +437,11 @@ class VertexLLM(StatelessLLMInterface):
         messages: list[dict[str, Any]],
         system: str | None = None,
         tools: list[dict[str, Any]] | None = None,
+        options: dict[str, Any] | None = None,
     ) -> AsyncIterator[str | list[ToolCallObject]]:
         body = self._request_body(messages, system, tools)
+        if options:
+            body = deep_merge(body, options)
         logger.debug(f"Sending {len(body['contents'])} contents to {self.model}")
 
         try:

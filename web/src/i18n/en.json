@@ -41,7 +41,9 @@
     "removeImage": "Remove image",
     "imageTooMany": "At most 4 images per message",
     "imageTooLarge": "Image too large (8 MiB max each)",
-    "tooLong": "Message too long (4000 chars max)"
+    "tooLong": "Message too long (4000 chars max)",
+    "more": "More: images and thinking",
+    "moreThinking": "More: images and thinking (thinking on: {{name}})"
   },
   "camera": {
     "start": "Start camera",
@@ -199,6 +201,22 @@
     "default": "Character default",
     "defaultDesc": "Use the model this character is configured with",
     "switched": "Switched to {{name}}"
+  },
+  "thinking": {
+    "label": "Think",
+    "title": "Thinking",
+    "level": {
+      "off": "Off",
+      "none": "Off",
+      "minimal": "Minimal",
+      "low": "Light",
+      "medium": "Medium",
+      "high": "Deep",
+      "xhigh": "Deeper",
+      "max": "Max"
+    },
+    "descOn": "Thinks before answering; slower",
+    "descOff": "Answers directly; fastest"
   },
   "server": {
     "Server is busy, please try again shortly": "Server is busy, please retry shortly",

@@ -41,7 +41,9 @@
     "removeImage": "移除图片",
     "imageTooMany": "最多附加 4 张图片",
     "imageTooLarge": "图片过大（单张上限 8 MiB）",
-    "tooLong": "消息过长（上限 4000 字）"
+    "tooLong": "消息过长（上限 4000 字）",
+    "more": "更多：图片与思考",
+    "moreThinking": "更多：图片与思考（思考已开启：{{name}}）"
   },
   "camera": {
     "start": "开启摄像头",
@@ -199,6 +201,22 @@
     "default": "角色默认",
     "defaultDesc": "使用当前角色预设的模型",
     "switched": "已切换到 {{name}}"
+  },
+  "thinking": {
+    "label": "思考",
+    "title": "思考强度",
+    "level": {
+      "off": "不思考",
+      "none": "不思考",
+      "minimal": "极简",
+      "low": "轻度",
+      "medium": "中等",
+      "high": "深度",
+      "xhigh": "更深",
+      "max": "极限"
+    },
+    "descOn": "回答前先推敲，会慢一些",
+    "descOff": "直接回答，速度最快"
   },
   "server": {
     "Server is busy, please try again shortly": "服务器繁忙，请稍后再试",

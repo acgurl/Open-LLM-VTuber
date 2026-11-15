@@ -15,9 +15,22 @@ models:
     model: deepseek-chat
     allowed_users:               # optional; empty or missing means everyone
       - alice@example.com
+    thinking:                    # optional; reasoning levels the user picks
+      default: off
+      levels:
+        - id: off
+          params: {thinking: {type: disabled}}
+        - id: high
+          params: {thinking: {type: enabled}, reasoning_effort: high}
 ```
 
 The remaining keys of an entry are that provider's ``llm_configs`` settings.
+
+``thinking`` lists the reasoning levels offered in the chat input. Each level's
+``params`` are extra request-body fields, deep-merged into every request made
+at that level, so any vendor's switch can be expressed. A level without
+``params`` gets the provider's standard effort field (see
+``_EFFORT_SHORTHAND``); ``off`` without ``params`` adds nothing.
 ``allowed_users`` follows the character presets' rule (``config_manager/
 access.py``): internal user ids or verified login emails, never display names.
 
@@ -57,7 +70,34 @@ MODEL_SETTING_KEY = "llm_model"
 _MODEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,63}")
 _MAX_NAME_CHARS = 80
 _MAX_DESCRIPTION_CHARS = 200
-_ENTRY_KEYS = frozenset({"id", "name", "description", "provider", "allowed_users"})
+_ENTRY_KEYS = frozenset(
+    {"id", "name", "description", "provider", "allowed_users", "thinking"}
+)
+
+# Prefix of the per-user setting that stores the thinking level of one model.
+THINKING_SETTING_PREFIX = "llm_thinking:"
+# The level id that means "no reasoning"; without ``params`` it adds nothing.
+THINKING_OFF = "off"
+# Level ids that mean "no reasoning" (``none`` is OpenAI's spelling).
+_OFF_IDS = frozenset({THINKING_OFF, "none"})
+_LEVEL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,31}")
+_MAX_LEVELS = 8
+_MAX_LEVEL_NAME_CHARS = 24
+
+
+def _effort_shorthand(provider: str, level: str) -> dict[str, Any] | None:
+    """Request fields of a level written without ``params``."""
+    if level == THINKING_OFF:
+        return {}
+    if provider == "openai_compatible_llm":
+        return {"reasoning_effort": level}
+    if provider == "openai_responses_llm":
+        return {"reasoning": {"effort": level}}
+    if provider == "claude_llm":
+        return {"output_config": {"effort": level}}
+    if provider == "vertex_llm":
+        return {"generationConfig": {"thinkingConfig": {"thinkingLevel": level}}}
+    return None
 
 
 def _provider_config_classes() -> dict[str, type[BaseModel]]:
@@ -74,6 +114,19 @@ _PROVIDER_CONFIGS = _provider_config_classes()
 
 
 @dataclass(frozen=True)
+class ThinkingLevel:
+    """One reasoning level of a model."""
+
+    id: str
+    name: str
+    # Extra request-body fields; compared so an edit replaces the entry.
+    params: dict[str, Any] = field(default_factory=dict)
+
+    def public_info(self) -> dict[str, str]:
+        return {"id": self.id, "name": self.name}
+
+
+@dataclass(frozen=True)
 class LLMModelEntry:
     """One selectable model."""
 
@@ -85,18 +138,99 @@ class LLMModelEntry:
     allowed_users: Any = field(compare=False, hash=False)
     scope: tuple[str, ...] = ()
     settings: tuple[tuple[str, Any], ...] = ()
+    thinking_levels: tuple[ThinkingLevel, ...] = ()
+    thinking_default: str | None = None
 
     @property
     def interrupt_method(self) -> str:
         return dict(self.settings).get("interrupt_method", "user")
 
-    def public_info(self) -> dict[str, str]:
-        """What a client may know; never the endpoint or the key."""
-        return {"id": self.id, "name": self.name, "description": self.description}
+    def thinking_level(self, level_id: Any) -> ThinkingLevel | None:
+        """The level ``level_id``, else the default one; None without levels."""
+        by_id = {level.id: level for level in self.thinking_levels}
+        if isinstance(level_id, str) and level_id in by_id:
+            return by_id[level_id]
+        return by_id.get(self.thinking_default) if self.thinking_default else None
+
+    def public_info(self) -> dict[str, Any]:
+        """What a client may know; never the endpoint, the key or the params."""
+        info: dict[str, Any] = {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description,
+        }
+        if len(self.thinking_levels) > 1:
+            info["thinking"] = {
+                "levels": [level.public_info() for level in self.thinking_levels],
+                "default": self.thinking_default,
+            }
+        return info
 
 
 def _text(value: Any, limit: int) -> str:
     return value.strip()[:limit] if isinstance(value, str) else ""
+
+
+def _parse_thinking(
+    raw: Any, provider: str, where: str
+) -> tuple[tuple[ThinkingLevel, ...], str | None]:
+    """The levels and default of a ``thinking`` block; empty when invalid."""
+    if raw is None:
+        return (), None
+    if not isinstance(raw, dict) or not isinstance(raw.get("levels"), list):
+        logger.error(f"{where}: 'thinking' needs a 'levels' list; ignored")
+        return (), None
+
+    levels: list[ThinkingLevel] = []
+    for item in raw["levels"][:_MAX_LEVELS]:
+        spec = {"id": item} if isinstance(item, str) else item
+        # YAML 1.1 reads a bare ``off`` as False.
+        if isinstance(spec, dict) and spec.get("id") is False:
+            spec = {**spec, "id": THINKING_OFF}
+        if item is False:
+            spec = {"id": THINKING_OFF}
+        level_id = spec.get("id") if isinstance(spec, dict) else None
+        if not isinstance(level_id, str) or not _LEVEL_ID.fullmatch(level_id):
+            logger.error(f"{where}: thinking level {level_id!r} is invalid; ignored")
+            return (), None
+        if any(level.id == level_id for level in levels):
+            logger.error(f"{where}: duplicate thinking level '{level_id}'; ignored")
+            return (), None
+        params = spec.get("params")
+        if params is None:
+            params = _effort_shorthand(provider, level_id)
+        if not isinstance(params, dict):
+            logger.error(
+                f"{where}: thinking level '{level_id}' needs 'params' (a mapping "
+                "of request fields); ignored"
+            )
+            return (), None
+        levels.append(
+            ThinkingLevel(
+                id=level_id,
+                name=_text(spec.get("name"), _MAX_LEVEL_NAME_CHARS),
+                params=params,
+            )
+        )
+    if not levels:
+        return (), None
+
+    default = raw.get("default")
+    if default is False:
+        default = THINKING_OFF
+    if not any(level.id == default for level in levels):
+        # Without a (valid) default nobody thinks until they ask to: the
+        # "off" level when there is one, else the first level.
+        fallback = next(
+            (level.id for level in levels if level.id in _OFF_IDS), levels[0].id
+        )
+        if default is not None:
+            logger.warning(
+                f"{where}: thinking default {default!r} is not a level; "
+                f"using '{fallback}'"
+            )
+        default = fallback
+    return tuple(levels), default
 
 
 def _parse_entry(raw: Any, source: str) -> LLMModelEntry | None:
@@ -152,6 +286,10 @@ def _parse_entry(raw: Any, source: str) -> LLMModelEntry | None:
         )
         return None
 
+    thinking_levels, thinking_default = _parse_thinking(
+        raw.get("thinking"), provider, f"{source} ({model_id})"
+    )
+
     return LLMModelEntry(
         id=model_id,
         name=_text(raw.get("name"), _MAX_NAME_CHARS) or model_id,
@@ -160,6 +298,8 @@ def _parse_entry(raw: Any, source: str) -> LLMModelEntry | None:
         allowed_users=allowed_users,
         scope=scope,
         settings=tuple(sorted(validated.model_dump().items())),
+        thinking_levels=thinking_levels,
+        thinking_default=thinking_default,
     )
 
 

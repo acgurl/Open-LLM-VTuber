@@ -194,6 +194,7 @@ class ClaudeLLM(StatelessLLMInterface):
         messages: list[dict[str, Any]],
         system: str | None = None,
         tools: list[dict[str, Any]] | None = None,
+        options: dict[str, Any] | None = None,
     ) -> AsyncIterator[str | list[ToolCallObject]]:
         request_messages = self._to_messages(messages)
         logger.debug(f"Sending {len(request_messages)} messages to {self.model}")
@@ -208,6 +209,7 @@ class ClaudeLLM(StatelessLLMInterface):
                 temperature=(
                     NOT_GIVEN if self.temperature is None else self.temperature
                 ),
+                extra_body=options or None,
             ) as stream:
                 produced_text = False
                 async for text in stream.text_stream:

@@ -135,6 +135,7 @@ class StatelessLLMInterface(metaclass=abc.ABCMeta):
         messages: list[dict[str, Any]],
         system: str | None = None,
         tools: list[dict[str, Any]] | None = None,
+        options: dict[str, Any] | None = None,
     ) -> AsyncIterator[str | list[ToolCallObject]]:
         """Stream one completion.
 
@@ -142,6 +143,8 @@ class StatelessLLMInterface(metaclass=abc.ABCMeta):
         - messages: The conversation, in the format of this module.
         - system: System prompt of this completion.
         - tools: Tools the model may call; ``None`` or empty offers none.
+        - options: Extra fields of the request body in the API's own names
+          (e.g. a thinking level), merged over what the backend builds.
 
         Yields:
         - ``str``: text, in the chunks the API delivers.

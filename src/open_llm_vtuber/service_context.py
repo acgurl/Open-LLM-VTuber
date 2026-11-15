@@ -29,7 +29,12 @@ from .storage import (
     UserHistoryStore,
 )
 from .session_tooling import SessionTooling, ToolingField
-from .llm_catalog import MODEL_SETTING_KEY, LLMModelCatalog, LLMModelEntry
+from .llm_catalog import (
+    MODEL_SETTING_KEY,
+    THINKING_SETTING_PREFIX,
+    LLMModelCatalog,
+    LLMModelEntry,
+)
 from .utils.dicts import deep_merge
 from .utils.security import redact_secrets, resolve_existing_file_within
 
@@ -144,6 +149,9 @@ class ServiceContext:
         self.active_model: LLMModelEntry | None = None
         # The LLM the character preset configured, to go back to.
         self._character_llm: tuple[Any, str] | None = None
+        # The user's thinking level per catalog model id; a missing or
+        # unknown level means the model's default.
+        self.thinking_choices: dict[str, str] = {}
 
     def __str__(self):
         if not self.character_config:
@@ -439,6 +447,7 @@ class ServiceContext:
                 self.selected_model_id, self.user_id, self.user_emails
             )
         if entry == self.active_model:
+            self._apply_thinking()
             return
 
         if entry is not None:
@@ -453,10 +462,34 @@ class ServiceContext:
         if entry is None:
             agent.use_llm(*self._character_llm)
         self.active_model = entry
+        self._apply_thinking()
         logger.info(
             f"Session {self.client_uid} now answers with "
             f"{'model ' + entry.id if entry else 'the character LLM'}"
         )
+
+    def thinking_level(self) -> str | None:
+        """The thinking level of the active model; None when it has none."""
+        if self.active_model is None:
+            return None
+        level = self.active_model.thinking_level(
+            self.thinking_choices.get(self.active_model.id)
+        )
+        return level.id if level else None
+
+    def _apply_thinking(self) -> None:
+        """Send the active model's chosen level with each request."""
+        agent = self.agent_engine
+        if not isinstance(agent, BasicMemoryAgent):
+            return
+        level = (
+            self.active_model.thinking_level(
+                self.thinking_choices.get(self.active_model.id)
+            )
+            if self.active_model is not None
+            else None
+        )
+        agent.request_options = dict(level.params) if level and level.params else None
 
     async def sync_model_selection(self) -> None:
         """Re-read the user's stored choice and apply it.
@@ -476,6 +509,45 @@ class ServiceContext:
             except Exception:
                 logger.exception("Failed to read the user's model choice")
         self._apply_model_selection()
+        await self.load_thinking_choice()
+
+    async def load_thinking_choice(self) -> None:
+        """Re-read and apply the stored thinking level of the active model."""
+        entry = self.active_model
+        repository = self.history_repository
+        if entry is None or repository is None or self.user_id is None:
+            self._apply_thinking()
+            return
+        try:
+            stored = await repository.get_user_setting(
+                user_id=self.user_id, key=THINKING_SETTING_PREFIX + entry.id
+            )
+        except Exception:
+            logger.exception("Failed to read the user's thinking level")
+            stored = self.thinking_choices.get(entry.id)
+        if stored is None:
+            self.thinking_choices.pop(entry.id, None)
+        else:
+            self.thinking_choices[entry.id] = stored
+        self._apply_thinking()
+
+    async def select_thinking(self, level_id: str, apply: bool = True) -> bool:
+        """Store the thinking level of the active model; False when invalid."""
+        entry = self.active_model
+        if entry is None or not any(
+            level.id == level_id for level in entry.thinking_levels
+        ):
+            return False
+        if self.history_repository is not None and self.user_id is not None:
+            await self.history_repository.set_user_setting(
+                user_id=self.user_id,
+                key=THINKING_SETTING_PREFIX + entry.id,
+                value=level_id,
+            )
+        self.thinking_choices[entry.id] = level_id
+        if apply:
+            self._apply_thinking()
+        return True
 
     async def select_model(self, model_id: str | None, apply: bool = True) -> bool:
         """Store and apply the user's choice; False when it is not available.
@@ -509,6 +581,7 @@ class ServiceContext:
             "type": "model-list",
             "models": [entry.public_info() for entry in models],
             "current": self.active_model.id if self.active_model else None,
+            "thinking": self.thinking_level(),
         }
 
     async def load_from_config(self, config: Config) -> None:

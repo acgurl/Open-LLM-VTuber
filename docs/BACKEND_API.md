@@ -269,6 +269,7 @@ Cookie（`auth/manager.py`）：
 | `switch-config` | `file`: string（**键名是 `file`**，不是 `config`/`name`；缺失则静默无响应） | `set-model-and-conf` + `config-switched`，或 `error`（无权限时为 `Character not available`）。单聊中有正在进行的一轮时先按 `interrupt-signal`（`text:""`）打断，见 13.2 |
 | `fetch-models` | 无 | `model-list`（已按当前用户的模型权限过滤），见第 24 节 |
 | `switch-model` | `model`: string \| null（`null` = 回到角色预设自带的 LLM） | `model-switched`，或 `error`（`Model not available`）+ `model-list`。对话记忆与历史不变；单聊中有正在进行的一轮时先打断，见 24.2 |
+| `set-thinking` | `level`: string（当前模型的思考档位 id） | `model-list`；档位无效时先回 `error`（`Thinking level not available`）。从下一次请求起生效，不打断，见 24.5 |
 | `request-init-config` | 无 | `set-model-and-conf`（含 `client_uid`） |
 | `fetch-backgrounds` | 无 | `background-files` |
 | `heartbeat` | 无 | `heartbeat-ack` |
@@ -341,9 +342,9 @@ Cookie（`auth/manager.py`）：
 
 **`background-files`** — `{ "type":"background-files", "files":["bg1.png", ...] }`（`websocket_handler.py:766-768`）。只有 basename，需自己拼 `/bg/`。
 
-**`model-list`** — `{ "type":"model-list", "models":[{"id":"deepseek-chat","name":"DeepSeek Chat","description":"..."}], "current":"deepseek-chat" }`。当前账号可选的 LLM 模型和正在使用的那个（`current: null` = 角色预设自带的 LLM）；连接建立时推送一次，之后响应 `fetch-models`。`models` 为空表示后台没有开启模型选择。详见第 24 节。
+**`model-list`** — `{ "type":"model-list", "models":[{"id":"deepseek-chat","name":"DeepSeek Chat","description":"...","thinking":{...}}], "current":"deepseek-chat", "thinking":"off" }`。当前账号可选的 LLM 模型和正在使用的那个（`current: null` = 角色预设自带的 LLM）；连接建立时推送一次，之后响应 `fetch-models`。`models` 为空表示后台没有开启模型选择。详见第 24 节。
 
-**`model-switched`** — `{ "type":"model-switched", "model":"deepseek-chat" }`（或 `"model": null`），`switch-model` 成功的回执。
+**`model-switched`** — `{ "type":"model-switched", "model":"deepseek-chat", "thinking":"off" }`（或 `"model": null`），`switch-model` 成功的回执；`thinking` 是新模型生效的思考档位（无档位为 `null`）。
 
 **`heartbeat-ack`** — `{ "type":"heartbeat-ack" }`，无其它字段。
 
@@ -1508,10 +1509,11 @@ models:
 | --- | --- | --- | --- |
 | C→S | `fetch-models` | 无 | 回 `model-list`。同时重新读取该用户保存的选择并应用 |
 | C→S | `switch-model` | `model`: string \| null | `null` = 回到角色预设自带的 LLM。成功回 `model-switched`；模型不存在或无权限回 `error`（`Model not available`）并紧跟一条最新的 `model-list` |
-| S→C | `model-list` | `models`: `[{id,name,description}]`，`current`: string \| null | 只含当前账号可用的模型；`current` 是此刻实际在用的目录模型，`null` 表示在用角色预设的 LLM。**连接建立时主动推送一次**（见 7.4）。`models` 为空时前端不应显示选择器 |
-| S→C | `model-switched` | `model`: string \| null | 切换已生效 |
+| C→S | `set-thinking` | `level`: string | 设定当前模型的思考档位，见 24.5 |
+| S→C | `model-list` | `models`: `[{id,name,description,thinking?}]`，`current`: string \| null，`thinking`: string \| null | 只含当前账号可用的模型；`current` 是此刻实际在用的目录模型，`null` 表示在用角色预设的 LLM；`thinking` 是 `current` 生效的思考档位（无档位为 `null`）。**连接建立时主动推送一次**（见 7.4）。`models` 为空时前端不应显示选择器 |
+| S→C | `model-switched` | `model`: string \| null，`thinking`: string \| null | 切换已生效；`thinking` 同上（群聊轮次中延后生效时为 `null`） |
 
-- **`base_url`、API key、上游模型名永远不下发**，前端只拿到 `id` / `name` / `description`。
+- **`base_url`、API key、上游模型名和思考档位的 `params` 永远不下发**，前端只拿到 `id` / `name` / `description` 和档位的 `id` / `name`。
 - 权限在服务端三处校验：下发列表时、`switch-model` 时、**每一轮对话开始前**（`conversation_utils.sync_turn_model`）。所以把某人从 `allowed_users` 移除、删除模型或改了模型配置，都在对方下一条消息生效，不需要重连；失去权限的会话自动回落到角色预设的 LLM，保存的选择保留（权限恢复后自动生效）。
 - 切换**只替换 agent 使用的 LLM 客户端**：对话记忆、当前历史、工具（MCP）和系统提示词不变，`history_uid` 不变，不需要重建历史。`interrupt_method` 跟随所选模型。
 - 单聊中有一轮正在进行时，`switch-model` 先按 `interrupt-signal`（`text:""`）打断，语义同 13.2 的 `switch-config`（没有回执，前端自己停播放、收气泡）。群聊轮次进行中时只保存选择，该成员的下一轮生效，此时 `model-switched.model` 是刚保存的值。
@@ -1526,6 +1528,36 @@ models:
 ### 24.4 前端参考实现
 
 `web/src/components/ModelPicker.tsx`：顶栏配置名大岛右侧的独立小岛（≤520px 时降到第二行左侧的小胶囊），点开下拉列出"角色默认" + `models`；每次打开发一次 `fetch-models`。状态在 `web/src/stores/models.ts`，`switch-model` 发出后等 `model-switched` 或 `error` 再解除 loading。
+
+### 24.5 思考档位（2026-11-15）
+
+目录模型可以在 `llm_models.yaml` 里声明思考档位，用户在输入框左侧的思考按钮里选择。没有声明档位的模型（以及角色预设自带的 LLM）不显示按钮，请求不带任何额外字段，行为与之前一致。
+
+```yaml
+  - id: deepseek-flash
+    provider: openai_compatible_llm
+    base_url: https://api.deepseek.com/v1
+    llm_api_key: ${DEEPSEEK_API_KEY}
+    model: deepseek-flash
+    thinking:
+      default: off              # 用户没选过时的档位；缺省或无效时取 off/none 档（没有则取第一档）
+      levels:
+        - id: off               # 档位 id：字母数字和 . _ -，最长 32
+          params: {thinking: {type: disabled}}
+        - id: high
+          name: 深度思考         # 可选；缺省时前端按 id 翻译（off/low/medium/high/xhigh/max 等）
+          params: {thinking: {type: enabled}, reasoning_effort: high}
+        - max                   # 简写：不写 params 时用 provider 的标准强度字段
+```
+
+- `params` 是**请求体的额外字段**，按各 API 自己的字段名书写，深合并进每次请求（Chat Completions / Responses / Messages 走 SDK 的 `extra_body`，Vertex 合并进 JSON 请求体）。因此任何厂商的开关都能表达：DeepSeek `thinking.type` + `reasoning_effort`、百炼/Qwen `enable_thinking`、OpenAI `reasoning_effort`、Claude `output_config.effort`、Gemini `generationConfig.thinkingConfig` 等。
+- 不写 `params` 的简写：`off` 不加任何字段；其他 id 按 provider 映射为 `openai_compatible_llm` → `reasoning_effort: <id>`，`openai_responses_llm` → `reasoning.effort`（与该模型配置的 `reasoning_effort` 深合并），`claude_llm` → `output_config.effort`，`vertex_llm` → `generationConfig.thinkingConfig.thinkingLevel`。**模型默认就会思考时（如 DeepSeek 新模型、Claude Opus 5.5），`off` 必须写明关闭用的 `params`**，否则“不思考”档实际仍按模型默认。
+- 校验：档位最多 8 个；id 非法、重复、`params` 不是映射、或没有简写可用时，整个 `thinking` 块忽略并记 ERROR，模型本身照常可用。只有一个档位时按该档请求但不显示按钮。YAML 的裸 `off` 会被解析成布尔 false，代码已按 `off` 处理。
+- 选择**按账号、按模型**保存：`user_settings` 键 `llm_thinking:<model_id>`。换到别的模型再换回来时恢复上次的档位；无效值回落到 `default`。每轮开始前随 `sync_model_selection` 一起重新读取。
+- `set-thinking` 不打断正在进行的一轮：已发出的请求不变，同一轮之后的工具调用轮次与下一轮使用新档位；群聊轮次进行中时只保存，该成员下一轮生效。
+- 思考过程（`reasoning_content` / thinking 块）**不显示、不朗读、不写入历史**。例外：`openai_compatible_llm` 在模型发起工具调用时，按首个 tool_call id 暂存该轮 `reasoning_content`，在回传工具结果的后续请求里随 assistant 消息带回（DeepSeek 思考模式的工具调用要求如此）；`claude_llm` 原本就原样保留含工具调用的 assistant 块。
+
+前端：输入条左侧的加号按钮（`InputBar.tsx`）展开菜单，上半是图片来源（上传 / 拍照 / 截屏），下半是 `ThinkingControls.tsx` 的思考区：一行“思考”开关，开启后在下方出现强度分段（只列非 off 档）；重新开启时回到本标签页上次用过的强度，没有则用最轻的一档。没有 off 档的模型只显示强度分段。思考开着时加号上有一颗主题色小点。状态在 `web/src/stores/models.ts` 的 `thinking`，点选后先本地更新，再以服务端回的 `model-list` 为准。
 
 ---
 
@@ -1561,7 +1593,7 @@ models:
 
 **客户端 → 服务端（`/client-ws`）**
 
-`text-input`、`mic-audio-data`、`mic-audio-end`、`interrupt-signal`、`frontend-playback-complete`、`ai-speak-signal`、`audio-play-start`、`fetch-configs`、`switch-config`、`fetch-models`、`switch-model`、`request-init-config`、`fetch-backgrounds`、`fetch-history-list`、`fetch-and-set-history`、`create-new-history`、`delete-history`、`add-client-to-group`、`remove-client-from-group`、`request-group-info`、`heartbeat`、`register-local-mcp`、`unregister-local-mcp`、`local-tool-result`
+`text-input`、`mic-audio-data`、`mic-audio-end`、`interrupt-signal`、`frontend-playback-complete`、`ai-speak-signal`、`audio-play-start`、`fetch-configs`、`switch-config`、`fetch-models`、`switch-model`、`set-thinking`、`request-init-config`、`fetch-backgrounds`、`fetch-history-list`、`fetch-and-set-history`、`create-new-history`、`delete-history`、`add-client-to-group`、`remove-client-from-group`、`request-group-info`、`heartbeat`、`register-local-mcp`、`unregister-local-mcp`、`local-tool-result`
 
 **服务端 → 客户端（`/client-ws` 文本通道）**
 

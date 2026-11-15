@@ -110,6 +110,7 @@ class WebSocketHandler:
             "switch-config": self._handle_config_switch,
             "fetch-models": self._handle_fetch_models,
             "switch-model": self._handle_model_switch,
+            "set-thinking": self._handle_set_thinking,
             "fetch-backgrounds": self._handle_fetch_backgrounds,
             "audio-play-start": self._handle_audio_play_start,
             "request-init-config": self._handle_init_config_request,
@@ -835,8 +836,39 @@ class WebSocketHandler:
             )
             return
 
-        current = model_id if deferred else context.model_list_payload()["current"]
-        await self._send_json(websocket, {"type": "model-switched", "model": current})
+        if deferred:
+            current, thinking = model_id, None
+        else:
+            await context.load_thinking_choice()
+            payload = context.model_list_payload()
+            current, thinking = payload["current"], payload["thinking"]
+        await self._send_json(
+            websocket,
+            {"type": "model-switched", "model": current, "thinking": thinking},
+        )
+
+    async def _handle_set_thinking(
+        self, websocket: WebSocket, client_uid: str, data: dict
+    ) -> None:
+        """Pick the thinking level of the model in use, from the next request."""
+        context = self.client_contexts[client_uid]
+        level = data.get("level")
+        # A running group turn keeps its settings; the next turn re-reads them.
+        deferred = self._group_turn_running(client_uid)
+        try:
+            changed = isinstance(level, str) and await context.select_thinking(
+                level, apply=not deferred
+            )
+        except Exception:
+            logger.exception("Failed to set the thinking level")
+            changed = False
+        if not changed:
+            await self._send_json(
+                websocket, {"type": "error", "message": "Thinking level not available"}
+            )
+        await self._send_json(
+            websocket, context.model_list_payload(), ensure_ascii=False
+        )
 
     def _group_turn_running(self, client_uid: str) -> bool:
         group = self.chat_group_manager.get_client_group(client_uid)

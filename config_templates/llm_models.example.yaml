@@ -33,6 +33,35 @@ models:
     model: deepseek-chat
     temperature: 1.0
 
+  - id: deepseek-flash
+    name: DeepSeek Flash
+    provider: openai_compatible_llm
+    base_url: https://api.deepseek.com/v1
+    llm_api_key: ${DEEPSEEK_API_KEY}
+    model: deepseek-flash
+    # Optional reasoning levels, picked with the thinking button in the chat
+    # input. `params` are extra request-body fields (the API's own names),
+    # merged into every request at that level. A level without `params` uses
+    # the provider's standard effort field (Chat Completions: reasoning_effort;
+    # Responses: reasoning.effort; Claude: output_config.effort; Vertex:
+    # generationConfig.thinkingConfig.thinkingLevel); `off` without `params`
+    # adds nothing, so spell out how to disable thinking for models that think
+    # by default. A user's choice is stored per account and per model.
+    # 可选的思考档位，用户在输入框的思考按钮里选择。`params` 是请求体的额外字段
+    # （用该 API 自己的字段名），按档位合并进每次请求。不写 `params` 时用该
+    # provider 的标准强度字段；`off` 不写 `params` 则什么都不加，所以默认就会
+    # 思考的模型要写明关闭方式。选择按账号、按模型保存。
+    thinking:
+      default: off
+      levels:
+        - id: off
+          params: {thinking: {type: disabled}}
+        - id: high
+          name: 深度思考 # optional; known ids are translated by the UI
+          params: {thinking: {type: enabled}, reasoning_effort: high}
+        - id: max
+          params: {thinking: {type: enabled}, reasoning_effort: max}
+
   - id: claude
     name: Claude
     description: 仅限指定账号
@@ -56,6 +85,10 @@ models:
     llm_api_key: ${OPENAI_API_KEY}
     model: gpt-5
     reasoning_effort: low
+    thinking: # shorthand: reasoning.effort = the level id
+      # Without `default`, users start on the "off"/"none" level when there is
+      # one (else the first level). 不写 default 时默认“不思考”档（没有则取第一档）。
+      levels: [minimal, low, medium, high]
 
   - id: gemini-flash
     name: Gemini Flash
