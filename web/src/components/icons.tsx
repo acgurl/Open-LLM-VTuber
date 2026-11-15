@@ -114,6 +114,22 @@ export function CheckIcon() {
   );
 }
 
+export function ChevronDownIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+export function SparkIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3.5 13.9 9a2 2 0 0 0 1.1 1.1l5.5 1.9-5.5 1.9a2 2 0 0 0-1.1 1.1L12 20.5 10.1 15A2 2 0 0 0 9 13.9L3.5 12 9 10.1A2 2 0 0 0 10.1 9z" />
+    </svg>
+  );
+}
+
 export function ArrowDownIcon() {
   return (
     <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

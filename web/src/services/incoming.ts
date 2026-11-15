@@ -3,6 +3,7 @@ import { useChat } from '../stores/chat';
 import { useHistory } from '../stores/history';
 import { useSettings } from '../stores/settings';
 import { useGroup } from '../stores/group';
+import { useModels } from '../stores/models';
 import { toast } from '../stores/toast';
 import { audioPlayer } from './audioPlayer';
 import { audioChannel } from './audioChannel';
@@ -168,6 +169,19 @@ export function handleServerMessage(msg: ServerMessage) {
       break;
     }
 
+    case 'model-list':
+      useModels.getState().setList(msg.models ?? [], msg.current ?? null);
+      break;
+
+    case 'model-switched': {
+      const models = useModels.getState();
+      models.confirmSwitch(msg.model ?? null);
+      const name =
+        models.models.find((m) => m.id === msg.model)?.name ?? t('model.default');
+      toast(t('model.switched', { name }), 'success');
+      break;
+    }
+
     case 'background-files':
       useSettings.getState().setBackgroundFiles(msg.files ?? []);
       break;
@@ -214,6 +228,7 @@ export function handleServerMessage(msg: ServerMessage) {
 
     case 'error':
       useSettings.getState().setSwitching(false);
+      useModels.getState().cancelSwitch();
       toast(translateServer(msg.message), 'error');
       break;
   }

@@ -193,6 +193,13 @@
     "switchFailed": "角色切换失败，请重试",
     "generic": "出错了"
   },
+  "model": {
+    "title": "模型",
+    "pick": "切换模型（当前：{{name}}）",
+    "default": "角色默认",
+    "defaultDesc": "使用当前角色预设的模型",
+    "switched": "已切换到 {{name}}"
+  },
   "server": {
     "Server is busy, please try again shortly": "服务器繁忙，请稍后再试",
     "Audio input is too long; the recording was discarded": "录音过长，已被丢弃，请重录",
@@ -200,7 +207,8 @@
     "Character not available": "该角色仅限指定用户使用",
     "Invalid request": "请求无效",
     "Cannot group clients belonging to different users": "不能把不同账户的连接拉进群聊",
-    "Only group owner or self can remove members": "只有群主或本人可以移出成员"
+    "Only group owner or self can remove members": "只有群主或本人可以移出成员",
+    "Model not available": "该模型不可用，或仅限指定用户使用"
   },
   "drawer": {
     "history": "历史",

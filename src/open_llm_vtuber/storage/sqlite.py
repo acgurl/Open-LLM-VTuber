@@ -21,6 +21,8 @@ from .base import (
 )
 
 
+MAX_USER_SETTING_CHARS = 1024
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS schema_migrations (
     version INTEGER PRIMARY KEY,
@@ -127,6 +129,14 @@ CREATE TABLE IF NOT EXISTS connector_conversations (
         REFERENCES histories(id) ON DELETE CASCADE ON UPDATE CASCADE,
     updated_at TEXT NOT NULL,
     PRIMARY KEY (connector_id, chat_key, user_id, conf_uid)
+);
+
+CREATE TABLE IF NOT EXISTS user_settings (
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, key)
 );
 """
 
@@ -260,7 +270,8 @@ class SQLiteHistoryRepository(HistoryRepository):
             # Version 5: transport (Streamable HTTP / legacy SSE).
             # Version 6: persisted tool calls.
             # Version 7: message connector identities and conversations.
-            for version in (1, 2, 3, 4, 5, 6, 7):
+            # Version 8: per-user settings.
+            for version in (1, 2, 3, 4, 5, 6, 7, 8):
                 conn.execute(
                     "INSERT OR IGNORE INTO schema_migrations(version, applied_at) "
                     "VALUES(?, ?)",
@@ -407,6 +418,45 @@ class SQLiteHistoryRepository(HistoryRepository):
             "display_name": row["display_name"],
             "emails": emails,
         }
+
+    async def get_user_setting(self, *, user_id: str, key: str) -> str | None:
+        validate_user_id(user_id)
+        validate_key(key, "key")
+        return await self._run(self._get_user_setting_sync, user_id, key)
+
+    def _get_user_setting_sync(self, user_id: str, key: str) -> str | None:
+        row = self._conn.execute(
+            "SELECT value FROM user_settings WHERE user_id = ? AND key = ?",
+            (user_id, key),
+        ).fetchone()
+        return row["value"] if row is not None else None
+
+    async def set_user_setting(
+        self, *, user_id: str, key: str, value: str | None
+    ) -> None:
+        validate_user_id(user_id)
+        validate_key(key, "key")
+        if value is not None and (
+            not isinstance(value, str) or len(value) > MAX_USER_SETTING_CHARS
+        ):
+            raise ValueError("Setting value must be a short string")
+        await self._run(self._set_user_setting_sync, user_id, key, value)
+
+    def _set_user_setting_sync(self, user_id: str, key: str, value: str | None) -> None:
+        with self._conn:
+            if value is None:
+                self._conn.execute(
+                    "DELETE FROM user_settings WHERE user_id = ? AND key = ?",
+                    (user_id, key),
+                )
+                return
+            self._ensure_user_sync(self._conn, user_id)
+            self._conn.execute(
+                "INSERT INTO user_settings(user_id, key, value, updated_at) "
+                "VALUES(?, ?, ?, ?) ON CONFLICT(user_id, key) DO UPDATE SET "
+                "value = excluded.value, updated_at = excluded.updated_at",
+                (user_id, key, value, _now_iso()),
+            )
 
     async def list_conf_uids(self, *, user_id: str) -> list[str]:
         validate_user_id(user_id)

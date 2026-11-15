@@ -108,6 +108,8 @@ class WebSocketHandler:
             "ai-speak-signal": self._handle_conversation_trigger,
             "fetch-configs": self._handle_fetch_configs,
             "switch-config": self._handle_config_switch,
+            "fetch-models": self._handle_fetch_models,
+            "switch-model": self._handle_model_switch,
             "fetch-backgrounds": self._handle_fetch_backgrounds,
             "audio-play-start": self._handle_audio_play_start,
             "request-init-config": self._handle_init_config_request,
@@ -296,6 +298,11 @@ class WebSocketHandler:
 
         await self._send_json(
             websocket, session_service_context.model_conf_payload(client_uid)
+        )
+
+        # Which LLM models this user may pick, and the one in use.
+        await self._send_json(
+            websocket, session_service_context.model_list_payload(), ensure_ascii=False
         )
 
         # The backend decides which user MCP entries are local; the browser
@@ -779,6 +786,64 @@ class WebSocketHandler:
             context = self.client_contexts[client_uid]
             await self._interrupt_turn_before_switch(client_uid, context)
             await context.handle_config_switch(websocket, config_file_name)
+
+    async def _handle_fetch_models(
+        self, websocket: WebSocket, client_uid: str, data: WSMessage
+    ) -> None:
+        """Send the LLM models this user may pick and the one in use."""
+        context = self.client_contexts[client_uid]
+        if not self._group_turn_running(client_uid):
+            # Also drops a choice whose model or access is gone.
+            await context.sync_model_selection()
+        await self._send_json(
+            websocket, context.model_list_payload(), ensure_ascii=False
+        )
+
+    async def _handle_model_switch(
+        self, websocket: WebSocket, client_uid: str, data: dict
+    ) -> None:
+        """Answer with another LLM model; ``model: null`` is the character's."""
+        context = self.client_contexts[client_uid]
+        model_id = data.get("model")
+        if model_id is not None and not isinstance(model_id, str):
+            await self._send_json(
+                websocket, {"type": "error", "message": "Model not available"}
+            )
+            return
+
+        # A running group turn belongs to the other members too: store the
+        # choice now and let this member's next turn pick it up.
+        deferred = self._group_turn_running(client_uid)
+        if not deferred:
+            await self._interrupt_turn_before_switch(client_uid, context)
+        try:
+            switched = await context.select_model(model_id, apply=not deferred)
+        except Exception:
+            logger.exception("Failed to switch the LLM model")
+            switched = False
+
+        if not switched:
+            logger.warning(
+                f"User {context.user_id} cannot use model {str(model_id)[:64]!r}"
+            )
+            await self._send_json(
+                websocket, {"type": "error", "message": "Model not available"}
+            )
+            # The client's list is stale; send the current one.
+            await self._send_json(
+                websocket, context.model_list_payload(), ensure_ascii=False
+            )
+            return
+
+        current = model_id if deferred else context.model_list_payload()["current"]
+        await self._send_json(websocket, {"type": "model-switched", "model": current})
+
+    def _group_turn_running(self, client_uid: str) -> bool:
+        group = self.chat_group_manager.get_client_group(client_uid)
+        if not group or len(group.members) <= 1:
+            return False
+        task = self.current_conversation_tasks.get(group.group_id)
+        return task is not None and not task.done()
 
     async def _interrupt_turn_before_switch(
         self, client_uid: str, context: ServiceContext

@@ -193,6 +193,13 @@
     "switchFailed": "Failed to switch character",
     "generic": "Something went wrong"
   },
+  "model": {
+    "title": "Model",
+    "pick": "Switch model (current: {{name}})",
+    "default": "Character default",
+    "defaultDesc": "Use the model this character is configured with",
+    "switched": "Switched to {{name}}"
+  },
   "server": {
     "Server is busy, please try again shortly": "Server is busy, please retry shortly",
     "Audio input is too long; the recording was discarded": "Recording too long and was discarded; please re-record",
@@ -200,7 +207,8 @@
     "Character not available": "This character is restricted to other users",
     "Invalid request": "Invalid request",
     "Cannot group clients belonging to different users": "Cannot group clients of different users",
-    "Only group owner or self can remove members": "Only the owner or the member themself can remove"
+    "Only group owner or self can remove members": "Only the owner or the member themself can remove",
+    "Model not available": "This model is unavailable or restricted to other users"
   },
   "drawer": {
     "history": "History",

@@ -29,6 +29,7 @@ from .storage import (
     UserHistoryStore,
 )
 from .session_tooling import SessionTooling, ToolingField
+from .llm_catalog import MODEL_SETTING_KEY, LLMModelCatalog, LLMModelEntry
 from .utils.dicts import deep_merge
 from .utils.security import redact_secrets, resolve_existing_file_within
 
@@ -132,6 +133,17 @@ class ServiceContext:
 
         self.channels: OutboundChannels | None = None
         self.client_uid: str | None = None
+
+        # User-selectable models (see llm_catalog.py). The catalog is shared;
+        # the rest is this session's view of the user's choice.
+        self.llm_catalog: LLMModelCatalog | None = None
+        # The user's stored choice; None follows the character's own LLM.
+        self.selected_model_id: str | None = None
+        # The catalog model the agent answers with now; None is the
+        # character's LLM (also when the stored choice is unavailable).
+        self.active_model: LLMModelEntry | None = None
+        # The LLM the character preset configured, to go back to.
+        self._character_llm: tuple[Any, str] | None = None
 
     def __str__(self):
         if not self.character_config:
@@ -390,12 +402,114 @@ class ServiceContext:
                 use_mcpp=effective_use_mcpp,
             )
             self.system_prompt = system_prompt
+            self._agent_replaced()
         else:
             self.agent_engine = None
             await self.init_agent(
                 self.character_config.agent_config,
                 self.character_config.persona_prompt,
             )
+
+    # ==== user-selectable model
+
+    def _agent_replaced(self) -> None:
+        """A new agent starts on the character's LLM; reapply the user's choice."""
+        agent = self.agent_engine
+        self._character_llm = (
+            (agent.llm, agent.interrupt_method)
+            if isinstance(agent, BasicMemoryAgent)
+            else None
+        )
+        self.active_model = None
+        self._apply_model_selection()
+
+    def _apply_model_selection(self) -> None:
+        """Point the agent at the selected model, or back at the character's.
+
+        Sync on purpose: the swap must not interleave with a running turn.
+        """
+        agent = self.agent_engine
+        if not isinstance(agent, BasicMemoryAgent) or self._character_llm is None:
+            self.active_model = None
+            return
+
+        entry = None
+        if self.llm_catalog is not None and self.selected_model_id:
+            entry = self.llm_catalog.resolve(
+                self.selected_model_id, self.user_id, self.user_emails
+            )
+        if entry == self.active_model:
+            return
+
+        if entry is not None:
+            try:
+                agent.use_llm(self.llm_catalog.client(entry), entry.interrupt_method)
+            except Exception as error:
+                logger.error(
+                    f"Model '{entry.id}' could not be initialized "
+                    f"({type(error).__name__}); using the character's LLM"
+                )
+                entry = None
+        if entry is None:
+            agent.use_llm(*self._character_llm)
+        self.active_model = entry
+        logger.info(
+            f"Session {self.client_uid} now answers with "
+            f"{'model ' + entry.id if entry else 'the character LLM'}"
+        )
+
+    async def sync_model_selection(self) -> None:
+        """Re-read the user's stored choice and apply it.
+
+        Run before each turn, so a choice made in another tab, an edit to
+        ``llm_models.yaml`` and a revoked ``allowed_users`` entry all take
+        effect on the next message without reconnecting.
+        """
+        if not isinstance(self.llm_catalog, LLMModelCatalog):
+            return
+        repository = self.history_repository
+        if repository is not None and self.user_id is not None:
+            try:
+                self.selected_model_id = await repository.get_user_setting(
+                    user_id=self.user_id, key=MODEL_SETTING_KEY
+                )
+            except Exception:
+                logger.exception("Failed to read the user's model choice")
+        self._apply_model_selection()
+
+    async def select_model(self, model_id: str | None, apply: bool = True) -> bool:
+        """Store and apply the user's choice; False when it is not available.
+
+        ``None`` goes back to the character's own LLM. ``apply=False`` only
+        stores the choice; the next turn picks it up.
+        """
+        if not isinstance(self.llm_catalog, LLMModelCatalog):
+            return False
+        if model_id is not None and (
+            self.llm_catalog.resolve(model_id, self.user_id, self.user_emails) is None
+        ):
+            return False
+        if self.history_repository is not None and self.user_id is not None:
+            await self.history_repository.set_user_setting(
+                user_id=self.user_id, key=MODEL_SETTING_KEY, value=model_id
+            )
+        self.selected_model_id = model_id
+        if apply:
+            self._apply_model_selection()
+        return True
+
+    def model_list_payload(self) -> dict:
+        """Build the model-list payload: what this user may pick, and the pick."""
+        models = (
+            self.llm_catalog.available(self.user_id, self.user_emails)
+            if isinstance(self.llm_catalog, LLMModelCatalog)
+            else []
+        )
+        return {
+            "type": "model-list",
+            "models": [entry.public_info() for entry in models],
+            "current": self.active_model.id if self.active_model else None,
+        }
 
     async def load_from_config(self, config: Config) -> None:
         """
@@ -563,6 +677,7 @@ class ServiceContext:
         # agent from init_session_agent); release e.g. a Hume socket.
         if previous_agent is not self.agent_engine:
             await self._close_agent(previous_agent)
+        self._agent_replaced()
 
     def _rewire_agent_tooling(self, agent_config: AgentConfig) -> None:
         if not isinstance(self.agent_engine, BasicMemoryAgent):

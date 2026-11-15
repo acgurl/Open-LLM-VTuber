@@ -8,6 +8,7 @@ import numpy as np
 from .conversation_utils import (
     DEFAULT_SESSION_EMOJI,
     bind_turn_history,
+    sync_turn_model,
     bound_history_uid,
     consume_agent_stream,
     conversation_start_frames,
@@ -87,6 +88,7 @@ async def process_group_conversation(
         # path does: opening another history mid-conversation must not
         # reroute this conversation's writes (tool calls included).
         for member_uid in group_members:
+            await sync_turn_model(client_contexts[member_uid])
             bind_turn_history(client_contexts[member_uid], metadata)
 
         # Get human name from initiator context

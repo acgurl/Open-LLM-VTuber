@@ -27,6 +27,7 @@ from .mcp_routes import init_user_mcp_routes
 from .connector_routes import init_connector_routes
 from .connectors import ConnectorManager
 from .service_context import ServiceContext
+from .llm_catalog import DEFAULT_MODELS_FILE, LLMModelCatalog
 from .config_manager.auth import AuthConfig
 from .config_manager.connectors import ConnectorsConfig
 from .config_manager.storage import StorageConfig
@@ -236,6 +237,12 @@ class WebSocketServer:
                 {"status": "ok" if ready else "starting"},
                 status_code=200 if ready else 503,
             )
+
+        # Models users may pick instead of their character's LLM; sessions
+        # share this catalog through the default context.
+        self.default_context_cache.llm_catalog = LLMModelCatalog(
+            getattr(config.system_config, "llm_models_file", DEFAULT_MODELS_FILE)
+        )
 
         # Shared by the static asset mounts and /live2d-models/info.
         self.asset_access = CharacterAssetAccess(

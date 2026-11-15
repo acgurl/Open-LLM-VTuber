@@ -20,7 +20,11 @@ from loguru import logger
 
 from ..auth import Identity
 from ..config_manager.connectors import ConnectorsConfig
-from ..conversations.conversation_utils import bind_turn_history, run_agent_turn
+from ..conversations.conversation_utils import (
+    bind_turn_history,
+    run_agent_turn,
+    sync_turn_model,
+)
 from ..conversations.types import OutboundChannels
 from ..service_context import ServiceContext
 from ..session_factory import build_session_context
@@ -466,6 +470,7 @@ class ConnectorDispatcher:
     async def _run_turn(self, session: _ConnectorSession, text: str) -> str:
         context = session.context
         session.errors.clear()
+        await sync_turn_model(context)
         turn_history_uid = bind_turn_history(context, None)
         streamed = _StreamedText()
         try:

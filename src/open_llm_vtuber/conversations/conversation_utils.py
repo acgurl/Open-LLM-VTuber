@@ -134,6 +134,17 @@ def bind_turn_history(context: Any, metadata: dict[str, Any] | None) -> str | No
     return turn_history_uid
 
 
+async def sync_turn_model(context: Any) -> None:
+    """Apply the user's current model choice before a turn starts."""
+    sync = getattr(context, "sync_model_selection", None)
+    if sync is None:
+        return
+    try:
+        await sync()
+    except Exception:
+        logger.exception("Failed to apply the user's model choice")
+
+
 def bound_history_uid(context: Any) -> str | None:
     """The history the running turn is bound to; None means not persisted.
 

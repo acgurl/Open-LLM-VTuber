@@ -4,6 +4,7 @@ import { useChat } from '../stores/chat';
 import { useHistory } from '../stores/history';
 import { useSettings } from '../stores/settings';
 import { useConnection } from '../stores/connection';
+import { useModels } from '../stores/models';
 import type { ImagePayload } from '../protocol/types';
 
 export function sendText(text: string, images?: ImagePayload[]) {
@@ -65,6 +66,20 @@ export function switchConfig(file: string) {
   if (useConnection.getState().busy || audioPlayer.isActive()) interrupt();
   settings.requestConfig(file);
   wsClient.send({ type: 'switch-config', file });
+}
+
+export function fetchModels() {
+  wsClient.send({ type: 'fetch-models' });
+}
+
+// id 为 null 表示回到角色预设自带的模型。对话记忆不变，只换回答用的模型。
+export function switchModel(id: string | null) {
+  const models = useModels.getState();
+  if (models.switching || id === models.current) return;
+  // 服务端会先停掉正在生成的一轮再换模型，本地也同步收尾
+  if (useConnection.getState().busy || audioPlayer.isActive()) interrupt();
+  models.requestSwitch();
+  wsClient.send({ type: 'switch-model', model: id });
 }
 
 export function fetchBackgrounds() {

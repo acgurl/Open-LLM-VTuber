@@ -1,0 +1,55 @@
+# User-selectable LLM models / 用户可在网页端选择的 LLM 模型
+#
+# Copy this file to the project root as `llm_models.yaml` (the path is
+# `system_config.llm_models_file` in conf.yaml). Without that file the feature
+# is off and every session uses the LLM of its character preset.
+# 把本文件复制到项目根目录并命名为 `llm_models.yaml`（路径由 conf.yaml 的
+# `system_config.llm_models_file` 指定）。没有这个文件时功能关闭，所有会话都用
+# 角色预设自带的 LLM。
+#
+# - Edits take effect within a few seconds; no restart is needed.
+#   修改后几秒内自动生效，不用重启。
+# - A user's choice is stored per account and replaces the character's LLM for
+#   the web UI and the message connectors. "Character default" in the picker
+#   goes back to the preset's own LLM.
+#   用户的选择按账号保存，网页端和消息连接器都会用它代替角色预设的 LLM；
+#   选择器里的“角色默认”即回到预设自带的 LLM。
+# - This file holds API keys: keep it out of git (it is ignored by default)
+#   and readable only by the service account. `${ENV_VAR}` is substituted.
+#   本文件含 API 密钥：不要提交到 git（默认已忽略），权限设为仅服务账号可读。
+#   支持 `${环境变量}` 替换。
+
+models:
+  - id: deepseek-chat # stable key stored as the user's choice: letters, digits, . _ : -
+    name: DeepSeek Chat # shown in the picker
+    description: 响应快，适合日常对话 # optional, shown under the name
+    # Any provider of `agent_config.llm_configs` in conf.yaml. The remaining
+    # keys are that provider's settings, exactly as in conf.yaml.
+    provider: deepseek_llm
+    llm_api_key: ${DEEPSEEK_API_KEY}
+    model: deepseek-chat
+    temperature: 1.0
+
+  - id: claude
+    name: Claude
+    description: 仅限指定账号
+    provider: claude_llm
+    llm_api_key: ${ANTHROPIC_API_KEY}
+    model: claude-sonnet-5-5
+    # Only these accounts see and can use the model. Same rule as a character
+    # preset's `allowed_users`: internal user ids (Settings → Account) or
+    # verified login emails; display names are never matched. Omit the key, or
+    # leave the list empty, to make the model available to everyone.
+    # 只有这些账号能看到并使用该模型。规则与角色预设的 `allowed_users` 相同：
+    # 内部 user_id（设置 → 账户）或已验证的登录邮箱，不匹配显示名。
+    # 不写或留空表示所有人可用。
+    allowed_users:
+      - alice@example.com
+      - 0123456789abcdef0123456789abcdef
+
+  - id: local-qwen
+    name: 本地 Qwen
+    provider: openai_compatible_llm
+    base_url: http://localhost:11434/v1
+    llm_api_key: not-needed
+    model: qwen2.5:latest
