@@ -50,7 +50,7 @@ The project uses a factory pattern for all AI engines:
 **Agent System** (`src/open_llm_vtuber/agent/`):
 - `agent_factory.py` - Factory for creating different agent types
 - `agents/` - Agent implementations (basic_memory, hume_ai)
-- `stateless_llm/` - Stateless LLM implementations (Claude, OpenAI, Ollama, etc.)
+- `stateless_llm/` - Stateless LLM implementations, one per wire protocol (OpenAI Chat Completions, OpenAI Responses, Claude, Vertex AI) behind `StatelessLLMInterface`
 
 **ASR Engines** (`src/open_llm_vtuber/asr/`):
 - Cloud ASR backends only: Groq Whisper and Azure (in-process local models were removed)

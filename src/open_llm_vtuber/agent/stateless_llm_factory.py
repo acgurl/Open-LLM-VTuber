@@ -2,13 +2,11 @@ from collections.abc import Callable
 
 from loguru import logger
 
+from .stateless_llm.claude_llm import ClaudeLLM
+from .stateless_llm.openai_compatible_llm import OpenAICompatibleLLM
+from .stateless_llm.openai_responses_llm import OpenAIResponsesLLM
 from .stateless_llm.stateless_llm_interface import StatelessLLMInterface
-from .stateless_llm.stateless_llm_with_template import (
-    AsyncLLMWithTemplate as StatelessLLMWithTemplate,
-)
-from .stateless_llm.openai_compatible_llm import AsyncLLM as OpenAICompatibleLLM
-from .stateless_llm.ollama_llm import OllamaLLM
-from .stateless_llm.claude_llm import AsyncLLM as ClaudeLLM
+from .stateless_llm.vertex_llm import VertexLLM
 
 
 def _build_openai_compatible(kwargs: dict) -> StatelessLLMInterface:
@@ -22,52 +20,45 @@ def _build_openai_compatible(kwargs: dict) -> StatelessLLMInterface:
     )
 
 
-def _build_template(kwargs: dict) -> StatelessLLMInterface:
-    return StatelessLLMWithTemplate(
+def _build_openai_responses(kwargs: dict) -> StatelessLLMInterface:
+    return OpenAIResponsesLLM(
         model=kwargs.get("model"),
-        base_url=kwargs.get("base_url"),
-        llm_api_key=kwargs.get("llm_api_key"),
-        organization_id=kwargs.get("organization_id"),
-        template=kwargs.get("template"),
-        project_id=kwargs.get("project_id"),
-        temperature=kwargs.get("temperature"),
-    )
-
-
-def _build_ollama(kwargs: dict) -> StatelessLLMInterface:
-    return OllamaLLM(
-        model=kwargs.get("model"),
-        base_url=kwargs.get("base_url"),
+        base_url=kwargs.get("base_url") or "https://api.openai.com/v1",
         llm_api_key=kwargs.get("llm_api_key"),
         organization_id=kwargs.get("organization_id"),
         project_id=kwargs.get("project_id"),
         temperature=kwargs.get("temperature"),
-        keep_alive=kwargs.get("keep_alive"),
-        unload_at_exit=kwargs.get("unload_at_exit"),
+        reasoning_effort=kwargs.get("reasoning_effort"),
+        max_output_tokens=kwargs.get("max_output_tokens"),
     )
 
 
 def _build_claude(kwargs: dict) -> StatelessLLMInterface:
     return ClaudeLLM(
-        system=kwargs.get("system_prompt"),
-        base_url=kwargs.get("base_url"),
         model=kwargs.get("model"),
         llm_api_key=kwargs.get("llm_api_key"),
+        base_url=kwargs.get("base_url"),
+        max_tokens=kwargs.get("max_tokens") or 16000,
+        temperature=kwargs.get("temperature"),
     )
 
 
+def _build_vertex(kwargs: dict) -> StatelessLLMInterface:
+    return VertexLLM(
+        model=kwargs.get("model"),
+        credentials_file=kwargs.get("credentials_file"),
+        project_id=kwargs.get("project_id"),
+        location=kwargs.get("location"),
+        temperature=kwargs.get("temperature"),
+    )
+
+
+# One builder per wire protocol; the keys are the ``llm_configs`` providers.
 _LLM_BUILDERS: dict[str, Callable[[dict], StatelessLLMInterface]] = {
     "openai_compatible_llm": _build_openai_compatible,
-    "openai_llm": _build_openai_compatible,
-    "gemini_llm": _build_openai_compatible,
-    "zhipu_llm": _build_openai_compatible,
-    "deepseek_llm": _build_openai_compatible,
-    "groq_llm": _build_openai_compatible,
-    "mistral_llm": _build_openai_compatible,
-    "lmstudio_llm": _build_openai_compatible,
-    "stateless_llm_with_template": _build_template,
-    "ollama_llm": _build_ollama,
+    "openai_responses_llm": _build_openai_responses,
     "claude_llm": _build_claude,
+    "vertex_llm": _build_vertex,
 }
 
 
@@ -78,7 +69,7 @@ class LLMFactory:
 
         Args:
             llm_provider: The type of LLM to create
-            **kwargs: Additional arguments
+            **kwargs: That provider's settings
         """
         logger.info(f"Initializing LLM: {llm_provider}")
         try:

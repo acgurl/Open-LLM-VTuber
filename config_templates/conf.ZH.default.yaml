@@ -114,11 +114,12 @@ character_config:
         # 基础 AI 代理，没什么特别的。
         # 从 llm_config 中选择一个 llm 提供商
         # 并在相应的字段中设置所需的参数
-        # 例如：
-        # 'openai_compatible_llm', 'claude_llm', 'ollama_llm'
-        # 'openai_llm', 'gemini_llm', 'zhipu_llm', 'deepseek_llm', 'groq_llm'
-        # 'mistral_llm', 'lmstudio_llm' 之类的
-        llm_provider: 'ollama_llm' # 使用的 LLM 提供商
+        # 可选：
+        # 'openai_compatible_llm'（OpenAI Chat Completions 协议，含 DeepSeek、Ollama、
+        #   LM Studio、Gemini、智谱、Groq、Mistral 等所有兼容端点）
+        # 'openai_responses_llm'（OpenAI Responses 协议）
+        # 'claude_llm'（Anthropic 原生协议）、'vertex_llm'（Google Vertex AI 原生协议）
+        llm_provider: 'openai_compatible_llm' # 使用的 LLM 提供商
         # 是否在第一句回应时遇上逗号就直接生成音频以减少首句延迟（默认：True）
         faster_first_response: True
         # 句子分割方法：'regex' 或 'pysbd'
@@ -142,78 +143,59 @@ character_config:
     llm_configs:
       # 一个配置池，用于不同代理中使用的所有无状态 llm 提供商的凭据和连接详细信息
 
-      # 无状态 LLM 模板 (对于非 ChatML 的 LLM, 通常而言不用管这个配置)
-      stateless_llm_with_template:
-        base_url: 'http://localhost:8080/v1'
-        llm_api_key: 'somethingelse'
-        organization_id: null
-        project_id: null
-        model: 'qwen2.5:latest'
-        template: 'CHATML'
-        temperature: 1.0 # value between 0 to 2
-        interrupt_method: 'user'
+      # 每种协议一项。旧版的 'deepseek_llm'、'ollama_llm'、'openai_llm' 等只是换了默认
+      # base_url 的 OpenAI 兼容配置，已并入 'openai_compatible_llm'；旧配置仍可加载，
+      # 启动时会自动映射并提示改名。
 
-      # OpenAI 兼容推理后端
+      # OpenAI Chat Completions 协议（/v1/chat/completions）：OpenAI 及所有兼容端点
       openai_compatible_llm:
+        # 常用 base_url：
+        #   Ollama     http://localhost:11434/v1
+        #   LM Studio  http://localhost:1234/v1
+        #   OpenAI     https://api.openai.com/v1
+        #   DeepSeek   https://api.deepseek.com/v1
+        #   Gemini     https://generativelanguage.googleapis.com/v1beta/openai/
+        #   智谱        https://open.bigmodel.cn/api/paas/v4/
+        #   Groq       https://api.groq.com/openai/v1
+        #   Mistral    https://api.mistral.ai/v1
         base_url: 'http://localhost:11434/v1' # 基础 URL
-        llm_api_key: 'somethingelse' # API 密钥
+        llm_api_key: 'somethingelse' # API 密钥（本地服务随便填一个非空值）
         organization_id: null # 组织 ID
         project_id: null # 项目 ID
         model: 'qwen2.5:latest' # 使用的模型
-        temperature: 1.0 # 温度，介于 0 到 2 之间
+        temperature: 1.0 # 温度，介于 0 到 2 之间；null 表示使用 API 默认值
         interrupt_method: 'user'
         # 用于表示中断信号的方法(提示词模式)。
         # 如果LLM支持在聊天记忆中的任何位置插入系统提示词，请使用'system'。
         # 否则，请使用'user'。您一般不需要更改此设置。
 
-      # Claude API 配置
+      # OpenAI Responses 协议（/v1/responses）
+      openai_responses_llm:
+        base_url: 'https://api.openai.com/v1' # 基础 URL
+        llm_api_key: 'Your Open AI API key' # API 密钥
+        organization_id: null # 组织 ID
+        project_id: null # 项目 ID
+        model: 'gpt-5' # 使用的模型
+        temperature: null # 温度；推理模型不接受该参数，保持 null
+        reasoning_effort: null # 推理强度，例如 'low'、'medium'、'high'；null 为 API 默认
+        max_output_tokens: null # 生成 token 上限（含推理）；null 为不限制
+        interrupt_method: 'system'
+
+      # Claude（Anthropic Messages 原生协议）
       claude_llm:
         base_url: 'https://api.anthropic.com' # 基础 URL
         llm_api_key: 'YOUR API KEY HERE' # API 密钥
-        model: 'claude-3-haiku-20240307' # 使用的模型
+        model: 'claude-opus-5-5' # 使用的模型
+        max_tokens: 16000 # 单次回复的最大 token 数
+        temperature: null # 温度；当前 Claude 模型不接受该参数，保持 null
 
-      ollama_llm:
-        base_url: 'http://localhost:11434/v1' # 基础 URL
-        model: 'qwen2.5:latest' # 使用的模型
-        temperature: 1.0 # 温度，介于 0 到 2 之间
-        # 不活动后模型在内存中保留的时间（秒）
-        # 设置为 -1 表示模型将永远保留在内存中（即使退出 open llm vtuber 之后也是）
-        keep_alive: -1
-        unload_at_exit: True # 退出时从内存中卸载模型
-
-      lmstudio_llm:
-        base_url: 'http://localhost:1234/v1'
-        model: 'qwen2.5:latest'
-        temperature: 1.0 # value between 0 to 2
-
-      openai_llm:
-        llm_api_key: 'Your Open AI API key' # OpenAI API 密钥
-        model: 'gpt-4o' # 使用的模型
-        temperature: 1.0 # 温度，介于 0 到 2 之间
-
-      gemini_llm:
-        llm_api_key: 'Your Gemini API Key' # Gemini API 密钥
-        model: 'gemini-2.0-flash-exp' # 使用的模型
-        temperature: 1.0 # 温度，介于 0 到 2 之间
-
-      zhipu_llm:
-        llm_api_key: 'Your ZhiPu AI API key' # 智谱 AI API 密钥
-        model: 'glm-4-flash' # 使用的模型
-        temperature: 1.0 # 温度，介于 0 到 2 之间
-
-      deepseek_llm:
-        llm_api_key: 'Your DeepSeek API key' # DeepSeek API 密钥
-        model: 'deepseek-chat' # 使用的模型
-        temperature: 0.7 # 注意，DeepSeek 的温度范围是 0 到 1
-
-      mistral_llm:
-        llm_api_key: 'Your Mistral API key' # Mistral API 密钥
-        model: 'pixtral-large-latest' # 使用的模型
-        temperature: 1.0 # 温度，介于 0 到 2 之间
-
-      groq_llm:
-        llm_api_key: 'your groq API key' # Groq API 密钥
-        model: 'llama-3.3-70b-versatile' # 使用的模型
+      # Vertex AI（Google Cloud）原生接口，直接使用从 Google Cloud 控制台下载的
+      # 服务账号密钥文件（JSON）鉴权
+      vertex_llm:
+        credentials_file: 'vertex_credentials.json' # 密钥文件路径；不要提交到 git
+        model: 'gemini-3-flash-preview' # 使用的模型
+        location: 'global' # 区域，也可以填 'us-central1' 之类的
+        project_id: null # null 表示使用密钥文件里的项目
         temperature: 1.0 # 温度，介于 0 到 2 之间
 
   # === 自动语音识别 ===

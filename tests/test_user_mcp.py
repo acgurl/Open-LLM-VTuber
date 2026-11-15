@@ -548,7 +548,7 @@ class LocalToolExecutionTests(unittest.IsolatedAsyncioTestCase):
             update
             async for update in executor.execute_tools(
                 [{"id": "call-1", "name": exposed, "args": {"text": "hi"}}],
-                "OpenAI",
+                "Native",
             )
         ]
 
@@ -596,7 +596,7 @@ class LocalToolExecutionTests(unittest.IsolatedAsyncioTestCase):
             update
             async for update in executor.execute_tools(
                 [{"id": "call-1", "name": exposed, "args": {}}],
-                "OpenAI",
+                "Native",
             )
         ]
 

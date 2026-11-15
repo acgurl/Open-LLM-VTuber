@@ -90,6 +90,8 @@ dist/
 
 # Runtime MCP config (may contain auth token, mounted at runtime)
 /mcp_servers.json
+# Vertex AI service-account key (mounted at runtime)
+vertex_credentials.json
 
 # Not needed in the image: VCS metadata, CI config, tests, tool caches.
 # (web/ stays in the context for the node stage; the runtime stage copies

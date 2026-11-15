@@ -1,276 +1,260 @@
-"""Description: This file contains the implementation of the `AsyncLLM` class for Claude API.
-This class is responsible for handling asynchronous interaction with Claude API endpoints
-for language generation.
-"""
+"""Claude through Anthropic's native Messages API."""
 
 import json
-from typing import Any
+from collections import OrderedDict
 from collections.abc import AsyncIterator
+from typing import Any
 
+import anthropic
+from anthropic import NOT_GIVEN, AsyncAnthropic
 from loguru import logger
-from anthropic import AsyncAnthropic, NOT_GIVEN
 
-from .stateless_llm_interface import StatelessLLMInterface
+from .stateless_llm_interface import (
+    StatelessLLMInterface,
+    authentication_error,
+    connection_error,
+    generation_error,
+    rate_limit_error,
+    split_data_url,
+)
+from ...mcpp.types import ToolCallObject
+
+# Assistant turns kept verbatim while their tool calls are being answered.
+_MAX_KEPT_TURNS = 256
 
 
-class AsyncLLM(StatelessLLMInterface):
+def _content_blocks(content: Any) -> list[dict[str, Any]]:
+    """Claude content blocks for a ``content`` in the internal format."""
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}] if content.strip() else []
+    if not isinstance(content, list):
+        return []
+    blocks: list[dict[str, Any]] = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "text":
+            # The API rejects empty text blocks.
+            if (item.get("text") or "").strip():
+                blocks.append({"type": "text", "text": item["text"]})
+        elif item.get("type") == "image_url":
+            image = split_data_url((item.get("image_url") or {}).get("url"))
+            if image is None:
+                logger.warning("Claude: skipped an image that is not a data URL")
+                continue
+            blocks.append(
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": image[0],
+                        "data": image[1],
+                    },
+                }
+            )
+    return blocks
+
+
+def _tool_result_block(message: dict[str, Any]) -> dict[str, Any]:
+    is_error = bool(message.get("is_error"))
+    content = message.get("content")
+    if isinstance(content, list):
+        result: Any = _content_blocks(content)
+    else:
+        result = content if isinstance(content, str) else str(content or "")
+    if not result:
+        result = "Error occurred during tool execution." if is_error else "(no output)"
+    return {
+        "type": "tool_result",
+        "tool_use_id": message.get("tool_call_id"),
+        "content": result,
+        "is_error": is_error,
+    }
+
+
+def claude_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Function tools in Claude's ``input_schema`` shape."""
+    converted = []
+    for tool in tools:
+        function = tool.get("function") if isinstance(tool, dict) else None
+        if not isinstance(function, dict) or not function.get("name"):
+            continue
+        converted.append(
+            {
+                "name": function["name"],
+                "description": function.get("description", ""),
+                "input_schema": function.get("parameters")
+                or {"type": "object", "properties": {}},
+            }
+        )
+    return converted
+
+
+class ClaudeLLM(StatelessLLMInterface):
     def __init__(
         self,
-        model: str = "claude-3-haiku-latest",
-        base_url: str | None = None,
+        model: str,
         llm_api_key: str | None = None,
-        system: str | None = None,
+        base_url: str | None = None,
+        max_tokens: int = 16000,
+        temperature: float | None = None,
     ):
         """
-        Initialize Claude LLM.
-
-        Args:
-            model (str): Model name
-            base_url (str): Base URL for Claude API
-            llm_api_key (str): Claude API key
-            system (str): System prompt
+        Parameters:
+        - model: Model name, e.g. ``claude-opus-5-5``.
+        - llm_api_key: Anthropic API key.
+        - base_url: Root of the API; ``None`` is Anthropic's own.
+        - max_tokens: Cap on the tokens of one response.
+        - temperature: Sampling temperature. ``None`` (the default) omits it;
+          current Claude models reject the parameter.
         """
         self.model = model
-        self.system = system
+        self.max_tokens = max_tokens
+        self.temperature = temperature
+        self.client = AsyncAnthropic(api_key=llm_api_key, base_url=base_url or None)
+        # A response that calls tools may carry thinking blocks, which Claude
+        # wants back unchanged with the tool results. The agent rebuilds the
+        # assistant turn from text and ToolCallObjects, so the original blocks
+        # are kept here, by the id of the turn's first tool call.
+        self._turns: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
 
-        # Initialize Claude client
-        self.client = AsyncAnthropic(
-            api_key=llm_api_key, base_url=base_url if base_url else None
-        )
+        logger.info(f"Initialized ClaudeLLM with model: {self.model}")
 
-        logger.info(f"Initialized Claude AsyncLLM with model: {self.model}")
-        logger.debug(f"Base URL: {base_url}")
+    # ---- request
 
-    def _convert_message_format(self, message: dict[str, Any]) -> dict[str, Any]:
-        """Convert message format to Claude's expected format."""
-        # Handle potential tool_result content blocks
-        if isinstance(message.get("content"), list):
-            new_content = []
-            is_tool_result = False
-            for content_item in message["content"]:
-                if content_item.get("type") == "image_url":
-                    # Extract media type and base64 data from data URL
-                    data_url = content_item["image_url"]["url"]
-                    # Split 'data:image/jpeg;base64,/9j/4AAQ...' into parts
-                    header, base64_data = data_url.split(",", 1)
-                    # Extract media type from 'data:image/jpeg;base64'
-                    media_type = header.split(":")[1].split(";")[0]
+    def _assistant_blocks(self, message: dict[str, Any]) -> list[dict[str, Any]]:
+        tool_calls = message.get("tool_calls") or []
+        if tool_calls:
+            kept = self._turns.get(tool_calls[0].get("id"))
+            if kept is not None:
+                return kept
 
-                    new_content.append(
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": media_type,
-                                "data": base64_data,
-                            },
-                        }
-                    )
-                elif content_item.get("type") == "tool_result":
-                    is_tool_result = True
-                    # Keep tool_result block as is, Anthropic SDK handles it
-                    new_content.append(content_item)
-                else:
-                    # Assume text or other standard types
-                    new_content.append(content_item)
+        blocks = _content_blocks(message.get("content"))
+        for call in tool_calls:
+            function = call.get("function") or {}
+            try:
+                arguments = json.loads(function.get("arguments") or "{}")
+            except ValueError:
+                arguments = {}
+            blocks.append(
+                {
+                    "type": "tool_use",
+                    "id": call.get("id"),
+                    "name": function.get("name", ""),
+                    "input": arguments if isinstance(arguments, dict) else {},
+                }
+            )
+        return blocks
 
-            # For tool_result messages, the role should be 'user'
-            # Ensure the role is correctly set before returning
-            role = "user" if is_tool_result else message["role"]
-            return {"role": role, "content": new_content}
+    def _to_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Claude ``messages``; system-role messages have no place and are dropped."""
+        converted: list[dict[str, Any]] = []
 
-        # Handle plain text content or non-list content
-        return message
+        def add(role: str, blocks: list[dict[str, Any]]) -> None:
+            if not blocks:
+                return
+            # All results of one assistant turn must share one user message.
+            if converted and converted[-1]["role"] == role == "user":
+                converted[-1]["content"].extend(blocks)
+            else:
+                converted.append({"role": role, "content": list(blocks)})
+
+        for message in messages:
+            role = message.get("role")
+            if role == "system":
+                continue
+            if role == "assistant":
+                add("assistant", self._assistant_blocks(message))
+            elif role == "tool":
+                add("user", [_tool_result_block(message)])
+            else:
+                add("user", _content_blocks(message.get("content")))
+        return converted
+
+    # ---- response
+
+    def _tool_calls(self, message: Any) -> list[ToolCallObject]:
+        calls = [
+            ToolCallObject.from_dict(
+                {
+                    "id": block.id,
+                    "type": "function",
+                    "index": index,
+                    "function": {
+                        "name": block.name,
+                        "arguments": json.dumps(block.input or {}, ensure_ascii=False),
+                    },
+                }
+            )
+            for index, block in enumerate(
+                block for block in message.content if block.type == "tool_use"
+            )
+        ]
+        if calls:
+            self._turns[calls[0].id] = [
+                block.model_dump(exclude_none=True) for block in message.content
+            ]
+            while len(self._turns) > _MAX_KEPT_TURNS:
+                self._turns.popitem(last=False)
+        return calls
 
     async def chat_completion(
         self,
         messages: list[dict[str, Any]],
         system: str | None = None,
         tools: list[dict[str, Any]] | None = None,
-    ) -> AsyncIterator[dict[str, Any]]:
-        """
-        Generates a chat completion using the Claude API asynchronously,
-        handling text generation and tool use.
+    ) -> AsyncIterator[str | list[ToolCallObject]]:
+        request_messages = self._to_messages(messages)
+        logger.debug(f"Sending {len(request_messages)} messages to {self.model}")
 
-        Parameters:
-        - messages (List[Dict[str, Any]]): The list of messages to send to the API.
-        - system (str, optional): System prompt to use for this completion.
-        - tools (List[Dict[str, Any]], optional): List of tools available.
-
-        Yields:
-        - Dict[str, Any]: Events representing text deltas, tool use, or errors.
-          Possible event types:
-            - {"type": "message_start", "data": ...}
-            - {"type": "text_delta", "text": "..."}
-            - {"type": "tool_use_start", "data": {"id": ..., "name": ..., "input": None}}
-            - {"type": "tool_input_delta", "tool_id": ..., "partial_json": "..."} # Optional
-            - {"type": "tool_use_complete", "data": {"id": ..., "name": ..., "input": {...}}}
-            - {"type": "message_delta", "data": ...} # e.g., stop_reason
-            - {"type": "message_stop"}
-            - {"type": "error", "message": "..."}
-        """
         try:
-            # Filter out system messages and convert message format
-            converted_messages = [
-                self._convert_message_format(msg)
-                for msg in messages
-                if msg["role"] != "system"
-            ]
-
-            logger.debug(f"Sending {len(converted_messages)} messages to Claude API")
-            logger.debug(f"Tools provided: {tools}")
-
             async with self.client.messages.stream(
-                messages=converted_messages,
-                system=system if system else (self.system if self.system else ""),
                 model=self.model,
-                max_tokens=1024,
-                tools=tools if tools else NOT_GIVEN,
+                max_tokens=self.max_tokens,
+                system=system or NOT_GIVEN,
+                messages=request_messages,
+                tools=claude_tools(tools) if tools else NOT_GIVEN,
+                temperature=(
+                    NOT_GIVEN if self.temperature is None else self.temperature
+                ),
             ) as stream:
-                state = _StreamState()
-                async for event in stream:
-                    handler = _EVENT_HANDLERS.get(event.type)
-                    if handler is None:
-                        # Anthropic SDK might raise errors directly, or via
-                        # event.type == 'error'. The outer try/except handles
-                        # SDK-level errors.
-                        continue
-                    for output in handler(event, state):
-                        yield output
+                produced_text = False
+                async for text in stream.text_stream:
+                    if text:
+                        produced_text = True
+                        yield text
+                message = await stream.get_final_message()
 
-        except Exception as e:
-            logger.error(f"Claude API error occurred: {e!s}")
-            logger.info(f"Model: {self.model}")
-            # Yield an error event before raising
-            yield {"type": "error", "message": f"Claude API error: {e!s}"}
-            raise
+            if message.stop_reason == "refusal":
+                logger.warning(f"{self.model} refused the request")
+                if not produced_text:
+                    raise generation_error("The model declined to answer.")
+                return
+            if message.stop_reason == "max_tokens":
+                logger.warning(
+                    f"{self.model} stopped at max_tokens ({self.max_tokens}); "
+                    "the response is cut short"
+                )
+                # A tool call cut off mid-input is not runnable.
+                return
 
-        # No finally block needed for stream.close() due to async with
-        logger.debug("Chat completion stream processing finished.")
+            calls = self._tool_calls(message)
+            if calls:
+                logger.info(f"Tool calls requested: {[c.function.name for c in calls]}")
+                yield calls
 
+        except anthropic.APIConnectionError as error:
+            logger.error(f"Claude API ({self.model}): connection failed: {error}")
+            raise connection_error() from error
+        except anthropic.RateLimitError as error:
+            logger.error(f"Claude API ({self.model}): rate limit exceeded: {error}")
+            raise rate_limit_error() from error
+        except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as e:
+            logger.error(f"Claude API ({self.model}): credentials rejected: {e}")
+            raise authentication_error() from e
+        except anthropic.APIError as error:
+            logger.error(f"Claude API ({self.model}): {error}")
+            raise generation_error() from error
 
-class _StreamState:
-    """The tool_use block being streamed, if any."""
-
-    def __init__(self) -> None:
-        self.tool_call: dict[str, Any] | None = None
-        self.partial_json = ""
-
-
-def _on_message_start(event, _state: _StreamState) -> list[dict[str, Any]]:
-    logger.debug("Stream: message_start")
-    return [
-        {
-            "type": "message_start",
-            "data": event.message.model_dump(exclude_none=True),
-        }
-    ]
-
-
-def _on_content_block_start(event, state: _StreamState) -> list[dict[str, Any]]:
-    logger.debug(
-        f"Stream: content_block_start - Index: {event.index}, Type: {event.content_block.type}"
-    )
-    # Text blocks are handled by text_delta.
-    if event.content_block.type != "tool_use":
-        return []
-    state.tool_call = {
-        "id": event.content_block.id,
-        "name": event.content_block.name,
-        "input": None,
-        "index": event.index,  # Store index
-    }
-    state.partial_json = ""
-    logger.debug(
-        f"Stream: tool_use started - ID: {state.tool_call['id']}, Name: {state.tool_call['name']}"
-    )
-    return [{"type": "tool_use_start", "data": state.tool_call.copy()}]
-
-
-def _on_content_block_delta(event, state: _StreamState) -> list[dict[str, Any]]:
-    logger.debug(
-        f"Stream: content_block_delta - Index: {event.index}, Delta Type: {event.delta.type}"
-    )
-    if event.delta.type == "text_delta":
-        return [{"type": "text_delta", "text": event.delta.text}]
-    if event.delta.type == "input_json_delta":
-        if state.tool_call and event.index == state.tool_call["index"]:
-            state.partial_json += event.delta.partial_json
-            logger.trace(
-                f"Stream: input_json_delta - Tool ID: {state.tool_call['id']}, Partial: {event.delta.partial_json}"
-            )
-        else:
-            logger.warning(
-                f"Received input_json_delta but no active tool call matching index {event.index}"
-            )
-    return []
-
-
-def _on_content_block_stop(event, state: _StreamState) -> list[dict[str, Any]]:
-    logger.debug(f"Stream: content_block_stop - Index: {event.index}")
-    tool_call = state.tool_call
-    # Only a stop for the active tool call completes it.
-    if not tool_call or event.index != tool_call["index"]:
-        return []
-    partial_json = state.partial_json
-    # Reset regardless of success or failure for this index
-    state.tool_call = None
-    state.partial_json = ""
-    try:
-        if not partial_json.strip():
-            logger.warning(
-                f"Empty JSON input received for tool ID: {tool_call['id']}. Using empty object."
-            )
-            tool_input = {}
-        else:
-            tool_input = json.loads(partial_json)
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to decode tool input JSON: {partial_json}. Error: {e}")
-        return [
-            {
-                "type": "error",
-                "message": f"Failed to parse tool input JSON for tool ID {tool_call['id']}",
-            }
-        ]
-    tool_call["input"] = tool_input
-    logger.debug(
-        f"Stream: tool_use completed - ID: {tool_call['id']}, Input: {tool_input}"
-    )
-    return [{"type": "tool_use_complete", "data": tool_call.copy()}]
-
-
-def _on_message_delta(event, _state: _StreamState) -> list[dict[str, Any]]:
-    logger.debug(
-        f"Stream: message_delta - Delta: {event.delta.model_dump(exclude_none=True)}, Usage: {event.usage}"
-    )
-    return [
-        {
-            "type": "message_delta",
-            "data": {
-                "delta": event.delta.model_dump(exclude_none=True),
-                "usage": event.usage.model_dump(),
-            },
-        }
-    ]
-
-
-def _on_message_stop(_event, _state: _StreamState) -> list[dict[str, Any]]:
-    logger.debug("Stream: message_stop")
-    # No need to break here, the context manager handles the end
-    return [{"type": "message_stop"}]
-
-
-def _on_ping(_event, _state: _StreamState) -> list[dict[str, Any]]:
-    logger.trace("Stream: ping")
-    return []
-
-
-_EVENT_HANDLERS = {
-    "message_start": _on_message_start,
-    "content_block_start": _on_content_block_start,
-    "content_block_delta": _on_content_block_delta,
-    "content_block_stop": _on_content_block_stop,
-    "message_delta": _on_message_delta,
-    "message_stop": _on_message_stop,
-    "ping": _on_ping,
-}
+    async def close(self) -> None:
+        await self.client.close()

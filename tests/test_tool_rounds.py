@@ -7,9 +7,8 @@ from open_llm_vtuber.agent.agents.basic_memory_agent import (
     TOOL_EXECUTOR_MISSING_NOTICE,
     BasicMemoryAgent,
 )
-from open_llm_vtuber.agent.stateless_llm import claude_llm
 from open_llm_vtuber.agent.stateless_llm.openai_compatible_llm import (
-    AsyncLLM as OpenAICompatibleAsyncLLM,
+    OpenAICompatibleLLM,
 )
 from open_llm_vtuber.mcpp import user_servers
 from open_llm_vtuber.mcpp.json_detector import StreamJSONDetector
@@ -55,31 +54,17 @@ class MissingToolExecutorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(agent.added, [])
         self.assertEqual(agent._llm.calls, 1)
 
-    async def test_claude(self):
-        llm = _OneRoundLLM(
-            [
-                {"type": "text_delta", "text": "let me check"},
-                {
-                    "type": "tool_use_complete",
-                    "data": {"name": "t", "id": "1", "input": {}},
-                },
-                {"type": "message_stop"},
-            ]
-        )
-        agent = _agent(llm)
-        await self._run(agent, agent._claude_tool_interaction_loop)
-
-    async def test_openai_native(self):
+    async def test_native(self):
         call = ToolCallObject(
             id="1", function=ToolCallFunctionObject(name="t", arguments="{}")
         )
         agent = _agent(_OneRoundLLM(["let me check", [call]]))
-        await self._run(agent, agent._openai_tool_interaction_loop)
+        await self._run(agent, agent._tool_interaction_loop)
 
     async def test_prompt_mode(self):
         llm = _OneRoundLLM(['{"mcp_server": "kb", "tool": "t", "arguments": {}}'])
         agent = _agent(llm, prompt_mode=True)
-        await self._run(agent, agent._openai_tool_interaction_loop)
+        await self._run(agent, agent._tool_interaction_loop)
         self.assertEqual(agent._json_detector.buffer, "")
 
 
@@ -98,9 +83,8 @@ def _tool_delta(index, id=None, name=None, arguments=None):
 
 
 class OpenAIStreamChunkTests(unittest.IsolatedAsyncioTestCase):
-    async def test_tool_call_fragments_are_merged_before_following_text(self):
-        llm = OpenAICompatibleAsyncLLM.__new__(OpenAICompatibleAsyncLLM)
-        llm.support_tools = True
+    async def test_tool_call_fragments_are_merged_and_yielded_last(self):
+        llm = OpenAICompatibleLLM.__new__(OpenAICompatibleLLM)
 
         async def stream():
             yield SimpleNamespace(choices=[])
@@ -113,39 +97,12 @@ class OpenAIStreamChunkTests(unittest.IsolatedAsyncioTestCase):
 
         items = [item async for item in llm._stream_chunks(stream())]
 
-        self.assertEqual(items[0], "pre")
-        calls = items[1]
+        # Text only (no empty chunks), then the calls of the response, once.
+        self.assertEqual(items[:2], ["pre", "post"])
+        (calls,) = items[2:]
         self.assertEqual([c.id for c in calls], ["c1", "c2"])
         self.assertEqual(calls[0].function.name, "search")
         self.assertEqual(calls[0].function.arguments, '{"q": "x"}')
-        self.assertEqual(items[2:], ["", "post"])
-
-
-class ClaudeStreamEventTests(unittest.TestCase):
-    def test_tool_use_block_is_completed_on_its_stop(self):
-        state = claude_llm._StreamState()
-        start = SimpleNamespace(
-            type="content_block_start",
-            index=1,
-            content_block=SimpleNamespace(type="tool_use", id="t1", name="f"),
-        )
-        delta = SimpleNamespace(
-            type="content_block_delta",
-            index=1,
-            delta=SimpleNamespace(type="input_json_delta", partial_json='{"a": 1}'),
-        )
-        stop = SimpleNamespace(type="content_block_stop", index=1)
-
-        outputs = []
-        for event in (start, delta, stop, stop):
-            outputs.extend(claude_llm._EVENT_HANDLERS[event.type](event, state))
-
-        self.assertEqual(
-            [output["type"] for output in outputs],
-            ["tool_use_start", "tool_use_complete"],
-        )
-        self.assertEqual(outputs[1]["data"]["input"], {"a": 1})
-        self.assertIsNone(state.tool_call)
 
 
 def _resolve_to(address):

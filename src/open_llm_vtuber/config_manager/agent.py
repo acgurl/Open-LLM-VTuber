@@ -3,10 +3,13 @@ This module contains the pydantic model for the configurations of
 different types of agents.
 """
 
+import copy
+
 from loguru import logger
 from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Any, ClassVar, Literal
 from .i18n import I18nMixin, Description
+from .llm_migration import migrate_agent_config
 from .stateless_llm import StatelessLLMConfigs
 
 # ======== Configurations for different Agents ========
@@ -16,17 +19,10 @@ class BasicMemoryAgentConfig(I18nMixin, BaseModel):
     """Configuration for the basic memory agent."""
 
     llm_provider: Literal[
-        "stateless_llm_with_template",
         "openai_compatible_llm",
+        "openai_responses_llm",
         "claude_llm",
-        "ollama_llm",
-        "lmstudio_llm",
-        "openai_llm",
-        "gemini_llm",
-        "zhipu_llm",
-        "deepseek_llm",
-        "groq_llm",
-        "mistral_llm",
+        "vertex_llm",
     ] = Field(..., alias="llm_provider")
 
     faster_first_response: bool | None = Field(True, alias="faster_first_response")
@@ -156,6 +152,16 @@ class AgentConfig(I18nMixin, BaseModel):
             en="Pool of LLM provider configurations", zh="语言模型提供者配置池"
         ),
     }
+
+    @model_validator(mode="before")
+    @classmethod
+    def map_removed_llm_providers(cls, data: Any) -> Any:
+        """Accept configurations naming a provider that was folded into
+        ``openai_compatible_llm`` (``deepseek_llm``, ``ollama_llm``, ...)."""
+        if not isinstance(data, dict):
+            return data
+        migrated = copy.deepcopy(data)
+        return migrated if migrate_agent_config(migrated) else data
 
     @field_validator("conversation_agent_choice", mode="before")
     @classmethod

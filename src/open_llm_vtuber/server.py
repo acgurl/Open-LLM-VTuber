@@ -421,11 +421,26 @@ class WebSocketServer:
         if self.connector_manager is not None:
             await self.connector_manager.stop()
             self.connector_manager = None
-        await self.default_context_cache.close()
+        default_context = self.default_context_cache
+        await default_context.close()
+        # Sessions are gone by now, so the LLM clients they shared can go too.
+        await self._close_llm(getattr(default_context.agent_engine, "llm", None))
+        if default_context.llm_catalog is not None:
+            await default_context.llm_catalog.close()
         await self.auth.close()
         if self.history_repository is not None:
             await self.history_repository.close()
             self.history_repository = None
+
+    @staticmethod
+    async def _close_llm(llm) -> None:
+        close = getattr(llm, "close", None)
+        if close is None:
+            return
+        try:
+            await close()
+        except Exception:
+            logger.exception("Failed to close the LLM client")
 
     @staticmethod
     def clean_cache():

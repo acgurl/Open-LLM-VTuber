@@ -1,65 +1,137 @@
+"""The contract every LLM backend implements.
+
+"Stateless" means the backend keeps no memory, system prompt or user messages:
+each call answers from its arguments alone. Agents add memory, prompts and
+tools on top.
+
+One message and tool format goes in, whatever the wire protocol behind it
+(the OpenAI Chat Completions shape, which is also what the agent stores):
+
+- ``{"role": "user" | "system", "content": str | parts}`` where a part is
+  ``{"type": "text", "text": ...}`` or
+  ``{"type": "image_url", "image_url": {"url": "data:<mime>;base64,..."}}``
+- ``{"role": "assistant", "content": str | None, "tool_calls": [...]}`` with
+  calls shaped ``{"id", "type": "function", "function": {"name", "arguments"}}``
+  (``arguments`` is a JSON string)
+- ``{"role": "tool", "tool_call_id", "content": str | parts, "is_error": bool}``
+
+Tools are OpenAI function definitions:
+``{"type": "function", "function": {"name", "description", "parameters"}}``.
+
+Each backend converts these to its own protocol and back.
+"""
+
 import abc
-from typing import Any
 from collections.abc import AsyncIterator
+from typing import Any
+
+from ...mcpp.types import ToolCallObject
+
+_ERROR_PREFIX = "Error calling the chat endpoint: "
+
+
+class LLMError(Exception):
+    """A completion failed.
+
+    ``str(error)`` is shown, and spoken, to the user: it names the kind of
+    problem and nothing else. Keys, URLs and provider payloads go to the log.
+    """
+
+
+class LLMToolsUnsupportedError(LLMError):
+    """The model or endpoint rejected the request because it carried tools."""
+
+
+def connection_error() -> LLMError:
+    return LLMError(
+        f"{_ERROR_PREFIX}Connection error. Failed to connect to the LLM API. "
+        "Check the configurations and the reachability of the LLM backend. "
+        "See the logs for details."
+    )
+
+
+def rate_limit_error() -> LLMError:
+    return LLMError(
+        f"{_ERROR_PREFIX}Rate limit exceeded. Please try again later. "
+        "See the logs for details."
+    )
+
+
+def authentication_error() -> LLMError:
+    return LLMError(
+        f"{_ERROR_PREFIX}Authentication failed. Check the credentials of the "
+        "LLM backend. See the logs for details."
+    )
+
+
+def generation_error(detail: str = "") -> LLMError:
+    return LLMError(
+        f"{_ERROR_PREFIX}{detail or 'Error occurred while generating response.'} "
+        "See the logs for details."
+    )
+
+
+def split_data_url(url: Any) -> tuple[str, str] | None:
+    """``(mime type, base64 data)`` of a ``data:`` URL, else ``None``."""
+    if not isinstance(url, str):
+        return None
+    header, _, data = url.partition(",")
+    if not header.startswith("data:") or not data:
+        return None
+    return header[len("data:") :].split(";")[0], data
+
+
+def content_text(content: Any) -> str:
+    """The text of a message ``content``, for protocols that take no images.
+
+    Images are counted in a trailing note so the model knows they existed.
+    """
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list):
+        return "" if content is None else str(content)
+    texts = []
+    images = 0
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        if part.get("type") == "text" and part.get("text"):
+            texts.append(part["text"])
+        elif part.get("type") == "image_url":
+            images += 1
+    if images:
+        texts.append(f"[{images} image(s) omitted]")
+    return "\n".join(texts)
 
 
 class StatelessLLMInterface(metaclass=abc.ABCMeta):
-    """
-    Interface for a stateless language model.
-
-    The word "stateless" means that the language model does not store memory,
-    system prompts, or user messages, which is most of the LLM. If we send a
-    message to the LLM, its response will be based on the message parameter alone.
-
-    The StatelessLLMInterface class provides a method for generating chat
-    completions asynchronously.
-
-    We use StatelessLLMs to initialize Agents, which pack the StatelessLLM with
-    memory, system prompts, and other features.
-
-    """
+    """A language model reached over some API."""
 
     @abc.abstractmethod
-    async def chat_completion(
+    def chat_completion(
         self,
         messages: list[dict[str, Any]],
         system: str | None = None,
         tools: list[dict[str, Any]] | None = None,
-    ) -> AsyncIterator[str]:
-        """
-        Generates a chat completion asynchronously and return an iterator to the response.
-        This function does not store memory or user messages.
+    ) -> AsyncIterator[str | list[ToolCallObject]]:
+        """Stream one completion.
 
         Parameters:
-        - messages (List[Dict[str, Any]]): The list of messages to send to the API.
-        - system (str, optional): System prompt to use for this completion.
-        - tools (List[Dict[str, str]], optional): List of tools to use for this completion.
-            - Each tool should follow the format:
-            {
-                "name": "tool_name",
-                "description": "tool_description",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "param1": {
-                            "type": "string",
-                            "description": "Description of param1"
-                        },
-                        "param2": {
-                            "type": "integer",
-                            "description": "Description of param2"
-                        }
-                    },
-                    "required": ["param1"]
-                }
-            }
+        - messages: The conversation, in the format of this module.
+        - system: System prompt of this completion.
+        - tools: Tools the model may call; ``None`` or empty offers none.
 
         Yields:
-        - str: The content of each chunk from the API response.
+        - ``str``: text, in the chunks the API delivers.
+        - ``list[ToolCallObject]``: the tool calls of the response, once, as
+          the last item. Absent when the model called no tool.
 
         Raises:
-        - APIConnectionError: When the server cannot be reached
-        - RateLimitError: When a 429 status code is received
-        - APIError: For other API-related errors
+        - ``LLMToolsUnsupportedError``: tools were offered and refused.
+        - ``LLMError``: any other failure. Nothing else escapes, and a
+          failure is never reported as text.
         """
         raise NotImplementedError
+
+    async def close(self) -> None:  # noqa: B027 - optional hook
+        """Release the network client. The instance is unusable afterwards."""
