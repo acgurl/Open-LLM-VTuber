@@ -219,7 +219,11 @@
       "max": "极限"
     },
     "descOn": "回答前先推敲，会慢一些",
-    "descOff": "直接回答，速度最快"
+    "descOff": "直接回答，速度最快",
+    "descAlways": "该模型始终会思考，无法关闭",
+    "descAlwaysPick": "该模型始终会思考，可调强度",
+    "descUnsupported": "该模型不支持思考",
+    "descUnknown": "当前模型不支持调整思考"
   },
   "server": {
     "Server is busy, please try again shortly": "服务器繁忙，请稍后再试",

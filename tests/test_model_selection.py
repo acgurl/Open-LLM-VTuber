@@ -440,10 +440,13 @@ class ThinkingCatalogTests(unittest.TestCase):
         entry = self.parse("claude_llm", {"levels": ["low", "high"]})
         self.assertEqual(entry.thinking_default, "low")
 
-    def test_single_level_is_not_offered(self):
+    def test_single_level_is_reported_as_locked(self):
         entry = self.parse("claude_llm", {"levels": ["high"]})
         self.assertEqual(entry.thinking_level(None).id, "high")
-        self.assertNotIn("thinking", entry.public_info())
+        self.assertEqual(
+            entry.public_info()["thinking"],
+            {"levels": [{"id": "high", "name": ""}], "default": "high"},
+        )
 
 
 class ThinkingSelectionTests(ModelSelectionTestCase):

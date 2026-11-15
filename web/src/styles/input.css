@@ -15,9 +15,12 @@
   padding: 8px;
   border-radius: 30px;
   background:
-    radial-gradient(240px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
-    linear-gradient(180deg, var(--sheen), transparent 72%),
-    var(--glass-strong);
+    radial-gradient(
+      240px circle at var(--mx, 50%) var(--my, 0px),
+      var(--sheen-spot),
+      transparent 72%
+    ),
+    linear-gradient(180deg, var(--sheen), transparent 72%), var(--glass-strong);
   border: 1px solid var(--line);
   backdrop-filter: blur(24px) saturate(1.2);
   -webkit-backdrop-filter: blur(24px) saturate(1.2);
@@ -42,7 +45,9 @@
 
 .input-row:focus-within {
   border-color: var(--accent-line);
-  box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow-float);
+  box-shadow:
+    0 0 0 4px var(--accent-soft),
+    var(--shadow-float);
 }
 
 /* 输入条平时只有半亮的受光边；有内容（待发送）时整圈提亮，作为“可以发了”的状态提示 */
@@ -132,7 +137,7 @@
 }
 
 .mic-btn.active::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: -3px;
   border-radius: inherit;
@@ -175,13 +180,17 @@
   color: var(--accent-ink);
   border-color: transparent;
   background: linear-gradient(180deg, var(--accent), var(--accent-strong));
-  box-shadow: 0 8px 22px -10px var(--accent-glow), var(--shadow-inset);
+  box-shadow:
+    0 8px 22px -10px var(--accent-glow),
+    var(--shadow-inset);
 }
 
 @media (hover: hover) {
   .input-row .send-btn:not(:disabled):hover {
     transform: translateY(-1px) scale(1.04);
-    box-shadow: 0 12px 28px -10px var(--accent-glow), var(--shadow-inset);
+    box-shadow:
+      0 12px 28px -10px var(--accent-glow),
+      var(--shadow-inset);
   }
 
   /* 纸飞机在悬停时朝发送方向轻推 */
@@ -401,14 +410,55 @@
 }
 
 .media-menu.composer-menu {
-  min-width: 248px;
+  /* 挂在 .input-bar 上（不在输入条里），backdrop-filter 才能真正透出后面的舞台与气泡 */
+  bottom: calc(100% + 10px);
+  left: 0;
+  min-width: 264px;
   max-width: min(300px, calc(100vw - 32px));
   gap: 4px;
-  /* 挂在输入条里，嵌套的 backdrop-filter 模糊不到聊天气泡，底色直接用实色 */
+  padding: 7px;
+  border-radius: 22px;
   background:
-    linear-gradient(180deg, var(--sheen), transparent 38%),
-    color-mix(in oklab, var(--accent) 4%, var(--bg-lift));
-  transform-origin: bottom left;
+    radial-gradient(140% 70% at 0% 0%, var(--sheen), transparent 62%),
+    linear-gradient(180deg, var(--sheen), transparent 40%), var(--glass-strong);
+  backdrop-filter: blur(28px) saturate(1.6) brightness(1.04);
+  -webkit-backdrop-filter: blur(28px) saturate(1.6) brightness(1.04);
+  box-shadow: var(--shadow-float), var(--shadow-inset);
+  overflow: visible;
+  transform-origin: 20px calc(100% + 24px);
+  animation: composer-in 300ms var(--ease-spring);
+  transition: box-shadow 360ms var(--ease-snap);
+}
+
+/* 思考开着时菜单带一圈很淡的主题色光晕，跟加号上的小点呼应 */
+.media-menu.composer-menu:has(.thinking-section.on) {
+  box-shadow:
+    var(--shadow-float),
+    var(--shadow-inset),
+    0 0 0 1px color-mix(in oklab, var(--accent) 14%, transparent),
+    0 18px 50px -26px var(--accent-glow);
+}
+
+.media-menu.composer-menu.closing {
+  animation: composer-out 150ms var(--ease-snap) forwards;
+}
+
+@keyframes composer-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes composer-out {
+  to {
+    opacity: 0;
+    transform: translateY(6px) scale(0.94);
+  }
 }
 
 .composer-menu-group {
@@ -439,11 +489,10 @@
 .thinking-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
   margin-top: 2px;
   padding-top: 6px;
   border-top: 1px solid var(--line);
-  animation: menu-item-in 240ms 90ms var(--ease-spring) backwards;
+  animation: menu-item-in 260ms 90ms var(--ease-spring) backwards;
 }
 
 .media-menu .thinking-row {
@@ -456,14 +505,21 @@
 }
 
 .media-menu .thinking-row:disabled {
-  opacity: 0.6;
-  cursor: default;
+  cursor: progress;
 }
 
 @media (hover: hover) {
   .media-menu .thinking-row:hover:not(:disabled) {
     transform: none;
   }
+
+  .media-menu .thinking-section.locked .thinking-row:hover {
+    background: none;
+  }
+}
+
+.thinking-section.locked .thinking-row {
+  cursor: not-allowed;
 }
 
 .thinking-row-icon {
@@ -475,21 +531,33 @@
   border-radius: 10px;
   background: var(--chip);
   color: var(--muted);
+  box-shadow: var(--shadow-inset);
   transition:
-    background 220ms var(--ease-snap),
-    color 220ms var(--ease-snap),
-    box-shadow 260ms var(--ease-snap);
+    background 260ms var(--ease-snap),
+    color 260ms var(--ease-snap),
+    box-shadow 300ms var(--ease-snap);
 }
 
 .thinking-section.on .thinking-row-icon {
-  background: color-mix(in oklab, var(--accent) 16%, transparent);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 70%),
+    color-mix(in oklab, var(--accent) 18%, transparent);
   color: var(--accent);
-  box-shadow: 0 0 14px -3px color-mix(in oklab, var(--accent) 70%, transparent);
+  box-shadow:
+    var(--shadow-inset),
+    0 0 16px -3px color-mix(in oklab, var(--accent) 70%, transparent);
 }
 
 .thinking-section.on .thinking-row-icon svg {
-  filter: drop-shadow(0 0 4px color-mix(in oklab, var(--accent) 70%, transparent));
+  filter: drop-shadow(
+    0 0 4px color-mix(in oklab, var(--accent) 70%, transparent)
+  );
   animation: bulb-on 420ms var(--ease-spring);
+}
+
+.thinking-section.locked.on .thinking-row-icon {
+  color: color-mix(in oklab, var(--accent) 60%, var(--muted));
+  box-shadow: var(--shadow-inset);
 }
 
 @keyframes bulb-on {
@@ -514,7 +582,20 @@
 }
 
 .thinking-row-title {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.thinking-row-level {
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.7rem;
+  font-style: normal;
   font-weight: 600;
 }
 
@@ -524,63 +605,166 @@
   line-height: 1.3;
 }
 
-/* iOS 式开关 */
+/* iOS 式开关：按住时圆钮被拉长，松开弹回 */
 .thinking-switch {
   position: relative;
   flex: none;
-  width: 38px;
-  height: 22px;
-  border-radius: 11px;
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
   background: color-mix(in oklab, var(--ink) 16%, transparent);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
   transition:
-    background 220ms var(--ease-snap),
-    box-shadow 220ms var(--ease-snap);
+    background 260ms var(--ease-snap),
+    box-shadow 260ms var(--ease-snap);
 }
 
 .thinking-switch i {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-  transition: transform 280ms var(--ease-spring);
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #fff, #f1f2f6);
+  color: #8a8c96;
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.25),
+    0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  transition:
+    transform 340ms var(--ease-spring),
+    width 240ms var(--ease-spring);
 }
 
 .thinking-section.on .thinking-switch {
   background: var(--accent);
-  box-shadow: 0 0 12px -2px color-mix(in oklab, var(--accent) 70%, transparent);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.12),
+    0 0 14px -2px color-mix(in oklab, var(--accent) 70%, transparent);
 }
 
 .thinking-section.on .thinking-switch i {
   transform: translateX(16px);
 }
 
-/* 强度分段：开启后从开关下方展开 */
-.thinking-levels {
-  display: flex;
-  gap: 3px;
-  margin: 0 4px 2px;
-  padding: 3px;
-  border-radius: 12px;
-  background: var(--chip);
-  animation: levels-in 260ms var(--ease-spring);
+.thinking-section:not(.locked)
+  .thinking-row:active:not(:disabled)
+  .thinking-switch
+  i {
+  width: 25px;
 }
 
-@keyframes levels-in {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
+.thinking-section.on:not(.locked)
+  .thinking-row:active:not(:disabled)
+  .thinking-switch
+  i {
+  transform: translateX(11px);
+}
+
+/* 锁定：模型只有一档或没有声明档位。开关褪色，圆钮上一把小锁 */
+.thinking-section.locked .thinking-switch {
+  background: color-mix(in oklab, var(--ink) 9%, transparent);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.thinking-section.locked.on .thinking-switch {
+  background: color-mix(
+    in oklab,
+    var(--accent) 38%,
+    color-mix(in oklab, var(--ink) 14%, transparent)
+  );
+}
+
+.thinking-section.locked .thinking-switch i {
+  background: color-mix(in oklab, #fff 84%, var(--muted));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.thinking-section.locked .thinking-row-title {
+  color: color-mix(in oklab, var(--ink) 72%, var(--muted));
+}
+
+/* 强度分段：高度用 grid 0fr→1fr 过渡，菜单平滑长高；选中块在档位间弹性滑动 */
+.thinking-levels-wrap {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    grid-template-rows 360ms var(--ease-spring),
+    opacity 180ms var(--ease-snap),
+    transform 360ms var(--ease-spring);
+}
+
+.thinking-levels-wrap.open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: none;
+  transition:
+    grid-template-rows 420ms var(--ease-spring),
+    opacity 260ms 80ms var(--ease-snap),
+    transform 420ms var(--ease-spring);
+}
+
+.thinking-levels-clip {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.thinking-levels {
+  position: relative;
+  display: flex;
+  gap: 2px;
+  margin: 6px 4px 3px;
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--inset);
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, 0.12),
+    inset 0 0 0 1px var(--line);
+  isolation: isolate;
+}
+
+.thinking-level-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  z-index: -1;
+  border-radius: 10px;
+  border: 1px solid var(--accent-line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16), transparent 70%),
+    var(--accent-soft);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 4px 14px -6px var(--accent-glow);
+  transition:
+    transform 360ms var(--ease-spring),
+    width 360ms var(--ease-spring);
+}
+
+html[data-theme="light"] .thinking-level-thumb {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.95),
+      rgba(255, 255, 255, 0.6)
+    ),
+    var(--accent-soft);
+  box-shadow:
+    inset 0 1px 0 #fff,
+    0 1px 2px rgba(25, 30, 48, 0.08),
+    0 4px 12px -6px var(--accent-glow);
 }
 
 .media-menu .thinking-level {
   flex: 1;
   min-width: 0;
   padding: 6px 4px;
-  border-radius: 9px;
+  border-radius: 10px;
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 600;
@@ -590,29 +774,40 @@
   text-overflow: ellipsis;
   animation: none;
   transition:
-    background 180ms var(--ease-snap),
-    color 180ms var(--ease-snap),
-    box-shadow 200ms var(--ease-snap);
+    color 220ms var(--ease-snap),
+    transform 200ms var(--ease-spring);
 }
 
 @media (hover: hover) {
   .media-menu .thinking-level:hover:not(:disabled) {
-    background: var(--chip-hover);
+    background: none;
     color: var(--ink);
     transform: none;
   }
 }
 
+.media-menu .thinking-level:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
 .media-menu .thinking-level.selected {
-  background: var(--bg-lift);
-  color: color-mix(in oklab, var(--ink) 45%, var(--accent));
-  box-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.12),
-    0 0 0 1px var(--accent-line);
+  color: color-mix(in oklab, var(--ink) 40%, var(--accent));
+}
+
+.media-menu .thinking-level:disabled {
+  cursor: default;
 }
 
 .media-menu .thinking-level:focus-visible,
 .media-menu .thinking-row:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thinking-levels-wrap,
+  .thinking-level-thumb,
+  .thinking-switch i {
+    transition: none;
+  }
 }

@@ -166,7 +166,9 @@ class LLMModelEntry:
             "name": self.name,
             "description": self.description,
         }
-        if len(self.thinking_levels) > 1:
+        # A single level is still reported so the UI can show the (locked)
+        # state: the model always thinks, or never does, and cannot be changed.
+        if self.thinking_levels:
             info["thinking"] = {
                 "levels": [level.public_info() for level in self.thinking_levels],
                 "default": self.thinking_default,
