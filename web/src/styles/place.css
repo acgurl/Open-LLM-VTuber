@@ -1,0 +1,624 @@
+/* ---------- 地点卡：与工具卡同一套玻璃几何，地图是卡里唯一一块亮面 ---------- */
+.place-card {
+  display: flex;
+  flex-direction: column;
+  animation: place-in 380ms var(--ease-spring) backwards;
+}
+
+@keyframes place-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.place-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px var(--surface-pad-x) 10px;
+}
+
+.place-glyph {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: var(--shadow-inset);
+}
+
+.place-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.place-name {
+  font-family: var(--font-round);
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.place-sub {
+  font-size: 0.76rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.place-head .icon-btn {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
+  color: var(--muted);
+  background: var(--chip);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (hover: hover) {
+  .place-head .icon-btn:hover:not(:disabled) {
+    color: var(--ink);
+    background: var(--chip-hover);
+    box-shadow: none;
+  }
+}
+
+/* 同名多地点：chips 切换，避免多张地图同时拉瓦片 */
+.place-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 var(--surface-pad-x) 10px;
+}
+
+.place-chip {
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--chip);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition:
+    background 160ms,
+    border-color 160ms,
+    color 160ms;
+}
+
+@media (hover: hover) {
+  .place-chip:hover {
+    background: var(--chip-hover);
+    color: var(--ink);
+  }
+}
+
+.place-chip.active {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* ---------- 地图预览：亮色瓦片嵌在玻璃里，圆角 + 内描边当作“图片附件” ---------- */
+.place-map {
+  position: relative;
+  height: 200px;
+  margin: 0 var(--surface-pad-x);
+  border-radius: 14px;
+  border: 1px solid var(--line-strong);
+  overflow: hidden;
+  background: var(--inset);
+  box-shadow: var(--shadow-inset);
+  cursor: zoom-in;
+}
+
+.place-map.interactive {
+  height: 100%;
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  cursor: grab;
+}
+
+.place-map.interactive:active {
+  cursor: grabbing;
+}
+
+.place-map-host {
+  position: absolute;
+  inset: 0;
+}
+
+.place-map .leaflet-container {
+  background: #e8ecE3;
+  font-family: var(--font-body);
+}
+
+.place-map .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.72);
+  color: #4a4d52;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.place-map .leaflet-control-attribution a {
+  color: #35618f;
+}
+
+.place-map .leaflet-bar {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  overflow: hidden;
+  box-shadow: var(--shadow-btn);
+}
+
+.place-map .leaflet-bar a {
+  background: var(--glass-solid);
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+
+@media (hover: hover) {
+  .place-map .leaflet-bar a:hover {
+    background: var(--chip-hover);
+    color: var(--ink);
+  }
+}
+
+.place-map .leaflet-bar a.leaflet-disabled {
+  background: var(--glass-solid);
+  color: var(--faint);
+}
+
+/* 加载/失败遮罩盖在瓦片 pane 之上 */
+.place-map-veil {
+  position: absolute;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  background: var(--inset);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.place-map-veil.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 16px;
+  text-align: center;
+  cursor: default;
+}
+
+.place-map-veil.error strong {
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+
+.place-map-veil.error span {
+  font-size: 0.76rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.place-map-expand {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--glass-solid);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 200ms var(--ease-snap),
+    transform 200ms var(--ease-snap);
+}
+
+@media (hover: hover) {
+  .place-map:hover .place-map-expand,
+  .place-map:focus-within .place-map-expand {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 标记：主色圆点 + 扩散环，和舞台上的光尘同一套色 */
+.place-pin-dot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--accent-strong);
+  border: 2.5px solid #fff;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+}
+
+.place-pin-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-line);
+  animation: pin-pulse 2.4s ease-out infinite;
+}
+
+@keyframes pin-pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(0.45);
+    opacity: 0.9;
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(1.15);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.15);
+    opacity: 0;
+  }
+}
+
+/* ---------- 卡内文字与操作行 ---------- */
+.place-detail {
+  margin: 0;
+  padding: 10px var(--surface-pad-x) 0;
+  font-size: 0.86rem;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+.place-room {
+  margin-left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--chip);
+  border: 1px solid var(--line);
+  font-size: 0.74rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.place-note-block {
+  padding: 6px var(--surface-pad-x) 0;
+}
+
+.place-note {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.place-note:not(.open) {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.place-note-toggle {
+  display: inline-block;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.place-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px var(--surface-pad-x) 14px;
+}
+
+.place-meta {
+  margin-left: auto;
+  font-size: 0.72rem;
+  color: var(--faint);
+  text-align: right;
+}
+
+/* ---------- 跳地图 App：主按钮 + caret 菜单 ---------- */
+.map-app {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.map-app-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 13px;
+  border-radius: 12px 0 0 12px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.84rem;
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    background 180ms,
+    transform 220ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .map-app-primary:hover {
+    background: color-mix(in oklab, var(--accent) 22%, transparent);
+  }
+}
+
+.map-app-primary:active {
+  transform: scale(0.98);
+}
+
+.map-app-caret {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  border: 1px solid var(--accent-line);
+  border-left: none;
+  border-radius: 0 12px 12px 0;
+  background: var(--accent-soft);
+  color: var(--accent);
+  cursor: pointer;
+  transition: background 180ms;
+}
+
+@media (hover: hover) {
+  .map-app-caret:hover {
+    background: color-mix(in oklab, var(--accent) 22%, transparent);
+  }
+}
+
+.map-app-caret svg {
+  transition: transform 200ms var(--ease-snap);
+}
+
+.map-app-caret[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+/* 向上弹：消息卡的 backdrop-filter 形成层叠上下文，向下会被后面的气泡盖住 */
+.map-app-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 172px;
+  padding: 6px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--glass-solid);
+  backdrop-filter: blur(20px) saturate(1.15);
+  -webkit-backdrop-filter: blur(20px) saturate(1.15);
+  box-shadow: var(--shadow-float);
+  animation: map-menu-in 160ms var(--ease-spring);
+}
+
+@keyframes map-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.map-app-menu a,
+.map-app-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 9px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.84rem;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+@media (hover: hover) {
+  .map-app-menu a:hover,
+  .map-app-menu button:hover {
+    background: var(--chip-hover);
+  }
+}
+
+/* ---------- 全屏地图：抽屉同层 mask + dialog ---------- */
+.place-fullscreen {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(1024px, calc(100vw - 32px));
+  height: min(780px, calc(100dvh - 32px));
+  display: flex;
+  flex-direction: column;
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, color-mix(in oklab, var(--accent) 6%, transparent), transparent 30%),
+    var(--glass-solid);
+  backdrop-filter: blur(26px) saturate(1.15);
+  -webkit-backdrop-filter: blur(26px) saturate(1.15);
+  box-shadow: 0 0 90px -26px rgba(0, 0, 0, 0.95);
+  z-index: 60;
+  overflow: hidden;
+  animation: place-full-in 320ms var(--ease-spring);
+}
+
+.place-fullscreen.closing {
+  pointer-events: none;
+  animation: place-full-out 220ms ease-in forwards;
+}
+
+@keyframes place-full-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes place-full-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.97) translateY(8px);
+  }
+}
+
+.place-fullscreen:focus {
+  outline: none;
+}
+
+.place-full-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 14px 12px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.place-full-head .icon-btn {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 50%;
+  color: var(--muted);
+  background: var(--chip);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (hover: hover) {
+  .place-full-head .icon-btn:hover:not(:disabled) {
+    color: var(--ink);
+    background: var(--chip-hover);
+    box-shadow: none;
+  }
+}
+
+.place-fullscreen .place-switch {
+  padding: 10px 16px 0;
+}
+
+.place-full-map {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 12px 16px 0;
+  border-radius: 16px;
+  border: 1px solid var(--line-strong);
+  overflow: hidden;
+}
+
+.place-full-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.place-full-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 34%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+
+.place-full-info .place-detail,
+.place-full-info .place-note-block {
+  padding: 0;
+}
+
+.place-coords {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.place-coords code {
+  padding: 2px 7px;
+  border-radius: 7px;
+  background: var(--inset);
+  border: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--ink);
+}
+
+.place-coords .place-meta {
+  margin-left: auto;
+}

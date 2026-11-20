@@ -174,6 +174,25 @@
     "active": "思考中",
     "done": "已思考 {{seconds}} 秒"
   },
+  "location": {
+    "fullscreen": "全屏查看",
+    "close": "关闭地图",
+    "switchLabel": "切换地点",
+    "openInApp": "在地图 App 打开",
+    "moreMaps": "更多地图与坐标",
+    "baidu": "百度地图",
+    "apple": "苹果地图",
+    "copyCoord": "复制坐标（GCJ-02）",
+    "copied": "坐标已复制",
+    "copyFailed": "复制失败，请手动选择坐标",
+    "standard": "标准",
+    "satellite": "卫星",
+    "mapStyle": "地图样式",
+    "noteMore": "展开",
+    "noteLess": "收起",
+    "mapFailed": "地图加载失败",
+    "mapFailedHint": "当前网络无法访问地图瓦片，可复制坐标或直接在地图 App 中打开。"
+  },
   "theme": {
     "toLight": "切换到白天模式",
     "toDark": "切换到黑夜模式"
