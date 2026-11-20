@@ -182,6 +182,56 @@
   }
 }
 
+/* 地点卡窄屏：地图矮一点、内边距收紧；全屏地图整幅铺满 */
+@media (max-width: 720px) {
+  .place-map {
+    height: 176px;
+    margin: 0 12px;
+  }
+
+  .place-head,
+  .place-foot,
+  .place-switch,
+  .place-detail,
+  .place-note-block {
+    padding-inline: 12px;
+  }
+
+  .place-meta {
+    margin-left: 0;
+    width: 100%;
+    text-align: left;
+  }
+
+  .place-fullscreen {
+    width: 100vw;
+    height: 100dvh;
+    border-radius: 0;
+    border: none;
+  }
+
+  .place-full-map {
+    margin: 10px 12px 0;
+  }
+
+  .place-fullscreen .place-switch,
+  .place-full-bar,
+  .place-full-info {
+    padding-inline: 12px;
+  }
+}
+
+@media (pointer: coarse) {
+  .place-map-expand {
+    opacity: 1;
+    transform: none;
+  }
+
+  .place-chip {
+    padding: 7px 12px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

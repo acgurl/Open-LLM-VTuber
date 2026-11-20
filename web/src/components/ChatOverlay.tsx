@@ -6,6 +6,7 @@ import { live2d } from '../live2d/controller';
 import { sendText } from '../services/actions';
 import { MessageBubble } from './MessageBubble';
 import { ToolCallCard } from './ToolCallCard';
+import { PlaceCard } from './PlaceCard';
 import { ArrowDownIcon } from './icons';
 
 const NEAR_BOTTOM_PX = 72;
@@ -152,8 +153,10 @@ export function ChatOverlay() {
           {entries.map((e: ChatEntry) =>
             e.kind === 'text' ? (
               <MessageBubble key={e.id} entry={e} />
-            ) : (
+            ) : e.kind === 'tool' ? (
               <ToolCallCard key={e.id} entry={e} />
+            ) : (
+              <PlaceCard key={e.id} entry={e} />
             ),
           )}
           {showStarters && (

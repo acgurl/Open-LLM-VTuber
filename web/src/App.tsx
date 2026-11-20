@@ -11,6 +11,7 @@ import { TopBar } from './components/TopBar';
 import { CameraWindow } from './components/CameraWindow';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { SettingsDrawer } from './components/SettingsDrawer';
+import { PlaceFullscreen } from './components/PlaceFullscreen';
 import { Toasts } from './components/Toasts';
 import { BootScreen } from './components/BootScreen';
 
@@ -88,6 +89,7 @@ export default function App() {
       <InputBar />
       <HistoryDrawer />
       <SettingsDrawer />
+      <PlaceFullscreen />
       <Toasts />
       <BootScreen />
       {status === 'failed' && (

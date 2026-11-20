@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { HistoryToolCall } from '../protocol/types';
+import { parsePlaces, placeKey, type Place } from '../utils/places';
 
 export interface ChatTextEntry {
   kind: 'text';
@@ -23,10 +24,45 @@ export interface ToolEntry {
   name?: string;
 }
 
-export type ChatEntry = ChatTextEntry | ToolEntry;
+// 地点卡：工具结果里带 places 时派生出的独立条目，插在工具卡之后、回答之前。
+// 工具卡完成会自动折叠，地图不能藏在折叠详情里，所以与工具卡同级而不是嵌套。
+export interface PlaceEntry {
+  kind: 'place';
+  id: string;
+  tool_id: string;
+  places: Place[];
+  timestamp: string;
+}
+
+export type ChatEntry = ChatTextEntry | ToolEntry | PlaceEntry;
 
 let seq = 0;
 const nextId = () => `e${Date.now().toString(36)}_${seq++}`;
+
+const makePlaceEntry = (
+  t: { tool_id: string; content: string; timestamp: string },
+  seen: Set<string>,
+): PlaceEntry | null => {
+  const places = parsePlaces(t.content).filter((p) => {
+    const key = placeKey(p);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (places.length === 0) return null;
+  return { kind: 'place', id: nextId(), tool_id: t.tool_id, places, timestamp: t.timestamp };
+};
+
+// 同一轮里并行/重复的工具调用可能返回相同地点：只与本轮已展示的地点去重
+const turnSeenKeys = (entries: ChatEntry[]): Set<string> => {
+  const seen = new Set<string>();
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const e = entries[i];
+    if (e.kind === 'text' && e.role === 'human') break;
+    if (e.kind === 'place') e.places.forEach((p) => seen.add(placeKey(p)));
+  }
+  return seen;
+};
 
 // 工具卡会插在文本气泡之后，流式气泡不一定在队尾，收尾时必须全量清理
 const stopStreaming = (entries: ChatEntry[]): ChatEntry[] => {
@@ -96,13 +132,26 @@ export const useChat = create<ChatState>((set) => ({
   upsertTool: (t) =>
     set((s) => {
       const idx = s.entries.findIndex((e) => e.kind === 'tool' && e.tool_id === t.tool_id);
+      let entries: ChatEntry[];
+      let toolIdx: number;
       if (idx >= 0) {
-        const entries = [...s.entries];
+        entries = [...s.entries];
         entries[idx] = { ...(entries[idx] as ToolEntry), ...t };
-        return { entries };
+        toolIdx = idx;
+      } else {
+        // 新工具卡意味着这段文本已经说完，后续 text-delta 会另起气泡
+        entries = [...stopStreaming(s.entries), { kind: 'tool', id: nextId(), ...t }];
+        toolIdx = entries.length - 1;
       }
-      // 新工具卡意味着这段文本已经说完，后续 text-delta 会另起气泡
-      return { entries: [...stopStreaming(s.entries), { kind: 'tool', id: nextId(), ...t }] };
+      // 完成态才解析地点：running 的 content 只是入参，没有结果
+      if (
+        t.status === 'completed' &&
+        !entries.some((e) => e.kind === 'place' && e.tool_id === t.tool_id)
+      ) {
+        const place = makePlaceEntry(t, turnSeenKeys(entries));
+        if (place) entries.splice(toolIdx + 1, 0, place);
+      }
+      return { entries };
     }),
 
   // 历史里的工具卡没有独立消息位：按 turn_index 挂回对应提问之后，
@@ -116,16 +165,27 @@ export const useChat = create<ChatState>((set) => ({
         byTurn.set(call.turn_index, list);
       }
 
-      const toolEntries = (turn: number): ToolEntry[] =>
-        (byTurn.get(turn) ?? []).map((call) => ({
-          kind: 'tool',
-          id: nextId(),
-          tool_id: call.tool_id,
-          tool_name: call.tool_name,
-          status: call.status,
-          content: call.content,
-          timestamp: call.timestamp,
-        }));
+      const toolEntries = (turn: number): ChatEntry[] => {
+        const seen = new Set<string>();
+        const out: ChatEntry[] = [];
+        for (const call of byTurn.get(turn) ?? []) {
+          out.push({
+            kind: 'tool',
+            id: nextId(),
+            tool_id: call.tool_id,
+            tool_name: call.tool_name,
+            status: call.status,
+            content: call.content,
+            timestamp: call.timestamp,
+          });
+          // 历史里的 content 与直播同形状，地点卡刷新后同样能复原
+          if (call.status === 'completed') {
+            const place = makePlaceEntry(call, seen);
+            if (place) out.push(place);
+          }
+        }
+        return out;
+      };
 
       const entries: ChatEntry[] = [];
       let turn = 0;

@@ -447,6 +447,8 @@ Cookie（`auth/manager.py`）：
 
 内部的 `final_tool_results` 事件只给 LLM，**不会发给客户端**（`tool_executor.py:302`）。群聊中该消息群播。
 
+**地点卡（前端派生，2026-11-21）**：后端**不新增任何 WS 字段**。全局 `kb_search` 完成态的 `content` 是知识库 JSON 原文，其中可选的 `places` 数组由前端解析成独立的地点卡条目（`web/src/utils/places.ts`、`stores/chat.ts`），插在工具卡之后、回答气泡之前；工具卡仍保留可折叠原文。`places` 每项形状：`name`（必需）、`alias/category/campus/detail/room/note/source/accuracy`（可选字符串）、`wgs84/gcj02/bd09`（`{lat,lon}`，至少 `gcj02` 或 `wgs84` 之一合法，否则丢弃该项）。历史回放走同一条解析路径（`tool_calls.content` 原文落库，见 12.5），因此刷新后地点卡同样复原。地图用高德免 key 瓦片 + `gcj02`（缺 `gcj02` 时前端由 `wgs84` 换算）；跳转链接为高德 `uri.amap.com/marker`（`callnative=1`）、百度 `api.map.baidu.com/marker`（`coord_type=gcj02`）、iOS 苹果地图。同一轮内按 `name+campus+坐标` 去重，单次最多渲染 6 个地点。
+
 **并行工具调用**（`ToolExecutor.execute_tools`）：模型在同一轮里发出的多个工具调用会并发执行（同时最多 `MAX_CONCURRENT_TOOL_CALLS = 8` 个，超出的排队）。客户端会先按调用顺序连续收到每个工具的 `running`，再按**完成先后**收到各自的 `completed`/`error`，所以不同 `tool_id` 的状态会交错，前端必须按 `tool_id` 更新卡片，不能假设“一个 running 之后紧跟它自己的 completed”。回给 LLM 的工具结果仍按模型发出调用的顺序排列。
 
 **用户/浏览器 MCP 的消息**（详见[第 22 节](#22-用户-mcp-与浏览器本地-mcp2026-10-25)）：
