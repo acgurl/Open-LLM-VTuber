@@ -28,12 +28,9 @@
   },
   "input": {
     "message": "Message",
-    "placeholder": "Say something, or hold mic…",
+    "placeholder": "Say something, or hold to talk…",
     "send": "Send",
     "stop": "Interrupt",
-    "mic": "Microphone",
-    "micOn": "Turn live voice off",
-    "micOff": "Tap for live voice, hold to talk",
     "pttArming": "Starting mic…",
     "pttReleaseToSend": "Release to send · Slide up to cancel",
     "pttReleaseToCancel": "Release to cancel",

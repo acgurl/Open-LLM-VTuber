@@ -28,12 +28,9 @@
   },
   "input": {
     "message": "消息",
-    "placeholder": "说点什么，或长按麦克风…",
+    "placeholder": "说点什么，或长按说话…",
     "send": "发送",
     "stop": "打断",
-    "mic": "麦克风",
-    "micOn": "关闭实时语音",
-    "micOff": "轻按实时语音，长按按住说话",
     "pttArming": "准备录音…",
     "pttReleaseToSend": "松开发送 · 上滑取消",
     "pttReleaseToCancel": "松开取消发送",
