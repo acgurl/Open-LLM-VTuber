@@ -133,6 +133,33 @@
   -webkit-touch-callout: none;
 }
 
+/* 触屏端在输入栏无文字时用非可编辑透明层接管触摸手势，避免手机浏览器长按呼出粘贴/选词菜单并打断录音 */
+.ptt-shield {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+@media (pointer: coarse) {
+  .ptt-shield {
+    display: block;
+  }
+}
+
+.input-row .media-anchor,
+.input-row .send-btn,
+.input-row .stop-btn {
+  position: relative;
+  z-index: 3;
+}
+
 /* ---------- 按住说话（PTT）录音条 ---------- */
 .ptt-hidden {
   display: none !important;

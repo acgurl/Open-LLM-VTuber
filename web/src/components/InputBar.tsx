@@ -617,6 +617,20 @@ export function InputBar() {
         onClickCapture={onRowClickCapture}
         onContextMenu={onRowContextMenu}
       >
+        {(pttReady || pttHolding) && (
+          <div
+            className="ptt-shield"
+            aria-hidden="true"
+            onClick={() => {
+              if (suppressNextClickRef.current) {
+                suppressNextClickRef.current = false;
+                return;
+              }
+              textRef.current?.focus();
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+          />
+        )}
         <div className={`media-anchor${pttHolding ? " ptt-hidden" : ""}`} ref={anchorRef}>
           <button
             className={`icon-btn plus-btn${mediaMenuOpen ? " open" : ""}${thinking.on ? " thinking-on" : ""}`}
