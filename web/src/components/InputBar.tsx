@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useConnection } from "../stores/connection";
-import { useSettings } from "../stores/settings";
 import { useGroup } from "../stores/group";
 import { toast } from "../stores/toast";
 import { sendText, interrupt } from "../services/actions";
 import { audioPlayer } from "../services/audioPlayer";
-import { mic } from "../services/mic";
 import { ptt, transcribeWav } from "../services/ptt";
 import { camera } from "../services/camera";
 import { fileToBase64 } from "../utils/base64";
@@ -18,7 +16,6 @@ import {
   CamIcon,
   CloseIcon,
   ImageIcon,
-  MicIcon,
   ScreenShareIcon,
   StopIcon,
   SendIcon,
@@ -50,10 +47,8 @@ export function InputBar() {
   const { t } = useTranslation();
   const busy = useConnection((s) => s.busy);
   const inGroup = useGroup((s) => s.members.length > 1);
-  const micOn = useSettings((s) => s.micOn);
   const [text, setText] = useState("");
   const [images, setImages] = useState<PendingImage[]>([]);
-  const [micStarting, setMicStarting] = useState(false);
   const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
   const [pttPhase, setPttPhase] = useState<PttPhase>("idle");
   const [pttCancelIntent, setPttCancelIntent] = useState(false);
@@ -65,6 +60,7 @@ export function InputBar() {
   const fileRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   // 已占用的附图名额：多张图并发编码时 images 状态还没更新，靠它同步计数才能守住上限
@@ -79,12 +75,14 @@ export function InputBar() {
 
   const gestureRef = useRef({
     pointerId: null as number | null,
+    startX: 0,
     startY: 0,
     holdTimer: null as number | null,
     holdTriggered: false,
     cancelIntent: false,
     submitting: false,
   });
+  const detachWinRef = useRef<(() => void) | null>(null);
   const suppressNextClickRef = useRef(false);
   const pttStartAtRef = useRef(0);
   const lastWaveAtRef = useRef(0);
@@ -125,16 +123,30 @@ export function InputBar() {
     return () => window.clearInterval(id);
   }, [pttPhase]);
 
+  const releaseCaptureIfHeld = (pid: number | null) => {
+    if (pid === null) return;
+    try {
+      if (rowRef.current?.hasPointerCapture(pid)) {
+        rowRef.current.releasePointerCapture(pid);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
   const cancelHoldRecording = () => {
     const g = gestureRef.current;
     if (g.holdTimer !== null) {
       window.clearTimeout(g.holdTimer);
       g.holdTimer = null;
     }
+    detachWinRef.current?.();
+    const pid = g.pointerId;
     g.pointerId = null;
     g.holdTriggered = false;
     g.cancelIntent = false;
     g.submitting = false;
+    releaseCaptureIfHeld(pid);
     ptt.cancel();
     setPttPhase("idle");
     setPttCancelIntent(false);
@@ -166,6 +178,7 @@ export function InputBar() {
       if (gestureRef.current.holdTimer !== null) {
         window.clearTimeout(gestureRef.current.holdTimer);
       }
+      detachWinRef.current?.();
       ptt.cancel();
       asrAbortRef.current?.abort();
     };
@@ -294,28 +307,16 @@ export function InputBar() {
     }
   };
 
-  const onMicClick = async () => {
-    if (suppressNextClickRef.current) {
-      suppressNextClickRef.current = false;
-      return;
-    }
-    if (pttPhase !== "idle") return;
-    if (micOn) {
-      mic.stop();
-      return;
-    }
-    setMicStarting(true);
-    await mic.start();
-    setMicStarting(false);
-  };
-
   const finishHoldRecording = async () => {
     const g = gestureRef.current;
     if (g.submitting) return;
     g.submitting = true;
+    detachWinRef.current?.();
+    const pid = g.pointerId;
     g.pointerId = null;
     g.holdTriggered = false;
     g.cancelIntent = false;
+    releaseCaptureIfHeld(pid);
 
     const result = ptt.stopAndEncode();
     setPttCancelIntent(false);
@@ -351,14 +352,12 @@ export function InputBar() {
         toast(t("input.pttEmpty"));
         return;
       }
-      const draft = textStateRef.current.trim();
-      const combined = draft ? `${draft} ${transcript}` : transcript;
-      if (combined.length > LIMITS.textInputChars) {
-        setText(combined);
+      if (transcript.length > LIMITS.textInputChars) {
+        setText(transcript);
         toast(t("input.tooLong"), "error");
         return;
       }
-      await sendMessage(combined);
+      await sendMessage(transcript);
     } catch (err) {
       if ((err as DOMException | null)?.name === "AbortError") return;
       toast(err instanceof Error ? err.message : t("error.generic"), "error");
@@ -369,12 +368,69 @@ export function InputBar() {
     }
   };
 
+  const handlePointerMove = (clientX: number, clientY: number) => {
+    const g = gestureRef.current;
+    if (g.pointerId === null) return;
+    if (!g.holdTriggered) {
+      // 尚未进入录音前大幅滑动，视为滑动误触而非长按，取消计时并放行原生交互
+      if (Math.hypot(clientX - g.startX, clientY - g.startY) > 24) {
+        if (g.holdTimer !== null) {
+          window.clearTimeout(g.holdTimer);
+          g.holdTimer = null;
+        }
+        detachWinRef.current?.();
+        g.pointerId = null;
+      }
+      return;
+    }
+    const wantCancel = clientY - g.startY < -CANCEL_SLIDE_PX;
+    if (wantCancel !== g.cancelIntent) {
+      g.cancelIntent = wantCancel;
+      setPttCancelIntent(wantCancel);
+    }
+  };
+
+  const finishPointerGesture = (pointerId: number, forceCancel: boolean) => {
+    const g = gestureRef.current;
+    if (g.pointerId !== pointerId) return;
+    if (g.holdTimer !== null) {
+      window.clearTimeout(g.holdTimer);
+      g.holdTimer = null;
+    }
+    detachWinRef.current?.();
+    const wasTriggered = g.holdTriggered;
+    const wasCancelIntent = g.cancelIntent;
+    g.pointerId = null;
+    releaseCaptureIfHeld(pointerId);
+
+    if (!wasTriggered) return;
+
+    window.setTimeout(() => {
+      suppressNextClickRef.current = false;
+    }, 0);
+
+    if (forceCancel || wasCancelIntent) {
+      cancelHoldRecording();
+      return;
+    }
+    void finishHoldRecording();
+  };
+
   const startHoldRecording = async () => {
     const g = gestureRef.current;
     if (g.pointerId === null) return;
     g.holdTriggered = true;
     g.holdTimer = null;
     suppressNextClickRef.current = true;
+
+    // 真正触发长按后再失焦并接管指针，避免影响短按聚焦输入
+    textRef.current?.blur();
+    window.getSelection()?.removeAllRanges();
+    try {
+      rowRef.current?.setPointerCapture(g.pointerId);
+    } catch {
+      /* ignore */
+    }
 
     setPttPhase("arming");
     setPttCancelIntent(false);
@@ -415,71 +471,70 @@ export function InputBar() {
     }
   };
 
-  const onMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+  const onRowPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    if (micOn || micStarting || pttPhase !== "idle") return;
+    if (pttPhase !== "idle") return;
+    // 输入栏有文字时保留长按选词/移动光标能力，不抢占为语音
+    if (textStateRef.current.trim().length > 0) return;
+    if ((e.target as Element | null)?.closest("button, .media-anchor")) return;
     if (mediaMenuOpen) setMediaMenuOpen(false);
 
     const g = gestureRef.current;
     if (g.holdTimer !== null) window.clearTimeout(g.holdTimer);
+    detachWinRef.current?.();
     suppressNextClickRef.current = false;
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
-    g.pointerId = e.pointerId;
+
+    const pid = e.pointerId;
+    g.pointerId = pid;
+    g.startX = e.clientX;
     g.startY = e.clientY;
     g.holdTriggered = false;
     g.cancelIntent = false;
     g.submitting = false;
+
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== gestureRef.current.pointerId) return;
+      handlePointerMove(ev.clientX, ev.clientY);
+    };
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== gestureRef.current.pointerId) return;
+      finishPointerGesture(ev.pointerId, false);
+    };
+    const onCancel = (ev: PointerEvent) => {
+      if (ev.pointerId !== gestureRef.current.pointerId) return;
+      finishPointerGesture(ev.pointerId, true);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+    detachWinRef.current = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      detachWinRef.current = null;
+    };
+
     g.holdTimer = window.setTimeout(() => {
       void startHoldRecording();
     }, HOLD_DELAY_MS);
   };
 
-  const onMicPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
-    const g = gestureRef.current;
-    if (!g.holdTriggered || g.pointerId !== e.pointerId) return;
-    const wantCancel = e.clientY - g.startY < -CANCEL_SLIDE_PX;
-    if (wantCancel !== g.cancelIntent) {
-      g.cancelIntent = wantCancel;
-      setPttCancelIntent(wantCancel);
-    }
+  const onRowClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!suppressNextClickRef.current) return;
+    suppressNextClickRef.current = false;
+    e.preventDefault();
+    e.stopPropagation();
+    textRef.current?.blur();
   };
 
-  const finishPointerGesture = (
-    e: React.PointerEvent<HTMLButtonElement>,
-    forceCancel: boolean,
-  ) => {
-    const g = gestureRef.current;
-    if (g.pointerId !== e.pointerId) return;
-    if (g.holdTimer !== null) {
-      window.clearTimeout(g.holdTimer);
-      g.holdTimer = null;
+  const onRowContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (
+      pttHolding ||
+      gestureRef.current.holdTriggered ||
+      gestureRef.current.pointerId !== null
+    ) {
+      e.preventDefault();
     }
-    try {
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-        e.currentTarget.releasePointerCapture(e.pointerId);
-      }
-    } catch {
-      /* ignore */
-    }
-
-    if (!g.holdTriggered) {
-      g.pointerId = null;
-      return;
-    }
-
-    window.setTimeout(() => {
-      suppressNextClickRef.current = false;
-    }, 0);
-
-    if (forceCancel || g.cancelIntent) {
-      cancelHoldRecording();
-      return;
-    }
-    void finishHoldRecording();
   };
 
   const thinkingName = thinking.active
@@ -492,9 +547,10 @@ export function InputBar() {
   // 群聊中一轮未结束时禁发
   const sendDisabled = inGroup && busy;
   sendDisabledRef.current = sendDisabled;
-  const hasContent = text.trim().length > 0 || images.length > 0;
+  const hasText = text.trim().length > 0;
+  const hasContent = hasText || images.length > 0;
+  const pttReady = !hasText && pttPhase === "idle";
   const isTranscribing = pttPhase === "transcribing";
-  const micActiveVisual = micOn || pttHolding;
 
   return (
     <div className="input-bar" ref={barRef}>
@@ -547,7 +603,19 @@ export function InputBar() {
         </div>
       )}
       <div
-        className={`input-row${hasContent ? " filled" : ""}${pttHolding ? " ptt-holding" : ""}${pttCancelIntent ? " ptt-cancel" : ""}${isTranscribing ? " ptt-transcribing" : ""}`}
+        ref={rowRef}
+        className={`input-row${hasContent ? " filled" : ""}${pttReady ? " ptt-ready" : ""}${pttHolding ? " ptt-holding" : ""}${pttCancelIntent ? " ptt-cancel" : ""}${isTranscribing ? " ptt-transcribing" : ""}`}
+        onPointerDown={onRowPointerDown}
+        onPointerMove={(e) => {
+          if (e.pointerId === gestureRef.current.pointerId) {
+            handlePointerMove(e.clientX, e.clientY);
+          }
+        }}
+        onPointerUp={(e) => finishPointerGesture(e.pointerId, false)}
+        onPointerCancel={(e) => finishPointerGesture(e.pointerId, true)}
+        onLostPointerCapture={(e) => finishPointerGesture(e.pointerId, true)}
+        onClickCapture={onRowClickCapture}
+        onContextMenu={onRowContextMenu}
       >
         <div className={`media-anchor${pttHolding ? " ptt-hidden" : ""}`} ref={anchorRef}>
           <button
@@ -621,33 +689,14 @@ export function InputBar() {
               ))}
             </div>
             <span className="ptt-hint">
-              {pttPhase === "arming"
-                ? t("input.pttArming")
-                : pttCancelIntent
-                  ? t("input.pttReleaseToCancel")
+              {pttCancelIntent
+                ? t("input.pttReleaseToCancel")
+                : pttPhase === "arming"
+                  ? t("input.pttArming")
                   : t("input.pttReleaseToSend")}
             </span>
           </div>
         )}
-        <button
-          className={`icon-btn mic-btn${micActiveVisual ? " active" : ""}${pttHolding ? " ptt-live" : ""}${pttCancelIntent ? " ptt-cancel" : ""}`}
-          title={micOn ? t("input.micOn") : t("input.micOff")}
-          aria-label={micOn ? t("input.micOn") : t("input.micOff")}
-          disabled={micStarting || isTranscribing}
-          onClick={() => void onMicClick()}
-          onPointerDown={onMicPointerDown}
-          onPointerMove={onMicPointerMove}
-          onPointerUp={(e) => finishPointerGesture(e, false)}
-          onPointerCancel={(e) => finishPointerGesture(e, true)}
-          onLostPointerCapture={(e) => finishPointerGesture(e, true)}
-          onContextMenu={(e) => e.preventDefault()}
-        >
-          {micStarting || isTranscribing ? (
-            <span className="spinner" />
-          ) : (
-            <MicIcon on={micActiveVisual} />
-          )}
-        </button>
         {!pttHolding &&
           (busy ? (
             <button
@@ -661,8 +710,10 @@ export function InputBar() {
           ) : (
             <button
               className="icon-btn send-btn"
-              title={t("input.send")}
-              aria-label={t("input.send")}
+              title={isTranscribing ? t("input.pttTranscribing") : t("input.send")}
+              aria-label={
+                isTranscribing ? t("input.pttTranscribing") : t("input.send")
+              }
               disabled={
                 sendDisabled ||
                 isTranscribing ||
@@ -670,7 +721,7 @@ export function InputBar() {
               }
               onClick={() => void submit()}
             >
-              <SendIcon />
+              {isTranscribing ? <span className="spinner" /> : <SendIcon />}
             </button>
           ))}
       </div>
