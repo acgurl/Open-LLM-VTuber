@@ -101,6 +101,23 @@
   .drawer-body {
     padding: 12px 12px calc(24px + env(safe-area-inset-bottom, 0px));
   }
+
+  .ptt-bar {
+    gap: 8px;
+    padding: 0 2px 0 6px;
+  }
+
+  .ptt-waves {
+    gap: 2px;
+  }
+
+  .ptt-waves i:nth-child(-n + 4) {
+    display: none;
+  }
+
+  .ptt-hint {
+    font-size: 0.78rem;
+  }
 }
 
 @media (max-width: 400px) {
