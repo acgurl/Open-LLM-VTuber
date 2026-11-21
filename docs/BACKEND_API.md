@@ -945,7 +945,7 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 | 400 | `{"error": "Audio must be mono"}` / `"Audio must be 16-bit PCM"` / `"Audio must be 16000 Hz"` / `"Audio exceeds the 120-second limit"` / `"Invalid WAV file: ..."` / `"Empty audio file"` / `"Empty audio data"` |
 | 401 | `{"error": "Authentication required"}`（仅 oidc） |
 | 413 | `{"error": "Audio file is too large"}` |
-| 429 | `{"error": "Too many concurrent transcription requests"}`（并发上限 **2**） |
+| 429 | `{"error": "Too many concurrent transcription requests"}`（并发上限 **16**） |
 | 500 | `{"error": "Internal server error during transcription"}` |
 
 用的是**默认上下文的 ASR 引擎**，不随角色切换而变（`default_context_cache.asr_engine`，`routes.py:371`）。
@@ -966,7 +966,7 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 | `/client-ws` 总连接数 | 64 | `websocket_handler.py:30` |
 | 每用户连接数 | 4（`auth.max_connections_per_user`，仅 oidc 生效） | `routes.py:173-175,199-206` |
 | 并发对话任务 | 16 | `conversation_handler.py:19` |
-| 并发 `/asr` | 2 | `routes.py:27` |
+| 并发 `/asr` | 16 | `routes.py:29` |
 | `/asr` 上传大小 | 10 MiB | `routes.py:23` |
 | `/tts-ws` 并发连接 | 16 | `routes.py:26` |
 | `/tts-ws` 文本 | 2000 字符 / 30 句 | `routes.py:24-25` |
@@ -1580,7 +1580,7 @@ models:
 | `MAX_TTS_TEXT_CHARS` | 2000 | `routes.py:24` |
 | `MAX_TTS_SENTENCES` | 30 | `routes.py:25` |
 | `MAX_TTS_CONNECTIONS` | 16 | `routes.py:26` |
-| `MAX_CONCURRENT_ASR` | 2 | `routes.py:27` |
+| `MAX_CONCURRENT_ASR` | 16 | `routes.py:29` |
 | `TTS_SYNTHESIS_TIMEOUT_SECONDS` | 30.0 | `tts_manager.py:16` |
 | `TTS_DELIVERY_TIMEOUT_SECONDS` | 10.0 | `tts_manager.py:17` |
 | `PLAYBACK_COMPLETE_TIMEOUT_SECONDS` | 120.0 | `conversation_utils.py:19` |

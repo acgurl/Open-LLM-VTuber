@@ -180,7 +180,7 @@ function assetBase(): string {
   return '/libs/';
 }
 
-function mapMicError(err: unknown): string {
+export function mapMicError(err: unknown): string {
   const t = i18n.t.bind(i18n);
   if (err instanceof Error && err.message === 'mic-timeout') return t('error.micTimeout');
   const name = (err as DOMException | null)?.name ?? '';

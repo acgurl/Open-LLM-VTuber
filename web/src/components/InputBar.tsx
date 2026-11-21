@@ -5,7 +5,9 @@ import { useSettings } from "../stores/settings";
 import { useGroup } from "../stores/group";
 import { toast } from "../stores/toast";
 import { sendText, interrupt } from "../services/actions";
+import { audioPlayer } from "../services/audioPlayer";
 import { mic } from "../services/mic";
+import { ptt, transcribeWav } from "../services/ptt";
 import { camera } from "../services/camera";
 import { fileToBase64 } from "../utils/base64";
 import { captureCamera, captureScreen } from "../utils/capture";
@@ -29,7 +31,20 @@ interface PendingImage {
   preview: string;
 }
 
+type PttPhase = "idle" | "arming" | "recording" | "transcribing";
+
+const HOLD_DELAY_MS = 180;
+const CANCEL_SLIDE_PX = 48;
+const WAVE_BAR_COUNT = 14;
+const INITIAL_WAVE_BARS = Array<number>(WAVE_BAR_COUNT).fill(0.14);
+
 let imageSeq = 0;
+
+function formatDuration(totalSeconds: number): string {
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
 
 export function InputBar() {
   const { t } = useTranslation();
@@ -40,6 +55,11 @@ export function InputBar() {
   const [images, setImages] = useState<PendingImage[]>([]);
   const [micStarting, setMicStarting] = useState(false);
   const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
+  const [pttPhase, setPttPhase] = useState<PttPhase>("idle");
+  const [pttCancelIntent, setPttCancelIntent] = useState(false);
+  const [pttSeconds, setPttSeconds] = useState(0);
+  const [pttBars, setPttBars] = useState<number[]>(INITIAL_WAVE_BARS);
+
   const mediaMenuPresence = usePresence(mediaMenuOpen, 140);
   const thinking = useThinking();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -49,6 +69,28 @@ export function InputBar() {
   const menuRef = useRef<HTMLDivElement>(null);
   // 已占用的附图名额：多张图并发编码时 images 状态还没更新，靠它同步计数才能守住上限
   const imageSlots = useRef(0);
+
+  // 最新值同步到 ref，供异步转写结束后的提交闭包读取，避免拿到过期状态
+  const imagesRef = useRef<PendingImage[]>([]);
+  imagesRef.current = images;
+  const textStateRef = useRef("");
+  textStateRef.current = text;
+  const sendDisabledRef = useRef(false);
+
+  const gestureRef = useRef({
+    pointerId: null as number | null,
+    startY: 0,
+    holdTimer: null as number | null,
+    holdTriggered: false,
+    cancelIntent: false,
+    submitting: false,
+  });
+  const suppressNextClickRef = useRef(false);
+  const pttStartAtRef = useRef(0);
+  const lastWaveAtRef = useRef(0);
+  const asrAbortRef = useRef<AbortController | null>(null);
+
+  const pttHolding = pttPhase === "arming" || pttPhase === "recording";
 
   // 窄屏聊天区贴输入框上沿，输入条自身会长高（换行、附图条），高度得上报给 CSS
   useEffect(() => {
@@ -69,10 +111,65 @@ export function InputBar() {
 
   useEffect(() => {
     const el = textRef.current;
-    if (!el) return;
+    if (!el || pttHolding) return;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
-  }, [text]);
+  }, [text, pttHolding]);
+
+  // 录音计时器
+  useEffect(() => {
+    if (pttPhase !== "recording") return;
+    const id = window.setInterval(() => {
+      setPttSeconds(Math.floor((Date.now() - pttStartAtRef.current) / 1000));
+    }, 250);
+    return () => window.clearInterval(id);
+  }, [pttPhase]);
+
+  const cancelHoldRecording = () => {
+    const g = gestureRef.current;
+    if (g.holdTimer !== null) {
+      window.clearTimeout(g.holdTimer);
+      g.holdTimer = null;
+    }
+    g.pointerId = null;
+    g.holdTriggered = false;
+    g.cancelIntent = false;
+    g.submitting = false;
+    ptt.cancel();
+    setPttPhase("idle");
+    setPttCancelIntent(false);
+    setPttSeconds(0);
+    setPttBars(INITIAL_WAVE_BARS);
+  };
+
+  // 按住录音期间：按 Esc 或窗口失焦时安全取消，防止状态卡死
+  useEffect(() => {
+    if (!pttHolding) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cancelHoldRecording();
+      }
+    };
+    const onBlur = () => cancelHoldRecording();
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [pttHolding]);
+
+  // 组件卸载清理
+  useEffect(() => {
+    return () => {
+      if (gestureRef.current.holdTimer !== null) {
+        window.clearTimeout(gestureRef.current.holdTimer);
+      }
+      ptt.cancel();
+      asrAbortRef.current?.abort();
+    };
+  }, []);
 
   const grabAndAdd = async (source: "camera" | "screen") => {
     setMediaMenuOpen(false);
@@ -151,24 +248,30 @@ export function InputBar() {
     };
   }, [mediaMenuOpen]);
 
-  const submit = async () => {
-    const value = text.trim();
-    if (!value && images.length === 0) return;
+  const sendMessage = async (rawText: string) => {
+    const value = rawText.trim();
+    const currentImages = imagesRef.current;
+    if (!value && currentImages.length === 0) return false;
     if (value.length > LIMITS.textInputChars) {
       toast(t("input.tooLong"), "error");
-      return;
+      return false;
     }
-    let payload = images.map((i) => i.payload);
+    let payload = currentImages.map((i) => i.payload);
     // 实况开着且没手动附图时，文字轮次也带一帧（对齐老前端）
     if (payload.length === 0 && camera.isLive) {
       const frame = await camera.grabImage().catch(() => null);
       if (frame) payload = [frame];
     }
     sendText(value, payload);
-    images.forEach((i) => URL.revokeObjectURL(i.preview));
+    currentImages.forEach((i) => URL.revokeObjectURL(i.preview));
     imageSlots.current = 0;
     setImages([]);
     setText("");
+    return true;
+  };
+
+  const submit = async () => {
+    await sendMessage(text);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -192,6 +295,11 @@ export function InputBar() {
   };
 
   const onMicClick = async () => {
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      return;
+    }
+    if (pttPhase !== "idle") return;
     if (micOn) {
       mic.stop();
       return;
@@ -199,6 +307,179 @@ export function InputBar() {
     setMicStarting(true);
     await mic.start();
     setMicStarting(false);
+  };
+
+  const finishHoldRecording = async () => {
+    const g = gestureRef.current;
+    if (g.submitting) return;
+    g.submitting = true;
+    g.pointerId = null;
+    g.holdTriggered = false;
+    g.cancelIntent = false;
+
+    const result = ptt.stopAndEncode();
+    setPttCancelIntent(false);
+    setPttSeconds(0);
+    setPttBars(INITIAL_WAVE_BARS);
+
+    if (result.status === "empty") {
+      g.submitting = false;
+      setPttPhase("idle");
+      return;
+    }
+    if (result.status === "too-short") {
+      g.submitting = false;
+      setPttPhase("idle");
+      toast(t("input.pttTooShort"));
+      return;
+    }
+
+    if (sendDisabledRef.current) {
+      g.submitting = false;
+      setPttPhase("idle");
+      toast(t("error.serverBusy"), "error");
+      return;
+    }
+
+    setPttPhase("transcribing");
+    const controller = new AbortController();
+    asrAbortRef.current = controller;
+
+    try {
+      const transcript = await transcribeWav(result.wav, controller.signal);
+      if (!transcript) {
+        toast(t("input.pttEmpty"));
+        return;
+      }
+      const draft = textStateRef.current.trim();
+      const combined = draft ? `${draft} ${transcript}` : transcript;
+      if (combined.length > LIMITS.textInputChars) {
+        setText(combined);
+        toast(t("input.tooLong"), "error");
+        return;
+      }
+      await sendMessage(combined);
+    } catch (err) {
+      if ((err as DOMException | null)?.name === "AbortError") return;
+      toast(err instanceof Error ? err.message : t("error.generic"), "error");
+    } finally {
+      if (asrAbortRef.current === controller) asrAbortRef.current = null;
+      g.submitting = false;
+      setPttPhase("idle");
+    }
+  };
+
+  const startHoldRecording = async () => {
+    const g = gestureRef.current;
+    if (g.pointerId === null) return;
+    g.holdTriggered = true;
+    g.holdTimer = null;
+    suppressNextClickRef.current = true;
+
+    setPttPhase("arming");
+    setPttCancelIntent(false);
+    setPttSeconds(0);
+    setPttBars(INITIAL_WAVE_BARS);
+
+    // 进入按住说话即打断当前 AI 播报/生成，避免外放回声被录进麦克风
+    if (useConnection.getState().busy || audioPlayer.isActive()) {
+      interrupt();
+    }
+
+    const ok = await ptt.start({
+      onReady: () => {
+        if (
+          gestureRef.current.pointerId === null ||
+          !gestureRef.current.holdTriggered ||
+          gestureRef.current.submitting
+        ) {
+          return;
+        }
+        pttStartAtRef.current = Date.now();
+        setPttPhase("recording");
+      },
+      onLevel: (level) => {
+        const now = performance.now();
+        if (now - lastWaveAtRef.current < 55) return;
+        lastWaveAtRef.current = now;
+        const barHeight = Math.max(0.14, level);
+        setPttBars((prev) => [...prev.slice(1), barHeight]);
+      },
+      onAutoStop: () => {
+        void finishHoldRecording();
+      },
+    });
+
+    if (!ok && gestureRef.current.holdTriggered && !gestureRef.current.submitting) {
+      cancelHoldRecording();
+    }
+  };
+
+  const onMicPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (micOn || micStarting || pttPhase !== "idle") return;
+    if (mediaMenuOpen) setMediaMenuOpen(false);
+
+    const g = gestureRef.current;
+    if (g.holdTimer !== null) window.clearTimeout(g.holdTimer);
+    suppressNextClickRef.current = false;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    g.pointerId = e.pointerId;
+    g.startY = e.clientY;
+    g.holdTriggered = false;
+    g.cancelIntent = false;
+    g.submitting = false;
+    g.holdTimer = window.setTimeout(() => {
+      void startHoldRecording();
+    }, HOLD_DELAY_MS);
+  };
+
+  const onMicPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const g = gestureRef.current;
+    if (!g.holdTriggered || g.pointerId !== e.pointerId) return;
+    const wantCancel = e.clientY - g.startY < -CANCEL_SLIDE_PX;
+    if (wantCancel !== g.cancelIntent) {
+      g.cancelIntent = wantCancel;
+      setPttCancelIntent(wantCancel);
+    }
+  };
+
+  const finishPointerGesture = (
+    e: React.PointerEvent<HTMLButtonElement>,
+    forceCancel: boolean,
+  ) => {
+    const g = gestureRef.current;
+    if (g.pointerId !== e.pointerId) return;
+    if (g.holdTimer !== null) {
+      window.clearTimeout(g.holdTimer);
+      g.holdTimer = null;
+    }
+    try {
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      }
+    } catch {
+      /* ignore */
+    }
+
+    if (!g.holdTriggered) {
+      g.pointerId = null;
+      return;
+    }
+
+    window.setTimeout(() => {
+      suppressNextClickRef.current = false;
+    }, 0);
+
+    if (forceCancel || g.cancelIntent) {
+      cancelHoldRecording();
+      return;
+    }
+    void finishHoldRecording();
   };
 
   const thinkingName = thinking.active
@@ -210,7 +491,10 @@ export function InputBar() {
 
   // 群聊中一轮未结束时禁发
   const sendDisabled = inGroup && busy;
+  sendDisabledRef.current = sendDisabled;
   const hasContent = text.trim().length > 0 || images.length > 0;
+  const isTranscribing = pttPhase === "transcribing";
+  const micActiveVisual = micOn || pttHolding;
 
   return (
     <div className="input-bar" ref={barRef}>
@@ -262,8 +546,10 @@ export function InputBar() {
           ))}
         </div>
       )}
-      <div className={`input-row${hasContent ? " filled" : ""}`}>
-        <div className="media-anchor" ref={anchorRef}>
+      <div
+        className={`input-row${hasContent ? " filled" : ""}${pttHolding ? " ptt-holding" : ""}${pttCancelIntent ? " ptt-cancel" : ""}${isTranscribing ? " ptt-transcribing" : ""}`}
+      >
+        <div className={`media-anchor${pttHolding ? " ptt-hidden" : ""}`} ref={anchorRef}>
           <button
             className={`icon-btn plus-btn${mediaMenuOpen ? " open" : ""}${thinking.on ? " thinking-on" : ""}`}
             title={
@@ -278,6 +564,7 @@ export function InputBar() {
             }
             aria-haspopup="menu"
             aria-expanded={mediaMenuOpen}
+            disabled={isTranscribing}
             onClick={() => setMediaMenuOpen((v) => !v)}
           >
             <AddIcon />
@@ -303,46 +590,89 @@ export function InputBar() {
         />
         <textarea
           ref={textRef}
-          className="input-text"
+          className={`input-text${pttHolding ? " ptt-hidden" : ""}`}
           name="message"
           rows={1}
           value={text}
-          placeholder={t("input.placeholder")}
+          disabled={isTranscribing}
+          placeholder={
+            isTranscribing ? t("input.pttTranscribing") : t("input.placeholder")
+          }
           aria-label={t("input.message")}
           autoComplete="off"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
         />
+        {pttHolding && (
+          <div className="ptt-bar" aria-live="polite">
+            <div className="ptt-timer">
+              <span className="ptt-dot" aria-hidden="true" />
+              <span>{formatDuration(pttSeconds)}</span>
+            </div>
+            <div className="ptt-waves" aria-hidden="true">
+              {pttBars.map((level, idx) => (
+                <i
+                  key={idx}
+                  style={{
+                    transform: `scaleY(${pttCancelIntent ? 0.16 : level})`,
+                  }}
+                />
+              ))}
+            </div>
+            <span className="ptt-hint">
+              {pttPhase === "arming"
+                ? t("input.pttArming")
+                : pttCancelIntent
+                  ? t("input.pttReleaseToCancel")
+                  : t("input.pttReleaseToSend")}
+            </span>
+          </div>
+        )}
         <button
-          className={`icon-btn mic-btn ${micOn ? "active" : ""}`}
+          className={`icon-btn mic-btn${micActiveVisual ? " active" : ""}${pttHolding ? " ptt-live" : ""}${pttCancelIntent ? " ptt-cancel" : ""}`}
           title={micOn ? t("input.micOn") : t("input.micOff")}
           aria-label={micOn ? t("input.micOn") : t("input.micOff")}
-          disabled={micStarting}
+          disabled={micStarting || isTranscribing}
           onClick={() => void onMicClick()}
+          onPointerDown={onMicPointerDown}
+          onPointerMove={onMicPointerMove}
+          onPointerUp={(e) => finishPointerGesture(e, false)}
+          onPointerCancel={(e) => finishPointerGesture(e, true)}
+          onLostPointerCapture={(e) => finishPointerGesture(e, true)}
+          onContextMenu={(e) => e.preventDefault()}
         >
-          {micStarting ? <span className="spinner" /> : <MicIcon on={micOn} />}
+          {micStarting || isTranscribing ? (
+            <span className="spinner" />
+          ) : (
+            <MicIcon on={micActiveVisual} />
+          )}
         </button>
-        {busy ? (
-          <button
-            className="icon-btn stop-btn"
-            title={t("input.stop")}
-            aria-label={t("input.stop")}
-            onClick={interrupt}
-          >
-            <StopIcon />
-          </button>
-        ) : (
-          <button
-            className="icon-btn send-btn"
-            title={t("input.send")}
-            aria-label={t("input.send")}
-            disabled={sendDisabled || (!text.trim() && images.length === 0)}
-            onClick={() => void submit()}
-          >
-            <SendIcon />
-          </button>
-        )}
+        {!pttHolding &&
+          (busy ? (
+            <button
+              className="icon-btn stop-btn"
+              title={t("input.stop")}
+              aria-label={t("input.stop")}
+              onClick={interrupt}
+            >
+              <StopIcon />
+            </button>
+          ) : (
+            <button
+              className="icon-btn send-btn"
+              title={t("input.send")}
+              aria-label={t("input.send")}
+              disabled={
+                sendDisabled ||
+                isTranscribing ||
+                (!text.trim() && images.length === 0)
+              }
+              onClick={() => void submit()}
+            >
+              <SendIcon />
+            </button>
+          ))}
       </div>
     </div>
   );
