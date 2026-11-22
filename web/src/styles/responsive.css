@@ -98,6 +98,11 @@
     max-width: calc(100vw - 215px);
   }
 
+  .character-menu {
+    /* 顶栏从 12px 起，第二行摄像头从 74px 起；在其底边下留 10px。 */
+    top: calc(74px + var(--island-h) - 2px);
+  }
+
   .model-menu {
     top: calc(100% + 8px);
     left: 0;
