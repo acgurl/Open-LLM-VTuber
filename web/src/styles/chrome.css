@@ -1,10 +1,8 @@
 /* ---------- 受光玻璃边 ---------- */
-.topbar-center,
 .input-row {
   position: relative;
 }
 
-.topbar-center::before,
 .input-row::before,
 .composer-menu::before {
   content: '';
@@ -90,132 +88,6 @@
   pointer-events: auto;
 }
 
-/* 角色菜单在胶囊外面，不受忙碌扫光的 overflow 裁剪。 */
-.character-picker {
-  position: relative;
-  display: flex;
-  min-width: 0;
-}
-
-.topbar-center {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  cursor: pointer;
-  height: var(--island-h);
-  padding: 0 17px;
-  border-radius: 999px;
-  background:
-    radial-gradient(160px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
-    linear-gradient(180deg, var(--sheen), transparent 72%),
-    var(--glass-strong);
-  border: 1px solid var(--line);
-  backdrop-filter: blur(var(--blur)) saturate(1.2);
-  -webkit-backdrop-filter: blur(var(--blur)) saturate(1.2);
-  box-shadow: var(--shadow-float);
-  max-width: 60vw;
-  overflow: hidden;
-  transition:
-    border-color 240ms var(--ease-snap),
-    box-shadow 240ms var(--ease-snap),
-    --sheen-spot 360ms ease;
-}
-
-.topbar-center[aria-disabled='true'] {
-  cursor: default;
-}
-
-@media (hover: hover) {
-  .topbar-center:hover:not([aria-disabled='true']) {
-    border-color: var(--line-strong);
-    box-shadow: var(--shadow-float), var(--shadow-inset);
-  }
-}
-
-.topbar-center.busy,
-.topbar-center[aria-expanded='true'] {
-  border-color: var(--accent-line);
-  box-shadow: var(--shadow-float), 0 0 30px -14px var(--accent-glow);
-}
-
-/* 忙碌时标题和状态一起被主色轻轻“点亮”，与状态点、扫光形成同一组信号 */
-.topbar-center.busy .topbar-name {
-  color: color-mix(in oklab, var(--ink) 82%, var(--accent));
-}
-
-.topbar-center.busy .topbar-status {
-  color: color-mix(in oklab, var(--muted) 42%, var(--accent));
-}
-
-.topbar-center.busy::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    110deg,
-    transparent 26%,
-    color-mix(in oklab, var(--accent) 20%, transparent) 46%,
-    transparent 68%
-  );
-  transform: translateX(-100%);
-  animation: sheen 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
-  pointer-events: none;
-}
-
-@keyframes sheen {
-  to {
-    transform: translateX(100%);
-  }
-}
-
-.topbar-name {
-  font-family: var(--font-round);
-  font-size: 0.98rem;
-  font-weight: 600;
-  letter-spacing: 0.005em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  transition: color 280ms var(--ease-snap);
-}
-
-.topbar-status {
-  color: var(--muted);
-  font-size: 0.8rem;
-  white-space: nowrap;
-  display: flex;
-  min-width: 0;
-  overflow: hidden;
-  transition: color 280ms var(--ease-snap);
-}
-
-.topbar-status:empty {
-  display: none;
-}
-
-.topbar-status-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  animation: status-swap 220ms var(--ease-spring);
-}
-
-/* 状态切换时 keyed 节点重建，进入动画自然重放；清空时直接消失不留残影 */
-@keyframes status-swap {
-  from {
-    opacity: 0;
-    transform: translateY(3px);
-    filter: blur(2px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-    filter: none;
-  }
-}
-
 .topbar .tts-toggle,
 .topbar .theme-toggle {
   width: var(--island-h);
@@ -227,63 +99,18 @@
   color: var(--faint);
 }
 
-.character-picker-indicator {
-  flex: none;
-  width: 14px;
-  display: grid;
-  place-items: center;
-  color: var(--faint);
-}
-
-.character-picker-indicator svg {
-  width: 14px;
-  height: 14px;
-  transition: transform 240ms var(--ease-spring), color 180ms var(--ease-snap);
-}
-
-.topbar-center[aria-expanded='true'] .character-picker-indicator svg {
-  color: var(--accent);
-  transform: rotate(180deg);
-}
-
-.character-picker-indicator .spinner {
-  width: 12px;
-  height: 12px;
-}
-
-.character-menu-hint {
-  padding: 9px 10px;
-  color: var(--muted);
-  font-size: 0.84rem;
-}
-
-.character-options {
-  display: grid;
-  gap: 2px;
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.character-options .picker-option {
-  width: 100%;
-  min-height: 40px;
-}
-
-.character-options .picker-option:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-
-/* ---------- 模型小岛 ---------- */
-/* 独立悬浮在配置名大岛右侧；外观沿用 icon-btn 的玻璃面，只是拉成胶囊放得下模型名 */
-.model-picker {
+/* ---------- 角色 / 模型切换小岛 ---------- */
+.topbar-picker {
   position: relative;
   display: flex;
   min-width: 0;
 }
 
-.model-pill {
+.topbar-picker:has(.picker-pill[aria-expanded='true']) {
+  z-index: 3;
+}
+
+.picker-pill {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -311,61 +138,129 @@
     --sheen-spot 360ms ease;
 }
 
-.model-pill > svg {
+.picker-pill-icon,
+.picker-pill-chevron {
   flex: none;
-  transition: transform 240ms var(--ease-spring);
+  display: grid;
+  place-items: center;
 }
 
-.model-pill > svg:first-child {
+.picker-pill-icon {
+  width: 16px;
   color: var(--accent);
 }
 
-.model-pill > svg:last-child {
+.picker-pill-chevron {
   color: var(--faint);
+  transition: transform 240ms var(--ease-spring), color 200ms var(--ease-snap);
 }
 
-.model-pill-name {
+.picker-pill-name {
   max-width: 150px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.picker-pill[aria-disabled='true'] {
+  cursor: default;
+}
+
 @media (hover: hover) {
-  .model-pill:hover {
+  .picker-pill:hover:not(:where([aria-disabled='true'])) {
     border-color: var(--line-strong);
     transform: translateY(-1px);
     box-shadow: var(--shadow-float), var(--shadow-inset);
   }
 }
 
-.model-pill:active {
+.picker-pill:active:not([aria-disabled='true']) {
   transform: scale(0.97);
   transition-duration: 90ms;
 }
 
-.model-pill.open {
+.picker-pill.busy,
+.picker-pill[aria-expanded='true'] {
   border-color: var(--accent-line);
   box-shadow: var(--shadow-float), 0 0 26px -14px var(--accent-glow);
 }
 
-.model-pill.open > svg:last-child {
+.picker-pill[aria-expanded='true'] .picker-pill-chevron {
   transform: rotate(180deg);
   color: var(--accent);
 }
 
-/* 等服务端确认期间名字轻轻呼吸，确认后随新名字一起停下 */
-.model-pill.switching .model-pill-name {
+/* 等服务端确认期间，两个入口用同样的呼吸和图标转动。 */
+.picker-pill.switching .picker-pill-name {
   animation: pulse 1.1s ease-in-out infinite;
 }
 
-.model-pill.switching > svg:first-child {
-  animation: model-spark 1.1s var(--ease-spring) infinite;
+.picker-pill.switching .picker-pill-icon {
+  animation: picker-switch 1.1s var(--ease-spring) infinite;
 }
 
-@keyframes model-spark {
+@keyframes picker-switch {
   50% {
     transform: rotate(90deg) scale(0.82);
+  }
+}
+
+/* 角色入口同时报告对话状态，和角色/模型的切换动效分开。 */
+.picker-pill.busy {
+  position: relative;
+  overflow: hidden;
+}
+
+.picker-pill.busy::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 26%,
+    color-mix(in oklab, var(--accent) 20%, transparent) 46%,
+    transparent 68%
+  );
+  transform: translateX(-100%);
+  animation: sheen 2.6s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  pointer-events: none;
+}
+
+@keyframes sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.topbar-status {
+  color: var(--muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.topbar-status:empty {
+  display: none;
+}
+
+.picker-pill.busy .topbar-status {
+  color: color-mix(in oklab, var(--muted) 42%, var(--accent));
+}
+
+.topbar-status-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: status-swap 220ms var(--ease-spring);
+}
+
+@keyframes status-swap {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+    filter: blur(2px);
   }
 }
 
@@ -396,32 +291,28 @@
   --menu-shift: -50%;
   transform: translateX(var(--menu-shift));
   transform-origin: top center;
-  animation: model-menu-in 220ms var(--ease-spring);
+  animation: picker-menu-in 220ms var(--ease-spring) both;
   transition: --sheen-spot 360ms ease;
 }
 
-/* 即使模型菜单还在退场，角色菜单也保持在它上方。 */
-.character-menu {
-  z-index: 3;
-}
-
-/* 菜单展开时顶栏整体抬一层，允许菜单直接覆盖摄像头。 */
+/* 菜单挂载期间把顶栏抬到摄像头上方，避免被遮挡。 */
 .topbar:has(.picker-menu) {
   z-index: 31;
 }
 
 .picker-menu.closing {
-  animation: model-menu-out 160ms var(--ease-snap) forwards;
+  pointer-events: none;
+  animation: picker-menu-out 160ms var(--ease-snap) forwards;
 }
 
-@keyframes model-menu-in {
+@keyframes picker-menu-in {
   from {
     opacity: 0;
     transform: translateX(var(--menu-shift)) translateY(-6px) scale(0.96);
   }
 }
 
-@keyframes model-menu-out {
+@keyframes picker-menu-out {
   to {
     opacity: 0;
     transform: translateX(var(--menu-shift)) translateY(-4px) scale(0.98);
@@ -453,19 +344,25 @@
     color 160ms var(--ease-snap);
 }
 
-.picker-option:hover:not(:disabled),
+.picker-option:hover,
 .picker-option:focus-visible {
   background: var(--chip-hover);
-  outline: none;
-}
-
-.picker-option:disabled {
-  cursor: default;
-  opacity: 0.6;
 }
 
 .picker-option.selected {
   background: var(--accent-soft);
+}
+
+.picker-pill:focus-visible,
+.picker-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.picker-menu-hint {
+  padding: 9px 10px;
+  color: var(--muted);
+  font-size: 0.84rem;
 }
 
 .picker-option-text {

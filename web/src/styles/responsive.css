@@ -18,7 +18,7 @@
   }
 
   .character-menu {
-    max-width: calc(100% - 12px);
+    max-width: min(320px, 100%);
   }
 
   /* 窄屏聊天区贴着输入框上沿往上长，长会话一直长到顶栏下方，不留空中阁楼 */
@@ -71,44 +71,43 @@
 }
 
 @media (max-width: 520px) {
+  .topbar {
+    --model-picker-top: calc(var(--island-h) + 8px);
+    /* 两个菜单都放到第二排控件下方（摄像头胶囊底边再留 10px）。 */
+    --picker-menu-top: calc(72px + var(--island-h));
+  }
+
   .topbar-status {
     display: none;
   }
 
-  .topbar-center {
-    max-width: 44vw;
-  }
-
-  /* 手机顶栏一行放不下模型名：模型小岛降到第二行左侧做成一枚小胶囊，
-     右侧留给摄像头胶囊，两者不相撞 */
+  /* 手机顶栏一行放不下模型名：模型小岛降到第二行左侧，右侧留给摄像头。 */
   .model-picker {
     position: absolute;
-    top: calc(var(--island-h) + 8px);
+    top: var(--model-picker-top);
     left: 0;
   }
 
-  .model-pill {
+  .model-picker .picker-pill {
     height: 30px;
     padding: 0 9px 0 10px;
     gap: 5px;
     font-size: 0.78rem;
   }
 
-  .model-pill-name {
+  .model-picker .picker-pill-name {
     max-width: calc(100vw - 215px);
   }
 
   .character-menu {
-    /* 顶栏从 12px 起，第二行摄像头从 74px 起；在其底边下留 10px。 */
-    top: calc(74px + var(--island-h) - 2px);
+    top: var(--picker-menu-top);
   }
 
   .model-menu {
-    top: calc(100% + 8px);
+    top: calc(var(--picker-menu-top) - var(--model-picker-top));
     left: 0;
     --menu-shift: 0;
     transform-origin: top left;
-    max-width: calc(100vw - 24px);
   }
 
   .drawer-body {
@@ -133,22 +132,6 @@
   }
 }
 
-@media (max-width: 360px) {
-  .character-picker .topbar-center {
-    padding-inline: 6px;
-    gap: 4px;
-  }
-
-  .character-picker .dot {
-    width: 6px;
-    height: 6px;
-  }
-
-  .character-picker-indicator {
-    width: 12px;
-  }
-}
-
 @media (max-width: 400px) {
   .topbar {
     --island-h: 38px;
@@ -164,12 +147,9 @@
     gap: 6px;
   }
 
-  .topbar-center {
-    padding: 0 12px;
-  }
-
-  .topbar-name {
-    font-size: 0.9rem;
+  .character-picker .picker-pill {
+    padding-inline: 8px;
+    gap: 5px;
   }
 
   .cam-window.idle {
