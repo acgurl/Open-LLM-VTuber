@@ -1,9 +1,8 @@
-import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { fetchConfigs, switchConfig } from '../services/actions';
 import { useConnection } from '../stores/connection';
 import { useSettings } from '../stores/settings';
-import { CheckIcon, ChevronDownIcon } from './icons';
+import { TopBarPicker } from './TopBarPicker';
 
 const DOT_CLASS: Record<string, string> = {
   online: 'dot online',
@@ -23,31 +22,7 @@ export function CharacterPicker() {
   const configs = useSettings((s) => s.configs);
   const configFile = useSettings((s) => s.configFile);
   const switching = useSettings((s) => s.switching);
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuId = useId();
   const name = confName || t('app.title');
-  const ready = status === 'online' && Boolean(confName) && !switching;
-  const expanded = open && ready;
-
-  useEffect(() => {
-    if (!ready) setOpen(false);
-  }, [ready]);
-
-  useEffect(() => {
-    if (!expanded) return;
-    const onPointerDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [expanded]);
-
-  const close = () => {
-    setOpen(false);
-    triggerRef.current?.focus();
-  };
 
   // 服务端只回角色名；同名时优先标记本次连接中确认切到的文件。
   const currentFile =
@@ -59,91 +34,26 @@ export function CharacterPicker() {
   }
 
   return (
-    <div
-      ref={rootRef}
-      className="character-picker"
-      onBlur={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false);
-      }}
-      onKeyDown={(e) => {
-        if (expanded && e.key === 'Escape') {
-          e.preventDefault();
-          close();
-        }
-      }}
-    >
-      <button
-        type="button"
-        ref={triggerRef}
-        className={`topbar-center${busy ? ' busy' : ''}`}
-        aria-disabled={!ready}
-        aria-expanded={expanded}
-        aria-controls={expanded ? menuId : undefined}
-        aria-label={switching ? `${name} · ${t('status.switching')}` : t('character.pick', { name })}
-        title={switching ? t('status.switching') : t('character.pick', { name })}
-        onClick={() => {
-          if (!ready) return;
-          if (expanded) setOpen(false);
-          else if (fetchConfigs()) setOpen(true);
-        }}
-      >
-        <span className={DOT_CLASS[status] ?? 'dot'} aria-hidden="true" />
-        <span className="topbar-name">{name}</span>
-        <span className="topbar-status" aria-live="polite">
-          {(switching || statusText) && (
-            <span className="topbar-status-text" key={switching ? 'switching' : statusText}>
-              {switching ? t('status.switching') : statusText}
-            </span>
-          )}
-        </span>
-        <span className="character-picker-indicator" aria-hidden="true">
-          {switching ? <span className="spinner" /> : <ChevronDownIcon />}
-        </span>
-      </button>
-      {expanded && (
-        <div
-          id={menuId}
-          className="picker-menu character-menu"
-          role="group"
-          aria-label={t('character.title')}
-        >
-          <div className="picker-menu-title">{t('character.title')}</div>
-          {configs?.length ? (
-            <ul className="character-options">
-              {configs.map((config) => {
-                const selected = config.filename === currentFile;
-                return (
-                  <li key={config.filename}>
-                    <button
-                      type="button"
-                      className={`picker-option${selected ? ' selected' : ''}`}
-                      aria-current={selected ? 'true' : undefined}
-                      onClick={() => {
-                        close();
-                        if (!selected) switchConfig(config.filename);
-                      }}
-                    >
-                      <span className="picker-option-text">
-                        <span className="picker-option-name">{config.name}</span>
-                        {config.filename === 'conf.yaml' ? (
-                          <span className="picker-option-desc">{t('character.default')}</span>
-                        ) : (nameCounts.get(config.name) ?? 0) > 1 ? (
-                          <span className="picker-option-desc">{config.filename.replace(/\.yaml$/, '')}</span>
-                        ) : null}
-                      </span>
-                      <span className="picker-option-check">{selected && <CheckIcon />}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : (
-            <div className="character-menu-hint" role="status">
-              {configs === null ? t('character.loading') : t('character.empty')}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+    <TopBarPicker
+      kind="character"
+      name={name}
+      label={switching ? `${name} · ${t('status.switching')}` : t('character.pick', { name })}
+      icon={<span className={DOT_CLASS[status] ?? 'dot'} />}
+      menuTitle={t('character.title')}
+      options={(configs ?? []).map((config) => ({
+        id: config.filename,
+        name: config.name,
+        description: config.filename === 'conf.yaml' ? t('character.default')
+          : (nameCounts.get(config.name) ?? 0) > 1 ? config.filename.replace(/\.yaml$/, '') : undefined,
+      }))}
+      selectedId={currentFile}
+      switching={switching}
+      disabled={status !== 'online' || !confName}
+      busy={busy}
+      statusText={switching ? t('status.switching') : statusText}
+      emptyHint={t(configs === null ? 'character.loading' : 'character.empty')}
+      onOpen={fetchConfigs}
+      onSelect={(id) => { if (id !== null) switchConfig(id); }}
+    />
   );
 }
