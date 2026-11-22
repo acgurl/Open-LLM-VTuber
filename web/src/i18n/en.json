@@ -31,7 +31,7 @@
     "placeholder": "Say something, or hold to talk…",
     "send": "Send",
     "stop": "Interrupt",
-    "pttArming": "Starting mic…",
+    "pttArming": "Opening mic…",
     "pttReleaseToSend": "Release to send · Slide up to cancel",
     "pttReleaseToCancel": "Release to cancel",
     "pttTranscribing": "Transcribing…",

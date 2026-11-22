@@ -31,7 +31,7 @@
     "placeholder": "说点什么，或长按说话…",
     "send": "发送",
     "stop": "打断",
-    "pttArming": "准备录音…",
+    "pttArming": "正在打开麦克风…",
     "pttReleaseToSend": "松开发送 · 上滑取消",
     "pttReleaseToCancel": "松开取消发送",
     "pttTranscribing": "正在识别语音…",

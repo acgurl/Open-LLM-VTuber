@@ -269,6 +269,10 @@
   opacity: 0.45;
 }
 
+.input-row.ptt-arming .ptt-waves i {
+  opacity: 0.3;
+}
+
 .ptt-hint {
   flex: 1;
   min-width: 0;
