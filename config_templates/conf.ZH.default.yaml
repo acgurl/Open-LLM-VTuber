@@ -207,8 +207,8 @@ character_config:
 
     groq_whisper_asr:
       api_key: ''
-      model: 'whisper-large-v3-turbo' # 或者 'whisper-large-v3'
-      lang: '' # 留空表示自动
+      model: 'whisper-large-v3' # 或者 'whisper-large-v3-turbo'
+      lang: 'zh' # 建议中文场景显式设为 zh，留空自动检测在短语音上容易误判语种
 
   # =================== 文本转语音 ===================
   tts_config:

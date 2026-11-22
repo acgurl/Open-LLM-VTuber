@@ -248,11 +248,8 @@ class PttController {
 
 function createAudioContext(): AudioContext {
   const Ctor = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-  try {
-    return new Ctor({ sampleRate: TARGET_SAMPLE_RATE });
-  } catch {
-    return new Ctor();
-  }
+  // 让设备按原生采样率采集，再由 downsampleTo16k 统一重采样，避免部分安卓平板/蓝牙耳机强制 16kHz 时采样失真
+  return new Ctor();
 }
 
 function stopTracks(stream: MediaStream | null): void {
