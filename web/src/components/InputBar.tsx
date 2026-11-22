@@ -66,17 +66,23 @@ export function InputBar() {
   // 已占用的附图名额：多张图并发编码时 images 状态还没更新，靠它同步计数才能守住上限
   const imageSlots = useRef(0);
 
-  // 最新值同步到 ref，供异步转写结束后的提交闭包读取，避免拿到过期状态
+  // 最新值同步到 ref，供异步转写结束后的提交闭包与原生 touch 监听读取，避免拿到过期状态
   const imagesRef = useRef<PendingImage[]>([]);
   imagesRef.current = images;
   const textStateRef = useRef("");
   textStateRef.current = text;
+  const pttPhaseRef = useRef<PttPhase>("idle");
+  pttPhaseRef.current = pttPhase;
+  const mediaMenuOpenRef = useRef(false);
+  mediaMenuOpenRef.current = mediaMenuOpen;
   const sendDisabledRef = useRef(false);
 
   const gestureRef = useRef({
+    mode: null as "mouse" | "touch" | null,
     pointerId: null as number | null,
     startX: 0,
     startY: 0,
+    movedOut: false,
     holdTimer: null as number | null,
     holdTriggered: false,
     cancelIntent: false,
@@ -134,19 +140,25 @@ export function InputBar() {
     }
   };
 
-  const cancelHoldRecording = () => {
+  const resetGestureState = () => {
     const g = gestureRef.current;
     if (g.holdTimer !== null) {
       window.clearTimeout(g.holdTimer);
       g.holdTimer = null;
     }
     detachWinRef.current?.();
-    const pid = g.pointerId;
+    const pid = g.mode === "mouse" ? g.pointerId : null;
+    g.mode = null;
     g.pointerId = null;
+    g.movedOut = false;
     g.holdTriggered = false;
     g.cancelIntent = false;
-    g.submitting = false;
     releaseCaptureIfHeld(pid);
+  };
+
+  const cancelHoldRecording = () => {
+    resetGestureState();
+    gestureRef.current.submitting = false;
     ptt.cancel();
     setPttPhase("idle");
     setPttCancelIntent(false);
@@ -154,7 +166,7 @@ export function InputBar() {
     setPttBars(INITIAL_WAVE_BARS);
   };
 
-  // 按住录音期间：按 Esc 或窗口失焦时安全取消，防止状态卡死
+  // 按住录音期间：按 Esc、窗口失焦时安全取消，并屏蔽长按菜单/选词事件
   useEffect(() => {
     if (!pttHolding) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -164,11 +176,16 @@ export function InputBar() {
       }
     };
     const onBlur = () => cancelHoldRecording();
+    const onBlock = (e: Event) => e.preventDefault();
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("blur", onBlur);
+    window.addEventListener("contextmenu", onBlock);
+    window.addEventListener("selectstart", onBlock);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("blur", onBlur);
+      window.removeEventListener("contextmenu", onBlock);
+      window.removeEventListener("selectstart", onBlock);
     };
   }, [pttHolding]);
 
@@ -311,12 +328,7 @@ export function InputBar() {
     const g = gestureRef.current;
     if (g.submitting) return;
     g.submitting = true;
-    detachWinRef.current?.();
-    const pid = g.pointerId;
-    g.pointerId = null;
-    g.holdTriggered = false;
-    g.cancelIntent = false;
-    releaseCaptureIfHeld(pid);
+    resetGestureState();
 
     const result = ptt.stopAndEncode();
     setPttCancelIntent(false);
@@ -368,18 +380,22 @@ export function InputBar() {
     }
   };
 
-  const handlePointerMove = (clientX: number, clientY: number) => {
+  const handleGestureMove = (clientX: number, clientY: number) => {
     const g = gestureRef.current;
     if (g.pointerId === null) return;
     if (!g.holdTriggered) {
-      // 尚未进入录音前大幅滑动，视为滑动误触而非长按，取消计时并放行原生交互
+      // 尚未进入录音前大幅滑动，视为滑动误触而非长按，取消计时
       if (Math.hypot(clientX - g.startX, clientY - g.startY) > 24) {
         if (g.holdTimer !== null) {
           window.clearTimeout(g.holdTimer);
           g.holdTimer = null;
         }
-        detachWinRef.current?.();
-        g.pointerId = null;
+        g.movedOut = true;
+        if (g.mode === "mouse") {
+          detachWinRef.current?.();
+          g.mode = null;
+          g.pointerId = null;
+        }
       }
       return;
     }
@@ -390,20 +406,25 @@ export function InputBar() {
     }
   };
 
-  const finishPointerGesture = (pointerId: number, forceCancel: boolean) => {
+  const finishActiveGesture = (
+    mode: "mouse" | "touch",
+    id: number,
+    forceCancel: boolean,
+    focusOnTap = false,
+  ) => {
     const g = gestureRef.current;
-    if (g.pointerId !== pointerId) return;
-    if (g.holdTimer !== null) {
-      window.clearTimeout(g.holdTimer);
-      g.holdTimer = null;
-    }
-    detachWinRef.current?.();
+    if (g.mode !== mode || g.pointerId !== id) return;
     const wasTriggered = g.holdTriggered;
     const wasCancelIntent = g.cancelIntent;
-    g.pointerId = null;
-    releaseCaptureIfHeld(pointerId);
+    const wasMovedOut = g.movedOut;
+    resetGestureState();
 
-    if (!wasTriggered) return;
+    if (!wasTriggered) {
+      if (focusOnTap && !forceCancel && !wasMovedOut) {
+        textRef.current?.focus();
+      }
+      return;
+    }
 
     window.setTimeout(() => {
       suppressNextClickRef.current = false;
@@ -418,7 +439,7 @@ export function InputBar() {
 
   const startHoldRecording = async () => {
     const g = gestureRef.current;
-    if (g.pointerId === null) return;
+    if (g.pointerId === null || g.movedOut) return;
     g.holdTriggered = true;
     g.holdTimer = null;
     suppressNextClickRef.current = true;
@@ -426,10 +447,12 @@ export function InputBar() {
     // 真正触发长按后再失焦并接管指针，避免影响短按聚焦输入
     textRef.current?.blur();
     window.getSelection()?.removeAllRanges();
-    try {
-      rowRef.current?.setPointerCapture(g.pointerId);
-    } catch {
-      /* ignore */
+    if (g.mode === "mouse") {
+      try {
+        rowRef.current?.setPointerCapture(g.pointerId);
+      } catch {
+        /* ignore */
+      }
     }
 
     setPttPhase("arming");
@@ -471,7 +494,97 @@ export function InputBar() {
     }
   };
 
+  const startHoldRef = useRef(startHoldRecording);
+  startHoldRef.current = startHoldRecording;
+  const moveRef = useRef(handleGestureMove);
+  moveRef.current = handleGestureMove;
+  const finishRef = useRef(finishActiveGesture);
+  finishRef.current = finishActiveGesture;
+
+  // 触屏端使用非 passive 的原生 touchstart/touchmove 监听：
+  // 在输入栏无文字时于 touchstart 立即 preventDefault()，彻底阻止 Android/iOS 弹出原生文本/粘贴菜单并打断录音；
+  // 短按 (<180ms) 在 touchend 中同步 focus() 输入框唤起键盘。桌面鼠标完全不触发 touch 事件，保留右键粘贴。
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+
+    const findTouch = (list: TouchList, id: number): Touch | null => {
+      for (let i = 0; i < list.length; i += 1) {
+        if (list[i].identifier === id) return list[i];
+      }
+      return null;
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      if (pttPhaseRef.current !== "idle") return;
+      if (textStateRef.current.trim().length > 0) return;
+      if ((e.target as Element | null)?.closest("button, .media-anchor")) return;
+
+      // 关键：必须在原生非 passive 的 touchstart 阻止默认行为，否则移动浏览器约 450ms 后会弹出文本菜单并触发 pointercancel
+      e.preventDefault();
+      if (mediaMenuOpenRef.current) setMediaMenuOpen(false);
+
+      const touch = e.changedTouches[0] ?? e.touches[0];
+      if (!touch) return;
+
+      const g = gestureRef.current;
+      resetGestureState();
+      suppressNextClickRef.current = false;
+
+      const tid = touch.identifier;
+      g.mode = "touch";
+      g.pointerId = tid;
+      g.startX = touch.clientX;
+      g.startY = touch.clientY;
+      g.movedOut = false;
+      g.holdTriggered = false;
+      g.cancelIntent = false;
+      g.submitting = false;
+
+      const onTouchMove = (ev: TouchEvent) => {
+        if (gestureRef.current.mode !== "touch" || gestureRef.current.pointerId !== tid) return;
+        const tItem = findTouch(ev.touches, tid) ?? findTouch(ev.changedTouches, tid);
+        if (!tItem) return;
+        ev.preventDefault();
+        moveRef.current(tItem.clientX, tItem.clientY);
+      };
+      const onTouchEnd = (ev: TouchEvent) => {
+        if (gestureRef.current.mode !== "touch" || gestureRef.current.pointerId !== tid) return;
+        const tItem = findTouch(ev.changedTouches, tid);
+        if (!tItem && findTouch(ev.touches, tid)) return;
+        finishRef.current("touch", tid, false, true);
+      };
+      const onTouchCancel = (ev: TouchEvent) => {
+        if (gestureRef.current.mode !== "touch" || gestureRef.current.pointerId !== tid) return;
+        const tItem = findTouch(ev.changedTouches, tid);
+        if (!tItem && findTouch(ev.touches, tid)) return;
+        finishRef.current("touch", tid, true, false);
+      };
+
+      window.addEventListener("touchmove", onTouchMove, { passive: false });
+      window.addEventListener("touchend", onTouchEnd);
+      window.addEventListener("touchcancel", onTouchCancel);
+      detachWinRef.current = () => {
+        window.removeEventListener("touchmove", onTouchMove);
+        window.removeEventListener("touchend", onTouchEnd);
+        window.removeEventListener("touchcancel", onTouchCancel);
+        detachWinRef.current = null;
+      };
+
+      g.holdTimer = window.setTimeout(() => {
+        void startHoldRef.current();
+      }, HOLD_DELAY_MS);
+    };
+
+    row.addEventListener("touchstart", onTouchStart, { passive: false });
+    return () => {
+      row.removeEventListener("touchstart", onTouchStart);
+    };
+  }, []);
+
   const onRowPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "touch") return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (pttPhase !== "idle") return;
     // 输入栏有文字时保留长按选词/移动光标能力，不抢占为语音
@@ -480,29 +593,30 @@ export function InputBar() {
     if (mediaMenuOpen) setMediaMenuOpen(false);
 
     const g = gestureRef.current;
-    if (g.holdTimer !== null) window.clearTimeout(g.holdTimer);
-    detachWinRef.current?.();
+    resetGestureState();
     suppressNextClickRef.current = false;
 
     const pid = e.pointerId;
+    g.mode = "mouse";
     g.pointerId = pid;
     g.startX = e.clientX;
     g.startY = e.clientY;
+    g.movedOut = false;
     g.holdTriggered = false;
     g.cancelIntent = false;
     g.submitting = false;
 
     const onMove = (ev: PointerEvent) => {
-      if (ev.pointerId !== gestureRef.current.pointerId) return;
-      handlePointerMove(ev.clientX, ev.clientY);
+      if (gestureRef.current.mode !== "mouse" || ev.pointerId !== gestureRef.current.pointerId) return;
+      moveRef.current(ev.clientX, ev.clientY);
     };
     const onUp = (ev: PointerEvent) => {
-      if (ev.pointerId !== gestureRef.current.pointerId) return;
-      finishPointerGesture(ev.pointerId, false);
+      if (gestureRef.current.mode !== "mouse" || ev.pointerId !== gestureRef.current.pointerId) return;
+      finishRef.current("mouse", ev.pointerId, false);
     };
     const onCancel = (ev: PointerEvent) => {
-      if (ev.pointerId !== gestureRef.current.pointerId) return;
-      finishPointerGesture(ev.pointerId, true);
+      if (gestureRef.current.mode !== "mouse" || ev.pointerId !== gestureRef.current.pointerId) return;
+      finishRef.current("mouse", ev.pointerId, true);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -515,7 +629,7 @@ export function InputBar() {
     };
 
     g.holdTimer = window.setTimeout(() => {
-      void startHoldRecording();
+      void startHoldRef.current();
     }, HOLD_DELAY_MS);
   };
 
@@ -607,30 +721,19 @@ export function InputBar() {
         className={`input-row${hasContent ? " filled" : ""}${pttReady ? " ptt-ready" : ""}${pttHolding ? " ptt-holding" : ""}${pttCancelIntent ? " ptt-cancel" : ""}${isTranscribing ? " ptt-transcribing" : ""}`}
         onPointerDown={onRowPointerDown}
         onPointerMove={(e) => {
-          if (e.pointerId === gestureRef.current.pointerId) {
-            handlePointerMove(e.clientX, e.clientY);
+          if (
+            gestureRef.current.mode === "mouse" &&
+            e.pointerId === gestureRef.current.pointerId
+          ) {
+            handleGestureMove(e.clientX, e.clientY);
           }
         }}
-        onPointerUp={(e) => finishPointerGesture(e.pointerId, false)}
-        onPointerCancel={(e) => finishPointerGesture(e.pointerId, true)}
-        onLostPointerCapture={(e) => finishPointerGesture(e.pointerId, true)}
+        onPointerUp={(e) => finishActiveGesture("mouse", e.pointerId, false)}
+        onPointerCancel={(e) => finishActiveGesture("mouse", e.pointerId, true)}
+        onLostPointerCapture={(e) => finishActiveGesture("mouse", e.pointerId, true)}
         onClickCapture={onRowClickCapture}
         onContextMenu={onRowContextMenu}
       >
-        {(pttReady || pttHolding) && (
-          <div
-            className="ptt-shield"
-            aria-hidden="true"
-            onClick={() => {
-              if (suppressNextClickRef.current) {
-                suppressNextClickRef.current = false;
-                return;
-              }
-              textRef.current?.focus();
-            }}
-            onContextMenu={(e) => e.preventDefault()}
-          />
-        )}
         <div className={`media-anchor${pttHolding ? " ptt-hidden" : ""}`} ref={anchorRef}>
           <button
             className={`icon-btn plus-btn${mediaMenuOpen ? " open" : ""}${thinking.on ? " thinking-on" : ""}`}
