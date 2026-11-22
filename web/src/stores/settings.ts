@@ -6,7 +6,7 @@ interface SettingsState {
   ttsOn: boolean;
   background: string | null; // /bg/<file> 完整路径或 null
   backgroundFiles: string[];
-  configs: ConfigFileEntry[];
+  configs: ConfigFileEntry[] | null; // null 表示这条连接尚未收到角色列表
   micOn: boolean; // 运行时状态，不持久化（默认关）
   historyOpen: boolean;
   settingsOpen: boolean;
@@ -23,7 +23,8 @@ interface SettingsState {
   setMicOn: (v: boolean) => void;
   setHistoryOpen: (v: boolean) => void;
   setSettingsOpen: (v: boolean) => void;
-  setSwitching: (v: boolean) => void;
+  cancelConfigSwitch: () => void;
+  resetConfigs: () => void;
   requestConfig: (file: string) => void;
   confirmConfig: () => void;
   setPointerInteractive: (v: boolean) => void;
@@ -34,7 +35,7 @@ export const useSettings = create<SettingsState>((set) => ({
   ttsOn: readSetting('tts') !== '0',
   background: readSetting('bg'),
   backgroundFiles: [],
-  configs: [],
+  configs: null,
   micOn: false,
   historyOpen: false,
   settingsOpen: false,
@@ -56,7 +57,8 @@ export const useSettings = create<SettingsState>((set) => ({
   setMicOn: (micOn) => set({ micOn }),
   setHistoryOpen: (historyOpen) => set({ historyOpen }),
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
-  setSwitching: (switching) => set({ switching }),
+  cancelConfigSwitch: () => set({ switching: false, requestedFile: null }),
+  resetConfigs: () => set({ configs: null, switching: false, configFile: null, requestedFile: null }),
   requestConfig: (requestedFile) => set({ switching: true, requestedFile }),
   confirmConfig: () =>
     set((s) => ({ switching: false, configFile: s.requestedFile ?? s.configFile, requestedFile: null })),

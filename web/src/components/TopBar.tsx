@@ -1,27 +1,14 @@
 import { useTranslation } from 'react-i18next';
-import { useConnection } from '../stores/connection';
 import { useSettings } from '../stores/settings';
 import { useTheme } from '../stores/theme';
 import { audioPlayer } from '../services/audioPlayer';
 import { newHistory } from '../services/actions';
+import { CharacterPicker } from './CharacterPicker';
 import { ModelPicker } from './ModelPicker';
 import { MenuIcon, NewChatIcon, VolumeIcon, SunIcon, MoonIcon, GearIcon } from './icons';
 
-const DOT_CLASS: Record<string, string> = {
-  online: 'dot online',
-  connecting: 'dot pending',
-  reconnecting: 'dot pending',
-  boot: 'dot pending',
-  unauthorized: 'dot error',
-  failed: 'dot error',
-};
-
 export function TopBar() {
   const { t } = useTranslation();
-  const status = useConnection((s) => s.status);
-  const confName = useConnection((s) => s.confName);
-  const statusText = useConnection((s) => s.statusText);
-  const busy = useConnection((s) => s.busy);
   const ttsOn = useSettings((s) => s.ttsOn);
   const setTtsOn = useSettings((s) => s.setTtsOn);
   const setHistoryOpen = useSettings((s) => s.setHistoryOpen);
@@ -56,17 +43,7 @@ export function TopBar() {
         </button>
       </div>
       <div className="topbar-middle">
-        <div className={`topbar-center${busy ? ' busy' : ''}`}>
-          <span className={DOT_CLASS[status] ?? 'dot'} />
-          <span className="topbar-name">{confName || t('app.title')}</span>
-          <span className="topbar-status" aria-live="polite">
-            {statusText && (
-              <span className="topbar-status-text" key={statusText}>
-                {statusText}
-              </span>
-            )}
-          </span>
-        </div>
+        <CharacterPicker />
         <ModelPicker />
         <button
           className={`icon-btn tts-toggle${ttsOn ? '' : ' off'}`}

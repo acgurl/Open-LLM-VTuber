@@ -1,4 +1,4 @@
-// 玻璃面受光：指针经过任一块玻璃面（消息卡、输入条与其弹出菜单、顶栏小岛与模型菜单、
+// 玻璃面受光：指针经过任一块玻璃面（消息卡、输入条与其弹出菜单、顶栏小岛与切换菜单、
 // 图标按钮、摄像头窗、提示条、推荐问题、历史条目、设置分区）时，在指针处亮起一小团柔光。
 // 全局只挂一个 pointermove 监听，按帧合并，只给当前命中的最内层那一块写两个 CSS 变量；
 // 触屏和 reduced-motion 下不安装。新加玻璃面时：这里登记选择器，CSS 背景最上层叠
@@ -13,7 +13,7 @@ const TARGETS = [
   '.history-item',
   '.topbar-center',
   '.model-pill',
-  '.model-menu',
+  '.picker-menu',
   '.icon-btn:not(.input-row .icon-btn, .drawer-head .icon-btn)',
   '.cam-window',
   '.toast',

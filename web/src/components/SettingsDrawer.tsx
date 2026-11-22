@@ -7,8 +7,6 @@ import { useTheme, type ThemeMode } from '../stores/theme';
 import { setLanguage } from '../i18n';
 import { logout } from '../services/session';
 import {
-  fetchConfigs,
-  switchConfig,
   fetchBackgrounds,
   proactiveSpeak,
   inviteToGroup,
@@ -35,9 +33,6 @@ export function SettingsDrawer() {
   const background = useSettings((s) => s.background);
   const setBackground = useSettings((s) => s.setBackground);
   const backgroundFiles = useSettings((s) => s.backgroundFiles);
-  const configs = useSettings((s) => s.configs);
-  const switching = useSettings((s) => s.switching);
-  const configFile = useSettings((s) => s.configFile);
   const pointerInteractive = useSettings((s) => s.pointerInteractive);
   const setPointerInteractive = useSettings((s) => s.setPointerInteractive);
   const scrollToResize = useSettings((s) => s.scrollToResize);
@@ -48,16 +43,10 @@ export function SettingsDrawer() {
   const setHue = useTheme((s) => s.setHue);
   const displayName = useConnection((s) => s.displayName);
   const userId = useConnection((s) => s.userId);
-  const confName = useConnection((s) => s.confName);
   const presence = usePresence(open, 220);
-  // 服务端只回角色名；同名预设只标记一个：优先最近切换到的文件，否则取第一个同名项
-  const currentFile =
-    configs.find((c) => c.filename === configFile && c.name === confName)?.filename ??
-    configs.find((c) => c.name === confName)?.filename;
 
   useEffect(() => {
     if (open) {
-      fetchConfigs();
       fetchBackgrounds();
       refreshGroup();
     }
@@ -93,29 +82,6 @@ export function SettingsDrawer() {
           </button>
         </div>
         <div className="drawer-body">
-          <section>
-            <h3>{t('settings.character')}</h3>
-            <div className="config-list">
-              {configs.map((c) => (
-                <button
-                  key={c.filename}
-                  className={`config-item${c.filename === currentFile ? ' current' : ''}`}
-                  aria-current={c.filename === currentFile ? 'true' : undefined}
-                  disabled={switching}
-                  onClick={() => switchConfig(c.filename)}
-                >
-                  <span className="config-name">{c.name}</span>
-                  <span className="config-file">{c.filename}</span>
-                </button>
-              ))}
-            </div>
-            {switching && (
-              <div className="switching-hint">
-                <span className="spinner" /> {t('status.switching')}
-              </div>
-            )}
-          </section>
-
           <section>
             <h3>{t('settings.background')}</h3>
             <div className="bg-grid">
