@@ -90,10 +90,19 @@
   pointer-events: auto;
 }
 
+/* 角色菜单在胶囊外面，不受忙碌扫光的 overflow 裁剪。 */
+.character-picker {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
 .topbar-center {
   display: flex;
   align-items: center;
   gap: 9px;
+  min-width: 0;
+  cursor: pointer;
   height: var(--island-h);
   padding: 0 17px;
   border-radius: 999px;
@@ -113,7 +122,19 @@
     --sheen-spot 360ms ease;
 }
 
-.topbar-center.busy {
+.topbar-center[aria-disabled='true'] {
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .topbar-center:hover:not([aria-disabled='true']) {
+    border-color: var(--line-strong);
+    box-shadow: var(--shadow-float), var(--shadow-inset);
+  }
+}
+
+.topbar-center.busy,
+.topbar-center[aria-expanded='true'] {
   border-color: var(--accent-line);
   box-shadow: var(--shadow-float), 0 0 30px -14px var(--accent-glow);
 }
@@ -204,6 +225,54 @@
 
 .tts-toggle.off {
   color: var(--faint);
+}
+
+.character-picker-indicator {
+  flex: none;
+  width: 14px;
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+}
+
+.character-picker-indicator svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 240ms var(--ease-spring), color 180ms var(--ease-snap);
+}
+
+.topbar-center[aria-expanded='true'] .character-picker-indicator svg {
+  color: var(--accent);
+  transform: rotate(180deg);
+}
+
+.character-picker-indicator .spinner {
+  width: 12px;
+  height: 12px;
+}
+
+.character-menu-hint {
+  padding: 9px 10px;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.character-options {
+  display: grid;
+  gap: 2px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.character-options .picker-option {
+  width: 100%;
+  min-height: 40px;
+}
+
+.character-options .picker-option:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 /* ---------- 模型小岛 ---------- */
@@ -300,7 +369,7 @@
   }
 }
 
-.model-menu {
+.picker-menu {
   position: absolute;
   top: calc(100% + 10px);
   left: 50%;
@@ -331,12 +400,17 @@
   transition: --sheen-spot 360ms ease;
 }
 
-/* 菜单展开时顶栏整体抬一层，压过同层级的摄像头胶囊 */
-.topbar:has(.model-menu) {
+/* 即使模型菜单还在退场，角色菜单也保持在它上方。 */
+.character-menu {
+  z-index: 3;
+}
+
+/* 菜单展开时顶栏整体抬一层，允许菜单直接覆盖摄像头。 */
+.topbar:has(.picker-menu) {
   z-index: 31;
 }
 
-.model-menu.closing {
+.picker-menu.closing {
   animation: model-menu-out 160ms var(--ease-snap) forwards;
 }
 
@@ -354,7 +428,7 @@
   }
 }
 
-.model-menu-title {
+.picker-menu-title {
   padding: 6px 10px 5px;
   color: var(--faint);
   font-size: 0.72rem;
@@ -362,7 +436,7 @@
   letter-spacing: 0.06em;
 }
 
-.model-option {
+.picker-option {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -379,22 +453,22 @@
     color 160ms var(--ease-snap);
 }
 
-.model-option:hover:not(:disabled),
-.model-option:focus-visible {
+.picker-option:hover:not(:disabled),
+.picker-option:focus-visible {
   background: var(--chip-hover);
   outline: none;
 }
 
-.model-option:disabled {
+.picker-option:disabled {
   cursor: default;
   opacity: 0.6;
 }
 
-.model-option.selected {
+.picker-option.selected {
   background: var(--accent-soft);
 }
 
-.model-option-text {
+.picker-option-text {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -402,24 +476,24 @@
   flex: 1;
 }
 
-.model-option-name {
+.picker-option-name {
   font-size: 0.9rem;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 
-.model-option.selected .model-option-name {
+.picker-option.selected .picker-option-name {
   color: color-mix(in oklab, var(--ink) 55%, var(--accent));
 }
 
-.model-option-desc {
+.picker-option-desc {
   color: var(--muted);
   font-size: 0.76rem;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
-.model-option-check {
+.picker-option-check {
   display: inline-flex;
   flex: none;
   width: 16px;

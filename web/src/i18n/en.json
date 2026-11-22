@@ -69,7 +69,6 @@
   },
   "settings": {
     "title": "Settings",
-    "character": "Character",
     "background": "Background",
     "noBackground": "None",
     "appearance": "Appearance",
@@ -220,6 +219,14 @@
     "asrBusy": "ASR is busy, please try again shortly",
     "switchFailed": "Failed to switch character",
     "generic": "Something went wrong"
+  },
+  "character": {
+    "title": "Switch character",
+    "pick": "Switch character (current: {{name}})",
+    "default": "Default preset",
+    "loading": "Loading characters…",
+    "empty": "No characters available",
+    "switched": "Switched to {{name}}"
   },
   "model": {
     "title": "Model",

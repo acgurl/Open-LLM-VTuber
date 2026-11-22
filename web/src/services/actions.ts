@@ -56,16 +56,16 @@ export function deleteHistory(uid: string) {
 }
 
 export function fetchConfigs() {
-  wsClient.send({ type: 'fetch-configs' });
+  return wsClient.send({ type: 'fetch-configs' });
 }
 
 export function switchConfig(file: string) {
   const settings = useSettings.getState();
-  if (settings.switching) return;
+  if (!wsClient.ready || settings.switching) return;
   // 换角色会清空活动历史与 agent 记忆，先收尾正在进行的一轮
   if (useConnection.getState().busy || audioPlayer.isActive()) interrupt();
   settings.requestConfig(file);
-  wsClient.send({ type: 'switch-config', file });
+  if (!wsClient.send({ type: 'switch-config', file })) settings.cancelConfigSwitch();
 }
 
 export function fetchModels() {

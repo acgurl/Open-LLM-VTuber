@@ -163,7 +163,7 @@ export function handleServerMessage(msg: ServerMessage) {
       useSettings.getState().confirmConfig();
       chat.clear();
       audioPlayer.stopAll();
-      toast(translateServer(msg.message), 'success');
+      toast(t('character.switched', { name: conn.confName }), 'success');
       // 切换后 history_uid 被清空，重建
       wsClient.send({ type: 'create-new-history' });
       break;
@@ -227,7 +227,7 @@ export function handleServerMessage(msg: ServerMessage) {
       break;
 
     case 'error':
-      useSettings.getState().setSwitching(false);
+      useSettings.getState().cancelConfigSwitch();
       useModels.getState().cancelSwitch();
       toast(translateServer(msg.message), 'error');
       break;

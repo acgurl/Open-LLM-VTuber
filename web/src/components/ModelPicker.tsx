@@ -105,12 +105,12 @@ export function ModelPicker() {
       {mounted && (
         <div
           ref={menuRef}
-          className={`model-menu${closing ? ' closing' : ''}`}
+          className={`picker-menu model-menu${closing ? ' closing' : ''}`}
           role="listbox"
           aria-label={t('model.title')}
           onKeyDown={onMenuKeyDown}
         >
-          <div className="model-menu-title">{t('model.title')}</div>
+          <div className="picker-menu-title">{t('model.title')}</div>
           {options.map((option) => {
             const selected = option.id === active.id;
             return (
@@ -118,17 +118,17 @@ export function ModelPicker() {
                 key={option.id ?? ''}
                 role="option"
                 aria-selected={selected}
-                className={`model-option${selected ? ' selected' : ''}`}
+                className={`picker-option${selected ? ' selected' : ''}`}
                 disabled={switching}
                 onClick={() => choose(option.id)}
               >
-                <span className="model-option-text">
-                  <span className="model-option-name">{option.name}</span>
+                <span className="picker-option-text">
+                  <span className="picker-option-name">{option.name}</span>
                   {option.description && (
-                    <span className="model-option-desc">{option.description}</span>
+                    <span className="picker-option-desc">{option.description}</span>
                   )}
                 </span>
-                <span className="model-option-check">{selected && <CheckIcon />}</span>
+                <span className="picker-option-check">{selected && <CheckIcon />}</span>
               </button>
             );
           })}

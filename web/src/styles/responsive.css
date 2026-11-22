@@ -13,6 +13,14 @@
     --island-h: 42px;
   }
 
+  .character-picker {
+    position: static;
+  }
+
+  .character-menu {
+    max-width: calc(100% - 12px);
+  }
+
   /* 窄屏聊天区贴着输入框上沿往上长，长会话一直长到顶栏下方，不留空中阁楼 */
   .chat-shell {
     left: calc(12px + env(safe-area-inset-left, 0px));
@@ -117,6 +125,22 @@
 
   .ptt-hint {
     font-size: 0.78rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .character-picker .topbar-center {
+    padding-inline: 6px;
+    gap: 4px;
+  }
+
+  .character-picker .dot {
+    width: 6px;
+    height: 6px;
+  }
+
+  .character-picker-indicator {
+    width: 12px;
   }
 }
 
