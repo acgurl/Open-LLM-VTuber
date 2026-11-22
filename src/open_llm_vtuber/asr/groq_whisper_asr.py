@@ -10,11 +10,14 @@ class VoiceRecognition(ASRInterface):
     # sample_rate, n_channels, and sampwidth are defined in asr_interface.py
 
     def __init__(
-        self, api_key: str, model: str = "distil-whisper-large-v3-en", lang: str = "en"
+        self,
+        api_key: str,
+        model: str = "distil-whisper-large-v3-en",
+        lang: str | None = "en",
     ) -> None:
         logger.info("Initializing Groq ASR...")
         self.client = Groq(api_key=api_key)
-        self.lang = lang
+        self.lang = (lang or "").strip() or None
         self.model = model
 
     def transcribe_np(self, audio: np.ndarray) -> str:
@@ -43,14 +46,18 @@ class VoiceRecognition(ASRInterface):
 
         audio_buffer.seek(0)
 
-        # Transcribe the audio with the BytesIO object
-        transcription = self.client.audio.transcriptions.create(
-            file=("audio.wav", audio_buffer.read()),
-            model=self.model,
-            # prompt="Specify context or spelling",
-            response_format="text",
-            language=self.lang,
-            temperature=0.0,
-        )
+        kwargs: dict = {
+            "file": ("audio.wav", audio_buffer.read()),
+            "model": self.model,
+            "response_format": "text",
+            "temperature": 0.0,
+        }
+        if self.lang:
+            kwargs["language"] = self.lang
+            # 引导 Whisper 输出简体中文，避免短语音误判为繁体或异域语种
+            if self.lang.lower().startswith("zh"):
+                kwargs["prompt"] = "简体中文。"
+
+        transcription = self.client.audio.transcriptions.create(**kwargs)
 
         return transcription
