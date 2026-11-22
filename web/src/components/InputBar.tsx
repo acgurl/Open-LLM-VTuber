@@ -30,7 +30,7 @@ interface PendingImage {
 
 type PttPhase = "idle" | "arming" | "recording" | "transcribing";
 
-const HOLD_DELAY_MS = 180;
+const HOLD_DELAY_MS = 140;
 const CANCEL_SLIDE_PX = 48;
 const WAVE_BAR_COUNT = 14;
 const INITIAL_WAVE_BARS = Array<number>(WAVE_BAR_COUNT).fill(0.14);
@@ -476,6 +476,11 @@ export function InputBar() {
         }
         pttStartAtRef.current = Date.now();
         setPttPhase("recording");
+        try {
+          navigator.vibrate?.(15);
+        } catch {
+          /* ignore */
+        }
       },
       onLevel: (level) => {
         const now = performance.now();
@@ -718,7 +723,7 @@ export function InputBar() {
       )}
       <div
         ref={rowRef}
-        className={`input-row${hasContent ? " filled" : ""}${pttReady ? " ptt-ready" : ""}${pttHolding ? " ptt-holding" : ""}${pttCancelIntent ? " ptt-cancel" : ""}${isTranscribing ? " ptt-transcribing" : ""}`}
+        className={`input-row${hasContent ? " filled" : ""}${pttReady ? " ptt-ready" : ""}${pttHolding ? " ptt-holding" : ""}${pttPhase === "arming" ? " ptt-arming" : ""}${pttCancelIntent ? " ptt-cancel" : ""}${isTranscribing ? " ptt-transcribing" : ""}`}
         onPointerDown={onRowPointerDown}
         onPointerMove={(e) => {
           if (
@@ -792,8 +797,14 @@ export function InputBar() {
         {pttHolding && (
           <div className="ptt-bar" aria-live="polite">
             <div className="ptt-timer">
-              <span className="ptt-dot" aria-hidden="true" />
-              <span>{formatDuration(pttSeconds)}</span>
+              {pttPhase === "arming" ? (
+                <span className="spinner" aria-hidden="true" />
+              ) : (
+                <>
+                  <span className="ptt-dot" aria-hidden="true" />
+                  <span>{formatDuration(pttSeconds)}</span>
+                </>
+              )}
             </div>
             <div className="ptt-waves" aria-hidden="true">
               {pttBars.map((level, idx) => (

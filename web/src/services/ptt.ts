@@ -36,12 +36,14 @@ class PttController {
   private active = false;
   private stream: MediaStream | null = null;
   private ctx: AudioContext | null = null;
+  private workletLoadedCtx: AudioContext | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
   private processorNode: AudioNode | null = null;
   private sinkGain: GainNode | null = null;
   private chunks: Float32Array[] = [];
   private totalSamples = 0;
   private sampleRate = TARGET_SAMPLE_RATE;
+  private firstFrameSeen = false;
   private autoStopped = false;
   private callbacks: PttCallbacks = {};
 
@@ -59,35 +61,32 @@ class PttController {
     this.cleanup();
     const gen = ++this.sessionGen;
     this.active = true;
+    this.firstFrameSeen = false;
     this.autoStopped = false;
     this.chunks = [];
     this.totalSamples = 0;
     this.callbacks = callbacks;
 
     let stream: MediaStream | null = null;
-    let ctx: AudioContext | null = null;
 
     try {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-      });
+      // 并行打开麦克风与预热 AudioContext / Worklet，减少从按住到首帧采集的冷启动耗时
+      const [mediaStream, ctx] = await Promise.all([
+        navigator.mediaDevices.getUserMedia({
+          audio: {
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        }),
+        this.ensureAudioContext(),
+      ]);
+      stream = mediaStream;
 
       if (!this.active || gen !== this.sessionGen) {
         stopTracks(stream);
-        return false;
-      }
-
-      ctx = createAudioContext();
-      await ctx.resume().catch(() => undefined);
-
-      if (!this.active || gen !== this.sessionGen) {
-        stopTracks(stream);
-        void ctx.close().catch(() => undefined);
+        void ctx.suspend().catch(() => undefined);
         return false;
       }
 
@@ -98,17 +97,15 @@ class PttController {
       this.sinkGain = ctx.createGain();
       this.sinkGain.gain.value = 0;
 
-      const attached = await this.attachCaptureNode(ctx, this.source, this.sinkGain, gen);
+      const attached = this.attachCaptureNode(ctx, this.source, this.sinkGain, gen);
       if (!attached || !this.active || gen !== this.sessionGen) {
         this.cleanup();
         return false;
       }
 
-      this.callbacks.onReady?.();
       return true;
     } catch (err) {
       stopTracks(stream);
-      if (ctx) void ctx.close().catch(() => undefined);
       if (gen === this.sessionGen && this.active) {
         this.cleanup();
         toast(mapMicError(err), 'error');
@@ -147,18 +144,37 @@ class PttController {
     return { status: 'ok', wav, durationMs };
   }
 
-  private async attachCaptureNode(
-    ctx: AudioContext,
-    source: MediaStreamAudioSourceNode,
-    sinkGain: GainNode,
-    gen: number,
-  ): Promise<boolean> {
-    if (typeof AudioWorkletNode !== 'undefined' && ctx.audioWorklet) {
+  private async ensureAudioContext(): Promise<AudioContext> {
+    let ctx = this.ctx;
+    if (!ctx || ctx.state === 'closed') {
+      ctx = createAudioContext();
+      this.ctx = ctx;
+      this.workletLoadedCtx = null;
+    }
+    await ctx.resume().catch(() => undefined);
+    if (typeof AudioWorkletNode !== 'undefined' && ctx.audioWorklet && this.workletLoadedCtx !== ctx) {
       let blobUrl: string | null = null;
       try {
         blobUrl = URL.createObjectURL(new Blob([WORKLET_CODE], { type: 'application/javascript' }));
         await ctx.audioWorklet.addModule(blobUrl);
-        if (!this.active || gen !== this.sessionGen) return false;
+        this.workletLoadedCtx = ctx;
+      } catch {
+        // Fallback to ScriptProcessorNode below if AudioWorklet is blocked or unsupported.
+      } finally {
+        if (blobUrl) URL.revokeObjectURL(blobUrl);
+      }
+    }
+    return ctx;
+  }
+
+  private attachCaptureNode(
+    ctx: AudioContext,
+    source: MediaStreamAudioSourceNode,
+    sinkGain: GainNode,
+    gen: number,
+  ): boolean {
+    if (typeof AudioWorkletNode !== 'undefined' && this.workletLoadedCtx === ctx) {
+      try {
         const worklet = new AudioWorkletNode(ctx, 'pcm-capture-processor');
         worklet.port.onmessage = (event: MessageEvent<Float32Array>) => {
           if (!this.active || gen !== this.sessionGen) return;
@@ -170,9 +186,7 @@ class PttController {
         this.processorNode = worklet;
         return true;
       } catch {
-        // Fallback to ScriptProcessorNode below if AudioWorklet is blocked or unsupported.
-      } finally {
-        if (blobUrl) URL.revokeObjectURL(blobUrl);
+        // Fallback to ScriptProcessorNode below if AudioWorkletNode creation fails.
       }
     }
 
@@ -194,6 +208,11 @@ class PttController {
   }
 
   private pushFrame(frame: Float32Array): void {
+    if (!this.firstFrameSeen) {
+      this.firstFrameSeen = true;
+      // 等到真正收到第一帧麦克风采样后再通知 UI 亮起红点并开始计时，避免硬件冷启动期吞字
+      this.callbacks.onReady?.();
+    }
     this.chunks.push(frame);
     this.totalSamples += frame.length;
 
@@ -214,6 +233,7 @@ class PttController {
 
   private cleanup(): void {
     this.active = false;
+    this.firstFrameSeen = false;
     this.callbacks = {};
     this.chunks = [];
     this.totalSamples = 0;
@@ -238,10 +258,9 @@ class PttController {
     stopTracks(this.stream);
     this.stream = null;
 
-    if (this.ctx) {
-      const ctx = this.ctx;
-      this.ctx = null;
-      void ctx.close().catch(() => undefined);
+    // 挂起而非关闭 AudioContext，保留已注册的 AudioWorklet 以加速下次长按冷启动
+    if (this.ctx && this.ctx.state === 'running') {
+      void this.ctx.suspend().catch(() => undefined);
     }
   }
 }
