@@ -54,11 +54,11 @@
 }
 
 .drawer.left.closing {
-  animation: drawer-left-out 220ms ease-in forwards;
+  animation: drawer-left-out 220ms var(--ease-fold) forwards;
 }
 
 .drawer.right.closing {
-  animation: drawer-right-out 220ms ease-in forwards;
+  animation: drawer-right-out 220ms var(--ease-fold) forwards;
 }
 
 @keyframes mask-in {
@@ -142,12 +142,24 @@
   -webkit-backdrop-filter: none;
 }
 
+.drawer-head .icon-btn > svg {
+  transition: transform 240ms var(--ease-spring);
+}
+
 @media (hover: hover) {
   .drawer-head .icon-btn:hover:not(:disabled) {
     color: var(--ink);
     background: var(--chip-hover);
     box-shadow: none;
   }
+
+  .drawer-head .icon-btn:hover:not(:disabled) > svg {
+    transform: rotate(90deg);
+  }
+}
+
+.drawer-head .icon-btn:active:not(:disabled) {
+  transform: scale(0.92);
 }
 
 .drawer-body {
@@ -302,11 +314,19 @@
   margin: 12px 0 0;
 }
 
+.drawer-action > svg {
+  transition: transform 220ms var(--ease-spring);
+}
+
 @media (hover: hover) {
   .drawer-action:hover {
     background: color-mix(in oklab, var(--accent) 22%, transparent);
     border-color: var(--accent-line);
     transform: translateY(-1px);
+  }
+
+  .drawer-action:hover > svg {
+    transform: scale(1.08);
   }
 }
 

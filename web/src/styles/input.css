@@ -67,18 +67,6 @@
   animation: btn-pop 300ms var(--ease-spring);
 }
 
-@keyframes btn-pop {
-  from {
-    transform: scale(0.72);
-  }
-  60% {
-    transform: scale(1.05);
-  }
-  to {
-    transform: none;
-  }
-}
-
 /* 输入条内的按钮退成无边框圆形，只保留发送/麦克风的状态高亮 */
 .input-row .icon-btn {
   width: 40px;
@@ -98,6 +86,10 @@
     transform: none;
     box-shadow: none;
   }
+}
+
+.input-row .icon-btn:active:not(:disabled) {
+  transform: scale(0.92);
 }
 
 .input-text {
@@ -219,6 +211,7 @@
 }
 
 .ptt-dot {
+  position: relative;
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -226,9 +219,24 @@
   animation: ptt-pulse 1.1s ease-in-out infinite;
 }
 
-.input-row.ptt-cancel .ptt-dot {
+.ptt-dot::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: inherit;
+  border: 1.5px solid var(--danger);
+  opacity: 0;
+  animation: ptt-ring 1.4s var(--ease-spring) infinite;
+}
+
+.input-row.ptt-cancel .ptt-dot,
+.input-row.ptt-cancel .ptt-dot::after {
   animation: none;
-  opacity: 0.55;
+  opacity: 0.45;
+}
+
+.input-row.ptt-cancel .ptt-dot::after {
+  opacity: 0;
 }
 
 @keyframes ptt-pulse {
@@ -238,8 +246,19 @@
     transform: scale(1);
   }
   50% {
-    opacity: 0.35;
-    transform: scale(0.76);
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+
+@keyframes ptt-ring {
+  0% {
+    opacity: 0.65;
+    transform: scale(0.6);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
   }
 }
 
@@ -283,6 +302,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   transition: color 180ms ease;
+  animation: status-swap 200ms var(--ease-spring) backwards;
 }
 
 .input-row.ptt-cancel .ptt-hint {
@@ -292,7 +312,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ptt-bar,
-  .ptt-dot {
+  .ptt-dot,
+  .ptt-dot::after,
+  .ptt-hint,
+  .input-row .stop-btn::after {
     animation: none;
   }
 
@@ -302,21 +325,45 @@
 }
 
 .input-row .stop-btn {
+  position: relative;
   color: var(--danger);
   background: var(--danger-soft);
+  border-color: var(--danger-line);
 }
 
-.input-row .stop-btn:not(:disabled) {
-  /* 先弹进来，再接力呼吸光，避免两条 animation 互相覆盖 */
-  animation:
-    btn-pop 300ms var(--ease-spring),
-    stop-glow 1.9s 300ms ease-in-out infinite;
+.input-row .stop-btn:not(:disabled)::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1.5px solid var(--danger);
+  opacity: 0;
+  pointer-events: none;
+  animation: stop-ring 1.9s 300ms var(--ease-spring) infinite;
 }
 
-@keyframes stop-glow {
-  50% {
-    box-shadow: 0 0 20px -8px var(--danger);
+@keyframes stop-ring {
+  0% {
+    opacity: 0.55;
+    transform: scale(0.96);
   }
+  75%,
+  100% {
+    opacity: 0;
+    transform: scale(1.24);
+  }
+}
+
+@media (hover: hover) {
+  .input-row .stop-btn:not(:disabled):hover {
+    background: color-mix(in oklab, var(--danger) 20%, transparent);
+    color: var(--danger);
+    transform: translateY(-1px) scale(1.04);
+  }
+}
+
+.input-row .stop-btn:not(:disabled):active {
+  transform: scale(0.93);
 }
 
 /* 发送是唯一的高亮主行动 */
@@ -437,6 +484,10 @@
   }
 }
 
+.media-menu button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
 .image-strip {
   display: flex;
   gap: 8px;
@@ -505,7 +556,10 @@
   }
 }
 
-.image-thumb,
+.image-remove:active {
+  transform: scale(0.88);
+}
+
 .cam-video,
 .cam-idle {
   animation: content-in 200ms ease-out;
@@ -587,7 +641,7 @@
 }
 
 .media-menu.composer-menu.closing {
-  animation: composer-out 150ms var(--ease-snap) forwards;
+  animation: composer-out 150ms var(--ease-fold) forwards;
 }
 
 @keyframes composer-in {
@@ -623,12 +677,15 @@
 .composer-menu-group button svg {
   flex: none;
   color: var(--muted);
-  transition: color 150ms;
+  transition:
+    color 160ms var(--ease-snap),
+    transform 220ms var(--ease-spring);
 }
 
 @media (hover: hover) {
   .composer-menu-group button:hover svg {
     color: var(--accent);
+    transform: scale(1.08);
   }
 }
 

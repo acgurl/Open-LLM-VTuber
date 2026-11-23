@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Map as LeafletMap, Marker, TileLayer } from 'leaflet';
+import { usePresence } from '../hooks/usePresence';
 import { gaodePoint, type Place } from '../utils/places';
 import { ExpandIcon } from './icons';
 
@@ -29,6 +30,7 @@ export function PlaceMap({ place, interactive = false, satellite = false, onExpa
   const tilesRef = useRef<TileLayer[]>([]);
   const leafletRef = useRef<typeof import('leaflet') | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const veilPresence = usePresence(state === 'loading', 180);
   const loadedRef = useRef(0);
   const errorsRef = useRef(0);
   // 异步加载 leaflet 期间 props 可能已经换过（切地点/切卫星），建图时读最新值
@@ -136,8 +138,11 @@ export function PlaceMap({ place, interactive = false, satellite = false, onExpa
       onClick={interactive ? undefined : onExpand}
     >
       <div ref={hostRef} className="place-map-host" />
-      {state === 'loading' && (
-        <div className="place-map-veil" aria-hidden="true">
+      {veilPresence.mounted && (
+        <div
+          className={`place-map-veil${veilPresence.closing ? ' closing' : ''}`}
+          aria-hidden="true"
+        >
           <span className="spinner" />
         </div>
       )}

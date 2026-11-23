@@ -18,6 +18,17 @@
   background: var(--chip);
   font-size: 0.8rem;
   max-width: 100%;
+  animation: content-in 240ms var(--ease-spring) backwards;
+  transition:
+    border-color 180ms var(--ease-snap),
+    background 180ms var(--ease-snap);
+}
+
+@media (hover: hover) {
+  .connector-bot:hover {
+    border-color: var(--line-strong);
+    background: var(--chip-hover);
+  }
 }
 
 .connector-bot-name {
@@ -102,12 +113,16 @@
   color: var(--ink);
   font-size: 0.82rem;
   line-height: 1.55;
+  animation: drawer-item-in 260ms var(--ease-spring);
 }
 
 .connector-notice.error {
   border-color: var(--danger-line);
   background: var(--danger-soft);
   color: var(--danger);
+  animation:
+    drawer-item-in 260ms var(--ease-spring),
+    error-shake 320ms var(--ease-snap);
 }
 
 /* 绑定码卡片：渐变描边 + 内凹底，码本身是视觉焦点 */

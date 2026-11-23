@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { usePresence } from '../hooks/usePresence';
 import { CheckIcon, ChevronDownIcon } from './icons';
 
@@ -23,6 +23,7 @@ interface TopBarPickerProps {
   name: string;
   label: string;
   icon: ReactNode;
+  iconKey?: string;
   menuTitle: string;
   options: PickerOption[];
   selectedId: PickerOption['id'] | undefined;
@@ -37,7 +38,7 @@ interface TopBarPickerProps {
 }
 
 export function TopBarPicker({
-  kind, name, label, icon, menuTitle, options, selectedId, switching, disabled = false,
+  kind, name, label, icon, iconKey, menuTitle, options, selectedId, switching, disabled = false,
   busy, statusText, emptyHint, tabs, onOpen, onSelect,
 }: TopBarPickerProps) {
   const [open, setOpen] = useState(false);
@@ -48,13 +49,34 @@ export function TopBarPicker({
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const activeTabRef = useRef<HTMLButtonElement>(null);
+  const tabListRef = useRef<HTMLDivElement>(null);
+  const [tabThumb, setTabThumb] = useState<{ x: number; w: number } | null>(null);
   const menuId = useId();
   const hasOptions = options.length > 0;
   const activeTabId = tabs?.activeId;
+  const tabCount = tabs?.items.length ?? 0;
   const setMenuRef = useCallback((node: HTMLDivElement | null) => {
     menuRef.current = node;
     if (node) node.inert = closing;
   }, [closing]);
+
+  useLayoutEffect(() => {
+    if (!mounted || !tabCount) {
+      setTabThumb(null);
+      return;
+    }
+    const list = tabListRef.current;
+    if (!list) return;
+    const measure = () => {
+      const btn = list.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]');
+      if (btn) setTabThumb({ x: btn.offsetLeft, w: btn.offsetWidth });
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(list);
+    return () => ro.disconnect();
+  }, [mounted, activeTabId, tabCount]);
 
   useEffect(() => {
     if (!blocked || !open) return;
@@ -183,8 +205,8 @@ export function TopBarPicker({
         title={label}
         onClick={toggle}
       >
-        <span className="picker-pill-icon" aria-hidden="true">{icon}</span>
-        <span className="picker-pill-name">{name}</span>
+        <span className={`picker-pill-icon${iconKey ? ' icon-swap' : ''}`} key={iconKey} aria-hidden="true">{icon}</span>
+        <span className="picker-pill-name" key={name}>{name}</span>
         <span className="topbar-status" aria-live="polite">
           {statusText && <span className="topbar-status-text" key={statusText}>{statusText}</span>}
         </span>
@@ -202,7 +224,14 @@ export function TopBarPicker({
           <div className="picker-menu-title" aria-hidden="true">{menuTitle}</div>
           {tabs ? (
             <>
-              <div className="picker-tabs" role="tablist" aria-label={menuTitle}>
+              <div ref={tabListRef} className="picker-tabs" role="tablist" aria-label={menuTitle}>
+                {tabThumb && (
+                  <span
+                    className="picker-tab-thumb"
+                    aria-hidden="true"
+                    style={{ transform: `translateX(${tabThumb.x}px)`, width: tabThumb.w }}
+                  />
+                )}
                 {tabs.items.map((item) => {
                   const active = item.id === tabs.activeId;
                   return (

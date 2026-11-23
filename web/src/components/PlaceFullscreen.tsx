@@ -48,7 +48,7 @@ export function PlaceFullscreen() {
           <span className="place-glyph" aria-hidden="true">
             <MapPinIcon size={18} />
           </span>
-          <div className="place-titles">
+          <div className="place-titles" key={index}>
             <strong className="place-name">{place.name}</strong>
             {sub && <span className="place-sub">{sub}</span>}
           </div>

@@ -26,7 +26,7 @@ export function TopBar() {
     <header className="topbar">
       <div className="topbar-side">
         <button
-          className="icon-btn"
+          className="icon-btn history-btn"
           aria-label={t('drawer.history')}
           title={t('drawer.history')}
           onClick={() => setHistoryOpen(true)}
@@ -34,7 +34,7 @@ export function TopBar() {
           <MenuIcon />
         </button>
         <button
-          className="icon-btn"
+          className="icon-btn new-chat-btn"
           aria-label={t('history.new')}
           title={t('history.new')}
           onClick={newHistory}
@@ -52,7 +52,9 @@ export function TopBar() {
           title={t(ttsOn ? 'settings.ttsOn' : 'settings.ttsOff')}
           onClick={toggleTts}
         >
-          <VolumeIcon muted={!ttsOn} />
+          <span className="icon-swap" key={ttsOn ? 'on' : 'off'}>
+            <VolumeIcon muted={!ttsOn} />
+          </span>
         </button>
         <button
           className="icon-btn theme-toggle"
@@ -65,7 +67,7 @@ export function TopBar() {
       </div>
       <div className="topbar-side end">
         <button
-          className="icon-btn"
+          className="icon-btn settings-btn"
           aria-label={t('drawer.settings')}
           title={t('drawer.settings')}
           onClick={() => setSettingsOpen(true)}

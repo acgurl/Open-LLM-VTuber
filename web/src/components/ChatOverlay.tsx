@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useChat, type ChatEntry } from '../stores/chat';
 import { useConnection } from '../stores/connection';
+import { usePresence } from '../hooks/usePresence';
 import { live2d } from '../live2d/controller';
 import { sendText } from '../services/actions';
 import { MessageBubble } from './MessageBubble';
@@ -25,6 +26,7 @@ export function ChatOverlay() {
   const jumping = useRef(false);
   const firstId = useRef<string | null>(null);
   const [showJump, setShowJump] = useState(false);
+  const jumpPresence = usePresence(showJump, 180);
   const [unread, setUnread] = useState(false);
   const [fade, setFade] = useState({ top: false, bottom: false });
 
@@ -190,9 +192,9 @@ export function ChatOverlay() {
           )}
         </div>
       </div>
-      {showJump && (
+      {jumpPresence.mounted && (
         <button
-          className={`scroll-jump${unread ? ' unread' : ''}`}
+          className={`scroll-jump${unread ? ' unread' : ''}${jumpPresence.closing ? ' closing' : ''}`}
           aria-label={t('chat.latest')}
           title={t('chat.latest')}
           onClick={jumpToLatest}

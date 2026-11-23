@@ -40,12 +40,24 @@
 .think-chevron {
   display: inline-block;
   margin-right: 5px;
-  transition: transform 220ms var(--ease-fold);
+  transition:
+    transform 240ms var(--ease-fold),
+    color 180ms var(--ease-snap);
 }
 
 .tool-card .tool-head[aria-expanded="true"] .think-chevron {
   transform: rotate(90deg);
   transition-timing-function: var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .tool-card:hover:not(.status-running):not(.status-error) {
+    border-color: var(--line-strong);
+  }
+
+  .tool-head:hover .think-chevron {
+    color: var(--muted);
+  }
 }
 
 .collapsible {
@@ -178,6 +190,10 @@
   }
 }
 
+.tool-head:active {
+  background: var(--chip-hover);
+}
+
 .tool-dot {
   width: 8px;
   height: 8px;
@@ -207,24 +223,6 @@
   animation: dot-pop 360ms var(--ease-spring);
 }
 
-@keyframes dot-pop {
-  from {
-    transform: scale(0.35);
-  }
-  60% {
-    transform: scale(1.35);
-  }
-  to {
-    transform: none;
-  }
-}
-
-@keyframes pulse {
-  50% {
-    opacity: 0.3;
-  }
-}
-
 .tool-name {
   min-width: 0;
   font-family: var(--font-mono);
@@ -242,6 +240,11 @@
   white-space: nowrap;
   font-size: 0.76rem;
   font-variant-numeric: tabular-nums;
+}
+
+.tool-status-text {
+  display: inline-block;
+  animation: status-swap 220ms var(--ease-spring);
 }
 
 /* 处理中/失败才让状态词带颜色；完成是最常见的结果，保持安静 */
@@ -283,6 +286,13 @@
   background: linear-gradient(90deg, transparent, var(--accent), transparent);
 }
 
+.think-card.status-completed::before {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--accent) 45%, transparent),
+    inset 0 -14px 22px -18px var(--accent);
+  animation: settle-ring 460ms var(--ease-spring);
+}
+
 .think-card.status-running .tool-status {
   color: var(--accent);
 }
@@ -293,7 +303,7 @@
   letter-spacing: 0;
 }
 
-/* 头部的小标记：一颗主色的菱形，思考中缓慢呼吸，和工具卡的状态点同位 */
+/* 头部的小标记：一颗主色的菱形，思考中缓慢呼吸，结束时轻弹落定，和工具卡的状态点同位 */
 .think-mark {
   flex: none;
   width: 8px;
@@ -307,6 +317,22 @@
 .think-mark.active {
   background: var(--accent);
   animation: pulse 1.2s ease-in-out infinite;
+}
+
+.think-mark.done {
+  animation: think-mark-pop 380ms var(--ease-spring);
+}
+
+@keyframes think-mark-pop {
+  from {
+    transform: rotate(0deg) scale(0.45);
+  }
+  60% {
+    transform: rotate(52deg) scale(1.28);
+  }
+  to {
+    transform: rotate(45deg);
+  }
 }
 
 .think-card .tool-status {
@@ -331,6 +357,7 @@
   max-height: calc(0.86rem * 1.65 * 5 + 2 * var(--surface-pad-y));
   scrollbar-width: none;
   mask-image: linear-gradient(to bottom, transparent 0, #000 1.6em);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 1.6em);
 }
 
 .think-card.status-running .think-body::-webkit-scrollbar {

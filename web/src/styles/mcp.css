@@ -10,16 +10,37 @@
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 10px 12px;
-  background: var(--chip);
+  background-color: var(--chip);
+  background-image: radial-gradient(200px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%);
+  animation: drawer-item-in 260ms var(--ease-spring) backwards;
   transition:
-    border-color 180ms,
-    background 180ms;
+    border-color 180ms var(--ease-snap),
+    background-color 180ms var(--ease-snap),
+    transform 220ms var(--ease-spring),
+    --sheen-spot 360ms ease;
+}
+
+.mcp-item:nth-child(2) {
+  animation-delay: 24ms;
+}
+.mcp-item:nth-child(3) {
+  animation-delay: 48ms;
+}
+.mcp-item:nth-child(4) {
+  animation-delay: 72ms;
+}
+.mcp-item:nth-child(5) {
+  animation-delay: 96ms;
+}
+.mcp-item:nth-child(n + 6) {
+  animation-delay: 120ms;
 }
 
 @media (hover: hover) {
   .mcp-item:hover {
     border-color: var(--line-strong);
-    background: var(--chip-hover);
+    background-color: var(--chip-hover);
+    transform: translateY(-1px);
   }
 }
 
@@ -100,6 +121,7 @@
 .mcp-editor.invalid {
   border-color: var(--danger-line);
   box-shadow: 0 0 0 3px var(--danger-soft);
+  animation: error-shake 320ms var(--ease-snap);
 }
 
 .mcp-editor::placeholder {
