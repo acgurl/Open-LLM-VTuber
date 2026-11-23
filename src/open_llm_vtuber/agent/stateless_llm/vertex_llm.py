@@ -284,6 +284,54 @@ class VertexLLM(StatelessLLMInterface):
 
     # ---- request
 
+    @staticmethod
+    def _append_content(
+        contents: list[dict[str, Any]], role: str, parts: list[dict[str, Any]]
+    ) -> None:
+        if not parts:
+            return
+        if contents and contents[-1]["role"] == role:
+            contents[-1]["parts"].extend(parts)
+        else:
+            contents.append({"role": role, "parts": parts})
+
+    def _assistant_parts(
+        self, message: dict[str, Any], call_names: dict[str, str]
+    ) -> list[dict[str, Any]]:
+        parts = _content_parts(message.get("content"))
+        for call in message.get("tool_calls") or []:
+            function = call.get("function") or {}
+            name = function.get("name", "")
+            call_names[call.get("id")] = name
+            try:
+                args = json.loads(function.get("arguments") or "{}")
+            except ValueError:
+                args = {}
+            part: dict[str, Any] = {
+                "functionCall": {
+                    "name": name,
+                    "args": args if isinstance(args, dict) else {},
+                }
+            }
+            signature = self._signatures.get(call.get("id"))
+            if signature:
+                part["thoughtSignature"] = signature
+            parts.append(part)
+        return parts
+
+    @staticmethod
+    def _tool_response_part(
+        message: dict[str, Any], call_names: dict[str, str]
+    ) -> dict[str, Any]:
+        result = content_text(message.get("content"))
+        response = {"error": result} if message.get("is_error") else {"result": result}
+        return {
+            "functionResponse": {
+                "name": call_names.get(message.get("tool_call_id"), ""),
+                "response": response,
+            }
+        }
+
     def _to_contents(
         self, messages: list[dict[str, Any]]
     ) -> tuple[list[dict[str, Any]], list[str]]:
@@ -291,14 +339,6 @@ class VertexLLM(StatelessLLMInterface):
         contents: list[dict[str, Any]] = []
         system_texts: list[str] = []
         call_names: dict[str, str] = {}
-
-        def add(role: str, parts: list[dict[str, Any]]) -> None:
-            if not parts:
-                return
-            if contents and contents[-1]["role"] == role:
-                contents[-1]["parts"].extend(parts)
-            else:
-                contents.append({"role": role, "parts": parts})
 
         for message in messages:
             role = message.get("role")
@@ -309,45 +349,17 @@ class VertexLLM(StatelessLLMInterface):
                     if "text" in part
                 )
             elif role == "assistant":
-                parts = _content_parts(message.get("content"))
-                for call in message.get("tool_calls") or []:
-                    function = call.get("function") or {}
-                    name = function.get("name", "")
-                    call_names[call.get("id")] = name
-                    try:
-                        args = json.loads(function.get("arguments") or "{}")
-                    except ValueError:
-                        args = {}
-                    part: dict[str, Any] = {
-                        "functionCall": {
-                            "name": name,
-                            "args": args if isinstance(args, dict) else {},
-                        }
-                    }
-                    signature = self._signatures.get(call.get("id"))
-                    if signature:
-                        part["thoughtSignature"] = signature
-                    parts.append(part)
-                add("model", parts)
+                self._append_content(
+                    contents, "model", self._assistant_parts(message, call_names)
+                )
             elif role == "tool":
-                result = content_text(message.get("content"))
-                add(
-                    "user",
-                    [
-                        {
-                            "functionResponse": {
-                                "name": call_names.get(message.get("tool_call_id"), ""),
-                                "response": (
-                                    {"error": result}
-                                    if message.get("is_error")
-                                    else {"result": result}
-                                ),
-                            }
-                        }
-                    ],
+                self._append_content(
+                    contents, "user", [self._tool_response_part(message, call_names)]
                 )
             else:
-                add("user", _content_parts(message.get("content")))
+                self._append_content(
+                    contents, "user", _content_parts(message.get("content"))
+                )
         return contents, system_texts
 
     def _request_body(
@@ -394,6 +406,63 @@ class VertexLLM(StatelessLLMInterface):
             }
         )
 
+    @staticmethod
+    def _parse_sse_chunk(line: str) -> dict[str, Any] | None:
+        if not line.startswith("data:"):
+            return None
+        try:
+            return json.loads(line[len("data:") :])
+        except ValueError:
+            return None
+
+    def _process_part(
+        self,
+        part: dict[str, Any],
+        think: ThinkMarkers,
+        tool_calls: list[ToolCallObject],
+        last_thought: str,
+    ) -> tuple[list[str], str, bool]:
+        if part.get("thought"):
+            # Thought summaries, sent when ``includeThoughts`` is on.
+            # Each one is a section opening with a bold title and
+            # no trailing newline; keep sections apart.
+            text = part.get("text") or ""
+            if think.open and text.startswith("**") and not last_thought.endswith("\n"):
+                text = "\n\n" + text
+            return list(think.thought(text)), text or last_thought, False
+        if part.get("functionCall"):
+            closed = list(think.close())
+            tool_calls.append(self._tool_call(part, len(tool_calls)))
+            return closed, last_thought, False
+        if part.get("text"):
+            return [*think.close(), part["text"]], last_thought, True
+        return [], last_thought, False
+
+    def _process_chunk(
+        self,
+        chunk: dict[str, Any],
+        think: ThinkMarkers,
+        tool_calls: list[ToolCallObject],
+        last_thought: str,
+    ) -> tuple[list[str], str, bool, str | None]:
+        block_reason = (chunk.get("promptFeedback") or {}).get("blockReason")
+        if block_reason:
+            logger.warning(f"Vertex blocked the prompt: {block_reason}")
+            raise generation_error(f"The request was blocked ({block_reason}).")
+
+        outputs: list[str] = []
+        produced_text = False
+        finish_reason = None
+        for candidate in chunk.get("candidates") or []:
+            finish_reason = candidate.get("finishReason") or finish_reason
+            for part in (candidate.get("content") or {}).get("parts") or []:
+                items, last_thought, wrote_text = self._process_part(
+                    part, think, tool_calls, last_thought
+                )
+                outputs.extend(items)
+                produced_text = produced_text or wrote_text
+        return outputs, last_thought, produced_text, finish_reason
+
     async def _stream_response(
         self, response: httpx.Response
     ) -> AsyncIterator[str | list[ToolCallObject]]:
@@ -404,46 +473,16 @@ class VertexLLM(StatelessLLMInterface):
         last_thought = ""
 
         async for line in response.aiter_lines():
-            if not line.startswith("data:"):
+            chunk = self._parse_sse_chunk(line)
+            if chunk is None:
                 continue
-            try:
-                chunk = json.loads(line[len("data:") :])
-            except ValueError:
-                continue
-
-            block_reason = (chunk.get("promptFeedback") or {}).get("blockReason")
-            if block_reason:
-                logger.warning(f"Vertex blocked the prompt: {block_reason}")
-                raise generation_error(f"The request was blocked ({block_reason}).")
-
-            for candidate in chunk.get("candidates") or []:
-                finish_reason = candidate.get("finishReason") or finish_reason
-                for part in (candidate.get("content") or {}).get("parts") or []:
-                    if part.get("thought"):
-                        # Thought summaries, sent when ``includeThoughts`` is on.
-                        # Each one is a section opening with a bold title and
-                        # no trailing newline; keep sections apart.
-                        text = part.get("text") or ""
-                        if (
-                            think.open
-                            and text.startswith("**")
-                            and not last_thought.endswith("\n")
-                        ):
-                            text = "\n\n" + text
-                        if text:
-                            last_thought = text
-                        for item in think.thought(text):
-                            yield item
-                        continue
-                    if part.get("functionCall"):
-                        for item in think.close():
-                            yield item
-                        tool_calls.append(self._tool_call(part, len(tool_calls)))
-                    elif part.get("text"):
-                        for item in think.close():
-                            yield item
-                        produced_text = True
-                        yield part["text"]
+            items, last_thought, wrote_text, chunk_finish = self._process_chunk(
+                chunk, think, tool_calls, last_thought
+            )
+            produced_text = produced_text or wrote_text
+            finish_reason = chunk_finish or finish_reason
+            for item in items:
+                yield item
 
         for item in think.close():
             yield item

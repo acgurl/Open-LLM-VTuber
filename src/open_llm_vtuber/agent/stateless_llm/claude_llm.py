@@ -3,6 +3,7 @@
 import json
 from collections import OrderedDict
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import anthropic
@@ -208,64 +209,10 @@ class ClaudeLLM(StatelessLLMInterface):
                 self._turns.popitem(last=False)
         return calls
 
-    async def chat_completion(
-        self,
-        messages: list[dict[str, Any]],
-        system: str | None = None,
-        tools: list[dict[str, Any]] | None = None,
-        options: dict[str, Any] | None = None,
-    ) -> AsyncIterator[str | list[ToolCallObject]]:
-        request_messages = self._to_messages(messages)
-        logger.debug(f"Sending {len(request_messages)} messages to {self.model}")
-
+    @asynccontextmanager
+    async def _claude_errors(self) -> AsyncIterator[None]:
         try:
-            async with self.client.messages.stream(
-                model=self.model,
-                max_tokens=self.max_tokens,
-                system=system or NOT_GIVEN,
-                messages=request_messages,
-                tools=claude_tools(tools) or NOT_GIVEN,
-                temperature=(
-                    NOT_GIVEN if self.temperature is None else self.temperature
-                ),
-                extra_body=_visible_thinking(options) or None,
-            ) as stream:
-                produced_text = False
-                think = ThinkMarkers()
-                async for event in stream:
-                    if event.type != "content_block_delta":
-                        continue
-                    delta = event.delta
-                    if delta.type == "thinking_delta":
-                        for item in think.thought(delta.thinking):
-                            yield item
-                    elif delta.type == "text_delta" and delta.text:
-                        for item in think.close():
-                            yield item
-                        produced_text = True
-                        yield delta.text
-                for item in think.close():
-                    yield item
-                message = await stream.get_final_message()
-
-            if message.stop_reason == "refusal":
-                logger.warning(f"{self.model} refused the request")
-                if not produced_text:
-                    raise generation_error("The model declined to answer.")
-                return
-            if message.stop_reason == "max_tokens":
-                logger.warning(
-                    f"{self.model} stopped at max_tokens ({self.max_tokens}); "
-                    "the response is cut short"
-                )
-                # A tool call cut off mid-input is not runnable.
-                return
-
-            calls = self._tool_calls(message)
-            if calls:
-                logger.info(f"Tool calls requested: {[c.function.name for c in calls]}")
-                yield calls
-
+            yield
         except anthropic.APIConnectionError as error:
             logger.error(f"Claude API ({self.model}): connection failed: {error}")
             raise connection_error() from error
@@ -278,6 +225,73 @@ class ClaudeLLM(StatelessLLMInterface):
         except anthropic.APIError as error:
             logger.error(f"Claude API ({self.model}): {error}")
             raise generation_error() from error
+
+    @staticmethod
+    def _delta_outputs(delta: Any, think: ThinkMarkers) -> tuple[list[str], bool]:
+        if delta.type == "thinking_delta":
+            return list(think.thought(delta.thinking)), False
+        if delta.type == "text_delta" and delta.text:
+            return [*think.close(), delta.text], True
+        return [], False
+
+    def _should_emit_tools(self, message: Any, produced_text: bool) -> bool:
+        if message.stop_reason == "refusal":
+            logger.warning(f"{self.model} refused the request")
+            if not produced_text:
+                raise generation_error("The model declined to answer.")
+            return False
+        if message.stop_reason == "max_tokens":
+            logger.warning(
+                f"{self.model} stopped at max_tokens ({self.max_tokens}); "
+                "the response is cut short"
+            )
+            # A tool call cut off mid-input is not runnable.
+            return False
+        return True
+
+    async def chat_completion(
+        self,
+        messages: list[dict[str, Any]],
+        system: str | None = None,
+        tools: list[dict[str, Any]] | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> AsyncIterator[str | list[ToolCallObject]]:
+        request_messages = self._to_messages(messages)
+        logger.debug(f"Sending {len(request_messages)} messages to {self.model}")
+
+        async with (
+            self._claude_errors(),
+            self.client.messages.stream(
+                model=self.model,
+                max_tokens=self.max_tokens,
+                system=system or NOT_GIVEN,
+                messages=request_messages,
+                tools=claude_tools(tools) or NOT_GIVEN,
+                temperature=(
+                    NOT_GIVEN if self.temperature is None else self.temperature
+                ),
+                extra_body=_visible_thinking(options) or None,
+            ) as stream,
+        ):
+            produced_text = False
+            think = ThinkMarkers()
+            async for event in stream:
+                if event.type != "content_block_delta":
+                    continue
+                outputs, wrote_text = self._delta_outputs(event.delta, think)
+                produced_text = produced_text or wrote_text
+                for item in outputs:
+                    yield item
+            for item in think.close():
+                yield item
+            message = await stream.get_final_message()
+
+        if not self._should_emit_tools(message, produced_text):
+            return
+        calls = self._tool_calls(message)
+        if calls:
+            logger.info(f"Tool calls requested: {[c.function.name for c in calls]}")
+            yield calls
 
     async def close(self) -> None:
         await self.client.close()

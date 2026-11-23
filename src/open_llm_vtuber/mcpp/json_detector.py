@@ -84,6 +84,33 @@ class StreamJSONDetector:
         self.potential_jsons = remaining_potential
         return new_jsons
 
+    @staticmethod
+    def _step_string_state(char: str, escaped: bool) -> tuple[bool, bool]:
+        if escaped:
+            return True, False
+        if char == "\\":
+            return True, True
+        return char != '"', False
+
+    def _find_json_end(self, start_idx: int) -> int:
+        stack = 1
+        i = start_idx + 1
+        in_string = False
+        escaped = False
+
+        while i < len(self.buffer) and stack > 0:
+            char = self.buffer[i]
+            if in_string:
+                in_string, escaped = self._step_string_state(char, escaped)
+            elif char == '"':
+                in_string = True
+            elif char == "{":
+                stack += 1
+            elif char == "}":
+                stack -= 1
+            i += 1
+        return i if stack == 0 else -1
+
     def _extract_json(self, start_idx: int) -> tuple[dict[str, Any] | None, int]:
         """Try to extract a complete JSON object from the given position.
 
@@ -94,39 +121,17 @@ class StreamJSONDetector:
             Tuple[Optional[Dict[str, Any]], int]: Parsed JSON object and ending position,
                                                or (None, -1) if incomplete
         """
-        stack = 1
-        i = start_idx + 1
-        in_string = False
-        escaped = False
-
-        while i < len(self.buffer) and stack > 0:
-            char = self.buffer[i]
-            if in_string:
-                if escaped:
-                    escaped = False
-                elif char == "\\":
-                    escaped = True
-                elif char == '"':
-                    in_string = False
-            elif char == '"':
-                in_string = True
-            elif char == "{":
-                stack += 1
-            elif char == "}":
-                stack -= 1
-            i += 1
-
-        # If complete JSON is found
-        if stack == 0:
-            json_str = self.buffer[start_idx:i]
-            try:
-                json_data = json.loads(json_str)
-                return json_data, i - 1
-            except json.JSONDecodeError:
-                logger.warning(
-                    f"JSON structure found but parsing failed: {json_str[:50]}..."
-                )
-
+        end_idx = self._find_json_end(start_idx)
+        if end_idx == -1:
+            return None, -1
+        json_str = self.buffer[start_idx:end_idx]
+        try:
+            json_data = json.loads(json_str)
+            return json_data, end_idx - 1
+        except json.JSONDecodeError:
+            logger.warning(
+                f"JSON structure found but parsing failed: {json_str[:50]}..."
+            )
         return None, -1
 
     def reset(self) -> None:

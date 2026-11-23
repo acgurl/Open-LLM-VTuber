@@ -176,6 +176,64 @@ def _config_display_name(config: Any, fallback: str) -> str:
     return config.get("character_config", {}).get("conf_name", fallback)
 
 
+def _read_default_character_setting() -> tuple[dict, str | None]:
+    try:
+        default_config = read_yaml("conf.yaml") or {}
+    except Exception as e:
+        logger.error(f"Failed to read default config: {e}")
+        return {}, None
+
+    default_sys = (
+        default_config.get("system_config")
+        if isinstance(default_config, dict)
+        else None
+    )
+    raw_default = (
+        default_sys.get("default_character")
+        if isinstance(default_sys, dict)
+        and isinstance(default_sys.get("default_character"), str)
+        else None
+    )
+    default_character = raw_default.strip() if raw_default else None
+    return default_config, default_character or None
+
+
+def _read_alt_config_entry(
+    full_path: str,
+    relative_path: str,
+    is_allowed: Callable[[dict], bool] | None,
+    default_character: str | None,
+) -> dict[str, Any] | None:
+    try:
+        config = read_yaml(full_path) or {}
+        name = _config_display_name(config, relative_path)
+    except Exception as e:
+        logger.error(f"Failed to read character config {full_path}: {e}")
+        if is_allowed is not None and may_declare_allowlist(full_path):
+            # Access cannot be checked without the parsed allowlist.
+            logger.warning(
+                f"Hiding unreadable character config {full_path}: it "
+                "may restrict access with allowed_users"
+            )
+            return None
+        name = relative_path
+    else:
+        if is_allowed is not None:
+            character_config = (
+                config.get("character_config") if isinstance(config, dict) else None
+            )
+            if not is_allowed(
+                character_config if isinstance(character_config, dict) else {}
+            ):
+                logger.debug(f"Hiding character config {full_path}")
+                return None
+
+    entry: dict[str, Any] = {"filename": relative_path, "name": name}
+    if default_character and relative_path == default_character:
+        entry["is_default"] = True
+    return entry
+
+
 def scan_config_alts_directory(
     config_alts_dir: str,
     is_allowed: Callable[[dict], bool] | None = None,
@@ -200,25 +258,7 @@ def scan_config_alts_directory(
 
     # Add default config first when conf.yaml defines its own character rather
     # than referencing a preset in config_alts_dir.
-    try:
-        default_config = read_yaml("conf.yaml") or {}
-    except Exception as e:
-        logger.error(f"Failed to read default config: {e}")
-        default_config = {}
-
-    default_sys = (
-        default_config.get("system_config")
-        if isinstance(default_config, dict)
-        else None
-    )
-    default_character = (
-        default_sys.get("default_character")
-        if isinstance(default_sys, dict)
-        and isinstance(default_sys.get("default_character"), str)
-        else None
-    )
-    default_character = default_character.strip() if default_character else None
-
+    default_config, default_character = _read_default_character_setting()
     if not default_character:
         config_files.append(
             {
@@ -238,36 +278,11 @@ def scan_config_alts_directory(
             relative_path = os.path.relpath(full_path, config_alts_dir).replace(
                 os.sep, "/"
             )
-            try:
-                config = read_yaml(full_path) or {}
-                name = _config_display_name(config, relative_path)
-            except Exception as e:
-                logger.error(f"Failed to read character config {full_path}: {e}")
-                if is_allowed is not None and may_declare_allowlist(full_path):
-                    # Access cannot be checked without the parsed allowlist.
-                    logger.warning(
-                        f"Hiding unreadable character config {full_path}: it "
-                        "may restrict access with allowed_users"
-                    )
-                    continue
-                name = relative_path
-            else:
-                if is_allowed is not None:
-                    character_config = (
-                        config.get("character_config")
-                        if isinstance(config, dict)
-                        else None
-                    )
-                    if not is_allowed(
-                        character_config if isinstance(character_config, dict) else {}
-                    ):
-                        logger.debug(f"Hiding character config {full_path}")
-                        continue
-
-            entry: dict[str, Any] = {"filename": relative_path, "name": name}
-            if default_character and relative_path == default_character:
-                entry["is_default"] = True
-            config_files.append(entry)
+            entry = _read_alt_config_entry(
+                full_path, relative_path, is_allowed, default_character
+            )
+            if entry is not None:
+                config_files.append(entry)
 
     if default_character:
         config_files = sorted(config_files, key=lambda item: item["filename"])

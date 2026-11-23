@@ -218,28 +218,45 @@ class CharacterAssetAccess:
         )
         add({**keys, "allowed_users": _DENY_ALL}, False)
 
+    @staticmethod
+    def _character_asset_keys(
+        character: dict, model_folders: dict[str, str]
+    ) -> list[tuple[str, str]]:
+        keys: list[tuple[str, str]] = []
+        folder = model_folders.get(character.get("live2d_model_name"))
+        if folder:
+            keys.append((LIVE2D_MOUNT, folder.casefold()))
+        avatar = character.get("avatar")
+        if isinstance(avatar, str):
+            normalized = _normalize_key(avatar)
+            if normalized:
+                keys.append((AVATAR_MOUNT, normalized.casefold()))
+        return keys
+
+    @staticmethod
+    def _record_character_rule(
+        rules: dict[tuple[str, str], Any],
+        character: dict,
+        public: bool,
+        model_folders: dict[str, str],
+    ) -> None:
+        allowed = character.get("allowed_users")
+        if not public:
+            scope = parse_allowed_users(allowed)
+            public = isinstance(scope, tuple) and not scope
+        for key in CharacterAssetAccess._character_asset_keys(character, model_folders):
+            current = rules.get(key)
+            if public or current is _PUBLIC:
+                rules[key] = _PUBLIC
+            else:
+                rules.setdefault(key, []).append(allowed)
+
     def _build_rules(self, presets: list[str]) -> dict[tuple[str, str], Any]:
         model_folders = self._load_model_folders()
         rules: dict[tuple[str, str], Any] = {}
 
         def add(character: dict, public: bool) -> None:
-            allowed = character.get("allowed_users")
-            if not public:
-                scope = parse_allowed_users(allowed)
-                public = isinstance(scope, tuple) and not scope
-            keys = []
-            folder = model_folders.get(character.get("live2d_model_name"))
-            if folder:
-                keys.append((LIVE2D_MOUNT, folder.casefold()))
-            avatar = character.get("avatar")
-            if isinstance(avatar, str) and _normalize_key(avatar):
-                keys.append((AVATAR_MOUNT, _normalize_key(avatar).casefold()))
-            for key in keys:
-                current = rules.get(key)
-                if public or current is _PUBLIC:
-                    rules[key] = _PUBLIC
-                else:
-                    rules.setdefault(key, []).append(allowed)
+            self._record_character_rule(rules, character, public, model_folders)
 
         for path, public in [(self.default_config_path, True)] + [
             (preset, False) for preset in presets

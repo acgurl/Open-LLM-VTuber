@@ -60,6 +60,7 @@ target-version = "py310"
 [tool.ruff.lint]
 extend-select = [
     "B",      # flake8-bugbear: likely bugs
+    "C901",   # mccabe: keep functions easy to follow
     "UP",     # pyupgrade: modern syntax for the py310 target
     "SIM",    # flake8-simplify
     "PIE",    # flake8-pie

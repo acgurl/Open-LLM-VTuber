@@ -407,28 +407,54 @@ class _WebToolRoutes:
             }
         )
 
+    async def _resolve_upload_client_uid(
+        self, request: Request, user_id: str
+    ) -> tuple[str | None, Response | None]:
+        # FastAPI treats an empty optional Form string as omitted. Inspect the
+        # parsed fields so empty, duplicate, and non-text IDs fail closed too.
+        client_uids = (await request.form()).getlist("client_uid")
+        if not client_uids:
+            return None, None
+        candidate = client_uids[0]
+        ws_handler = self.ws_handler
+        if (
+            len(client_uids) != 1
+            or not isinstance(candidate, str)
+            or not candidate
+            or ws_handler is None
+            or not ws_handler.has_client(candidate, user_id)
+        ):
+            return None, _json_error(404, "Unknown client")
+        return candidate, None
+
+    async def _transcribe_with_context(
+        self, client_uid: str | None, user_id: str, audio_array
+    ) -> tuple[str | None, Response | None]:
+        async with self.asr_semaphore:
+            context = self.default_context_cache
+            ws_handler = self.ws_handler
+            if client_uid is not None and ws_handler is not None:
+                context = await ws_handler.resolve_asr_context(client_uid, user_id)
+                if context is None:
+                    return None, _json_error(404, "Unknown client")
+            engine = context.asr_engine
+            if engine is None:
+                return None, _json_error(
+                    500, "Internal server error during transcription"
+                )
+            return await engine.async_transcribe_np(audio_array), None
+
     async def transcribe_audio(self, request: Request, file: UploadFile = File(...)):
         """Transcribe using a live session's ASR, or the standalone default."""
         user_id = request_user_id(request, self.auth, self.default_context_cache)
         if user_id is None:
             return _json_error(401, "Authentication required")
 
-        # FastAPI treats an empty optional Form string as omitted. Inspect the
-        # parsed fields so empty, duplicate, and non-text IDs fail closed too.
-        client_uids = (await request.form()).getlist("client_uid")
-        client_uid = None
-        ws_handler = self.ws_handler
-        if client_uids:
-            candidate = client_uids[0]
-            if (
-                len(client_uids) != 1
-                or not isinstance(candidate, str)
-                or not candidate
-                or ws_handler is None
-                or not ws_handler.has_client(candidate, user_id)
-            ):
-                return _json_error(404, "Unknown client")
-            client_uid = candidate
+        client_uid, error_response = await self._resolve_upload_client_uid(
+            request, user_id
+        )
+        if error_response is not None:
+            return error_response
 
         try:
             contents = await file.read(MAX_ASR_UPLOAD_BYTES + 1)
@@ -448,18 +474,11 @@ class _WebToolRoutes:
             if self.asr_semaphore.locked():
                 return _json_error(429, "Too many concurrent transcription requests")
 
-            async with self.asr_semaphore:
-                context = self.default_context_cache
-                if client_uid is not None and ws_handler is not None:
-                    context = await ws_handler.resolve_asr_context(client_uid, user_id)
-                    if context is None:
-                        return _json_error(404, "Unknown client")
-                engine = context.asr_engine
-                if engine is None:
-                    return _json_error(
-                        500, "Internal server error during transcription"
-                    )
-                text = await engine.async_transcribe_np(audio_array)
+            text, error_response = await self._transcribe_with_context(
+                client_uid, user_id, audio_array
+            )
+            if error_response is not None:
+                return error_response
             logger.info(f"Transcription result: {text}")
             return {"text": text}
 

@@ -71,6 +71,33 @@ def _fallback_timestamp(source: Path) -> str:
     return datetime.fromtimestamp(source.stat().st_mtime).isoformat(timespec="seconds")
 
 
+def _parse_legacy_message(item: dict, fallback: str) -> HistoryMessage | None:
+    role = item.get("role")
+    if role not in {"human", "ai", "system"}:
+        logger.warning(f"Skipping legacy message with invalid role: {role!r}")
+        return None
+
+    content = item.get("content")
+    if not isinstance(content, str):
+        logger.warning("Skipping legacy message with non-string content")
+        return None
+
+    timestamp = item.get("timestamp")
+    if not isinstance(timestamp, str) or not timestamp:
+        timestamp = fallback
+
+    message: HistoryMessage = {
+        "role": role,
+        "timestamp": timestamp,
+        "content": content,
+    }
+    if isinstance(item.get("name"), str):
+        message["name"] = item["name"]
+    if isinstance(item.get("avatar"), str):
+        message["avatar"] = item["avatar"]
+    return message
+
+
 def _read_legacy_file(
     source: Path,
 ) -> tuple[dict, list[HistoryMessage], str | None]:
@@ -86,9 +113,7 @@ def _read_legacy_file(
     for item in data:
         if not isinstance(item, dict):
             continue
-
-        role = item.get("role")
-        if role == "metadata":
+        if item.get("role") == "metadata":
             metadata.update(
                 {
                     key: value
@@ -99,30 +124,9 @@ def _read_legacy_file(
             if isinstance(item.get("timestamp"), str):
                 metadata_timestamp = item["timestamp"]
             continue
-
-        if role not in {"human", "ai", "system"}:
-            logger.warning(f"Skipping legacy message with invalid role: {role!r}")
-            continue
-
-        content = item.get("content")
-        if not isinstance(content, str):
-            logger.warning("Skipping legacy message with non-string content")
-            continue
-
-        timestamp = item.get("timestamp")
-        if not isinstance(timestamp, str) or not timestamp:
-            timestamp = fallback
-
-        message: HistoryMessage = {
-            "role": role,
-            "timestamp": timestamp,
-            "content": content,
-        }
-        if isinstance(item.get("name"), str):
-            message["name"] = item["name"]
-        if isinstance(item.get("avatar"), str):
-            message["avatar"] = item["avatar"]
-        messages.append(message)
+        message = _parse_legacy_message(item, fallback)
+        if message is not None:
+            messages.append(message)
 
     return metadata, messages, metadata_timestamp
 
@@ -142,6 +146,66 @@ def _move_to_backup(
             f"{destination.stem}_{uuid.uuid4().hex[:8]}{destination.suffix}"
         )
     shutil.move(str(source), str(destination))
+
+
+async def _import_legacy_file(
+    repository: HistoryRepository,
+    source: Path,
+    *,
+    user_id: str,
+    conf_uid: str,
+    root: Path,
+    backup_root: Path,
+    result: LegacyImportResult,
+) -> None:
+    if source.is_symlink() or not source.is_file():
+        logger.warning(f"Skipping unsafe legacy history path: {source}")
+        result.failed += 1
+        return
+
+    history_uid = source.stem
+    try:
+        validate_key(conf_uid, "conf_uid")
+        validate_key(history_uid, "history_uid")
+        # Validate the path is still contained in the legacy directory.
+        _get_safe_history_path(conf_uid, history_uid, str(root))
+        metadata, messages, metadata_timestamp = _read_legacy_file(source)
+    except Exception as exc:
+        logger.error(f"Failed to read legacy history {source}: {exc}")
+        result.failed += 1
+        return
+
+    try:
+        if messages:
+            imported = await repository.import_history(
+                user_id=user_id,
+                conf_uid=conf_uid,
+                history_uid=history_uid,
+                messages=messages,
+                metadata=metadata,
+                created_at=metadata_timestamp or messages[0]["timestamp"],
+                updated_at=messages[-1]["timestamp"],
+                legacy_path=str(source),
+            )
+            if imported:
+                result.imported += 1
+            else:
+                logger.warning(
+                    f"Legacy history already exists, skipping import: {source}"
+                )
+                result.skipped += 1
+        else:
+            result.skipped += 1
+
+        _move_to_backup(
+            source,
+            conf_uid=conf_uid,
+            history_uid=history_uid,
+            backup_root=backup_root,
+        )
+    except Exception as exc:
+        logger.error(f"Failed to import legacy history {source}: {exc}")
+        result.failed += 1
 
 
 async def import_legacy_histories(
@@ -176,54 +240,15 @@ async def import_legacy_histories(
             continue
 
         for source in sorted(conf_dir.glob("*.json")):
-            if source.is_symlink() or not source.is_file():
-                logger.warning(f"Skipping unsafe legacy history path: {source}")
-                result.failed += 1
-                continue
-
-            history_uid = source.stem
-            try:
-                validate_key(conf_uid, "conf_uid")
-                validate_key(history_uid, "history_uid")
-                # Validate the path is still contained in the legacy directory.
-                _get_safe_history_path(conf_uid, history_uid, str(root))
-                metadata, messages, metadata_timestamp = _read_legacy_file(source)
-            except Exception as exc:
-                logger.error(f"Failed to read legacy history {source}: {exc}")
-                result.failed += 1
-                continue
-
-            try:
-                if messages:
-                    imported = await repository.import_history(
-                        user_id=user_id,
-                        conf_uid=conf_uid,
-                        history_uid=history_uid,
-                        messages=messages,
-                        metadata=metadata,
-                        created_at=metadata_timestamp or messages[0]["timestamp"],
-                        updated_at=messages[-1]["timestamp"],
-                        legacy_path=str(source),
-                    )
-                    if imported:
-                        result.imported += 1
-                    else:
-                        logger.warning(
-                            f"Legacy history already exists, skipping import: {source}"
-                        )
-                        result.skipped += 1
-                else:
-                    result.skipped += 1
-
-                _move_to_backup(
-                    source,
-                    conf_uid=conf_uid,
-                    history_uid=history_uid,
-                    backup_root=backup_root,
-                )
-            except Exception as exc:
-                logger.error(f"Failed to import legacy history {source}: {exc}")
-                result.failed += 1
+            await _import_legacy_file(
+                repository,
+                source,
+                user_id=user_id,
+                conf_uid=conf_uid,
+                root=root,
+                backup_root=backup_root,
+                result=result,
+            )
 
     logger.info(
         "Legacy history import complete: "

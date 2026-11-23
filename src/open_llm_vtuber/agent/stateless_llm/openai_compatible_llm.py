@@ -185,6 +185,54 @@ class OpenAICompatibleLLM(StatelessLLMInterface):
             if getattr(function, "arguments", None):
                 entry["function"]["arguments"] += function.arguments
 
+    def _process_chunk(
+        self,
+        chunk: Any,
+        accumulated: dict[int, dict[str, Any]],
+        reasoning: list[str],
+        think: ThinkMarkers,
+    ) -> list[str]:
+        # Some servers (e.g. OpenWebUI) send chunks without choices.
+        if not chunk.choices:
+            return []
+        outputs: list[str] = []
+        delta = chunk.choices[0].delta
+        delta_tool_calls = getattr(delta, "tool_calls", None)
+        if delta_tool_calls:
+            self._merge_tool_call_deltas(accumulated, delta_tool_calls)
+        # DeepSeek/Qwen send ``reasoning_content``; vLLM and some gateways
+        # ``reasoning``.
+        thought = getattr(delta, "reasoning_content", None) or getattr(
+            delta, "reasoning", None
+        )
+        if isinstance(thought, str) and thought:
+            reasoning.append(thought)
+            outputs.extend(think.thought(thought))
+        content = getattr(delta, "content", None)
+        if content or delta_tool_calls:
+            outputs.extend(think.close())
+        if content:
+            outputs.append(content)
+        return outputs
+
+    def _finalize_tool_calls(
+        self,
+        accumulated: dict[int, dict[str, Any]],
+        reasoning: list[str],
+    ) -> list[ToolCallObject] | None:
+        if not accumulated:
+            return None
+        calls = [
+            ToolCallObject.from_dict(accumulated[index])
+            for index in sorted(accumulated)
+        ]
+        if reasoning and calls[0].id:
+            self._reasoning[calls[0].id] = "".join(reasoning)
+            while len(self._reasoning) > _MAX_KEPT_REASONING:
+                self._reasoning.popitem(last=False)
+        logger.info(f"Tool calls requested: {[c.function.name for c in calls]}")
+        return calls
+
     async def _stream_chunks(
         self, stream: AsyncIterator[Any]
     ) -> AsyncIterator[str | list[ToolCallObject]]:
@@ -193,42 +241,14 @@ class OpenAICompatibleLLM(StatelessLLMInterface):
         reasoning: list[str] = []
         think = ThinkMarkers()
         async for chunk in stream:
-            # Some servers (e.g. OpenWebUI) send chunks without choices.
-            if not chunk.choices:
-                continue
-            delta = chunk.choices[0].delta
-            delta_tool_calls = getattr(delta, "tool_calls", None)
-            if delta_tool_calls:
-                self._merge_tool_call_deltas(accumulated, delta_tool_calls)
-            # DeepSeek/Qwen send ``reasoning_content``; vLLM and some gateways
-            # ``reasoning``.
-            thought = getattr(delta, "reasoning_content", None) or getattr(
-                delta, "reasoning", None
-            )
-            if isinstance(thought, str) and thought:
-                reasoning.append(thought)
-                for item in think.thought(thought):
-                    yield item
-            content = getattr(delta, "content", None)
-            if content or delta_tool_calls:
-                for item in think.close():
-                    yield item
-            if content:
-                yield content
+            for item in self._process_chunk(chunk, accumulated, reasoning, think):
+                yield item
 
         for item in think.close():
             yield item
 
-        if accumulated:
-            calls = [
-                ToolCallObject.from_dict(accumulated[index])
-                for index in sorted(accumulated)
-            ]
-            if reasoning and calls[0].id:
-                self._reasoning[calls[0].id] = "".join(reasoning)
-                while len(self._reasoning) > _MAX_KEPT_REASONING:
-                    self._reasoning.popitem(last=False)
-            logger.info(f"Tool calls requested: {[c.function.name for c in calls]}")
+        calls = self._finalize_tool_calls(accumulated, reasoning)
+        if calls:
             yield calls
 
     async def chat_completion(

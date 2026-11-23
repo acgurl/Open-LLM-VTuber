@@ -136,62 +136,74 @@ class OpenAIResponsesLLM(StatelessLLMInterface):
         )
         logger.info(f"Initialized OpenAIResponsesLLM: {self.base_url}, {self.model}")
 
+    @staticmethod
+    def _build_function_call(item: Any, index: int) -> ToolCallObject:
+        return ToolCallObject.from_dict(
+            {
+                "id": item.call_id,
+                "type": "function",
+                "index": index,
+                "function": {
+                    "name": item.name,
+                    "arguments": item.arguments or "{}",
+                },
+            }
+        )
+
+    def _handle_terminal_event(self, kind: str, event: Any) -> None:
+        if kind == "response.refusal.done":
+            logger.warning(f"{self.model} refused the request")
+            raise generation_error("The model declined to answer.")
+        if kind == "response.failed":
+            error = getattr(event.response, "error", None)
+            logger.error(f"Responses API ({self.model}): request failed: {error}")
+            raise generation_error()
+        if kind == "error":
+            logger.error(f"Responses API ({self.model}): {event.code}: {event.message}")
+            raise generation_error()
+        if kind == "response.incomplete":
+            details = getattr(event.response, "incomplete_details", None)
+            logger.warning(f"Responses API ({self.model}): incomplete: {details}")
+
+    def _handle_stream_event(
+        self,
+        event: Any,
+        think: ThinkMarkers,
+        calls: list[ToolCallObject],
+    ) -> list[str]:
+        kind = event.type
+        if kind in (
+            "response.reasoning_summary_text.delta",
+            "response.reasoning_text.delta",
+        ):
+            return list(think.thought(event.delta or ""))
+        if kind == "response.reasoning_summary_part.added":
+            # Summaries come in parts; keep them apart as paragraphs.
+            if think.open and getattr(event, "summary_index", 0):
+                return list(think.thought("\n\n"))
+            return []
+        if kind == "response.output_text.delta":
+            if not event.delta:
+                return []
+            return [*think.close(), event.delta]
+        if kind == "response.output_item.done":
+            item = event.item
+            if getattr(item, "type", None) != "function_call":
+                return []
+            closed = list(think.close())
+            calls.append(self._build_function_call(item, len(calls)))
+            return closed
+        self._handle_terminal_event(kind, event)
+        return []
+
     async def _stream_events(
         self, stream: AsyncIterator[Any]
     ) -> AsyncIterator[str | list[ToolCallObject]]:
         calls: list[ToolCallObject] = []
         think = ThinkMarkers()
         async for event in stream:
-            kind = event.type
-            if kind in (
-                "response.reasoning_summary_text.delta",
-                "response.reasoning_text.delta",
-            ):
-                for item in think.thought(event.delta or ""):
-                    yield item
-            elif kind == "response.reasoning_summary_part.added":
-                # Summaries come in parts; keep them apart as paragraphs.
-                if think.open and getattr(event, "summary_index", 0):
-                    for item in think.thought("\n\n"):
-                        yield item
-            elif kind == "response.output_text.delta":
-                if event.delta:
-                    for item in think.close():
-                        yield item
-                    yield event.delta
-            elif kind == "response.output_item.done":
-                item = event.item
-                if getattr(item, "type", None) == "function_call":
-                    for closing in think.close():
-                        yield closing
-                    calls.append(
-                        ToolCallObject.from_dict(
-                            {
-                                "id": item.call_id,
-                                "type": "function",
-                                "index": len(calls),
-                                "function": {
-                                    "name": item.name,
-                                    "arguments": item.arguments or "{}",
-                                },
-                            }
-                        )
-                    )
-            elif kind == "response.refusal.done":
-                logger.warning(f"{self.model} refused the request")
-                raise generation_error("The model declined to answer.")
-            elif kind == "response.failed":
-                error = getattr(event.response, "error", None)
-                logger.error(f"Responses API ({self.model}): request failed: {error}")
-                raise generation_error()
-            elif kind == "error":
-                logger.error(
-                    f"Responses API ({self.model}): {event.code}: {event.message}"
-                )
-                raise generation_error()
-            elif kind == "response.incomplete":
-                details = getattr(event.response, "incomplete_details", None)
-                logger.warning(f"Responses API ({self.model}): incomplete: {details}")
+            for item in self._handle_stream_event(event, think, calls):
+                yield item
 
         for item in think.close():
             yield item

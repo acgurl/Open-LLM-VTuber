@@ -191,6 +191,56 @@ def _text(value: Any, limit: int) -> str:
     return value.strip()[:limit] if isinstance(value, str) else ""
 
 
+def _parse_thinking_level(
+    item: Any, provider: str, seen: set[str], where: str
+) -> ThinkingLevel | None:
+    spec = {"id": item} if isinstance(item, str) else item
+    # YAML 1.1 reads a bare ``off`` as False.
+    if isinstance(spec, dict) and spec.get("id") is False:
+        spec = {**spec, "id": THINKING_OFF}
+    if item is False:
+        spec = {"id": THINKING_OFF}
+    level_id = spec.get("id") if isinstance(spec, dict) else None
+    if not isinstance(level_id, str) or not _LEVEL_ID.fullmatch(level_id):
+        logger.error(f"{where}: thinking level {level_id!r} is invalid; ignored")
+        return None
+    if level_id in seen:
+        logger.error(f"{where}: duplicate thinking level '{level_id}'; ignored")
+        return None
+    params = spec.get("params")
+    if params is None:
+        params = _effort_shorthand(provider, level_id)
+    if not isinstance(params, dict):
+        logger.error(
+            f"{where}: thinking level '{level_id}' needs 'params' (a mapping "
+            "of request fields); ignored"
+        )
+        return None
+    return ThinkingLevel(
+        id=level_id,
+        name=_text(spec.get("name"), _MAX_LEVEL_NAME_CHARS),
+        params=params,
+    )
+
+
+def _resolve_thinking_default(
+    raw_default: Any, levels: list[ThinkingLevel], where: str
+) -> str:
+    default = THINKING_OFF if raw_default is False else raw_default
+    if any(level.id == default for level in levels):
+        return default
+    # Without a (valid) default nobody thinks until they ask to: the
+    # "off" level when there is one, else the first level.
+    fallback = next(
+        (level.id for level in levels if level.id in _OFF_IDS), levels[0].id
+    )
+    if default is not None:
+        logger.warning(
+            f"{where}: thinking default {default!r} is not a level; using '{fallback}'"
+        )
+    return fallback
+
+
 def _parse_thinking(
     raw: Any, provider: str, where: str
 ) -> tuple[tuple[ThinkingLevel, ...], str | None]:
@@ -202,55 +252,17 @@ def _parse_thinking(
         return (), None
 
     levels: list[ThinkingLevel] = []
+    seen: set[str] = set()
     for item in raw["levels"][:_MAX_LEVELS]:
-        spec = {"id": item} if isinstance(item, str) else item
-        # YAML 1.1 reads a bare ``off`` as False.
-        if isinstance(spec, dict) and spec.get("id") is False:
-            spec = {**spec, "id": THINKING_OFF}
-        if item is False:
-            spec = {"id": THINKING_OFF}
-        level_id = spec.get("id") if isinstance(spec, dict) else None
-        if not isinstance(level_id, str) or not _LEVEL_ID.fullmatch(level_id):
-            logger.error(f"{where}: thinking level {level_id!r} is invalid; ignored")
+        level = _parse_thinking_level(item, provider, seen, where)
+        if level is None:
             return (), None
-        if any(level.id == level_id for level in levels):
-            logger.error(f"{where}: duplicate thinking level '{level_id}'; ignored")
-            return (), None
-        params = spec.get("params")
-        if params is None:
-            params = _effort_shorthand(provider, level_id)
-        if not isinstance(params, dict):
-            logger.error(
-                f"{where}: thinking level '{level_id}' needs 'params' (a mapping "
-                "of request fields); ignored"
-            )
-            return (), None
-        levels.append(
-            ThinkingLevel(
-                id=level_id,
-                name=_text(spec.get("name"), _MAX_LEVEL_NAME_CHARS),
-                params=params,
-            )
-        )
+        seen.add(level.id)
+        levels.append(level)
     if not levels:
         return (), None
 
-    default = raw.get("default")
-    if default is False:
-        default = THINKING_OFF
-    if not any(level.id == default for level in levels):
-        # Without a (valid) default nobody thinks until they ask to: the
-        # "off" level when there is one, else the first level.
-        fallback = next(
-            (level.id for level in levels if level.id in _OFF_IDS), levels[0].id
-        )
-        if default is not None:
-            logger.warning(
-                f"{where}: thinking default {default!r} is not a level; "
-                f"using '{fallback}'"
-            )
-        default = fallback
-    return tuple(levels), default
+    return tuple(levels), _resolve_thinking_default(raw.get("default"), levels, where)
 
 
 def _parse_entry(raw: Any, source: str) -> LLMModelEntry | None:
@@ -373,11 +385,7 @@ class _CatalogFile(Generic[_Entry]):
         self.signature: tuple[int, int, int] | None = None
         self.entries: dict[str, _Entry] = {}
 
-    def refresh(self) -> None:
-        now = time.monotonic()
-        if now - self.checked_at < self.interval:
-            return
-        self.checked_at = now
+    def _read_signature(self) -> tuple[int, int, int] | None:
         try:
             stat = os.stat(self.path)
         except FileNotFoundError:
@@ -385,16 +393,15 @@ class _CatalogFile(Generic[_Entry]):
                 logger.warning(f"{self.path} is gone; clearing {self.section}")
             self.entries = {}
             self.signature = None
-            return
+            return None
         except OSError as error:
             logger.error(
                 f"{self.path} cannot be read ({type(error).__name__}); keeping {self.section}"
             )
-            return
-        signature = (stat.st_mtime_ns, stat.st_size, stat.st_ino)
-        if signature == self.signature:
-            return
-        self.signature = signature
+            return None
+        return (stat.st_mtime_ns, stat.st_size, stat.st_ino)
+
+    def _load_entries(self) -> None:
         try:
             data = read_yaml(self.path, log_parse_error=False)
             if not isinstance(data, dict) or not isinstance(
@@ -414,6 +421,17 @@ class _CatalogFile(Generic[_Entry]):
             logger.error(f"{self.path}: {error}; keeping {self.section}")
         else:
             logger.info(f"Loaded {len(self.entries)} model(s) from {self.path}")
+
+    def refresh(self) -> None:
+        now = time.monotonic()
+        if now - self.checked_at < self.interval:
+            return
+        self.checked_at = now
+        signature = self._read_signature()
+        if signature is None or signature == self.signature:
+            return
+        self.signature = signature
+        self._load_entries()
 
 
 class LLMModelCatalog:

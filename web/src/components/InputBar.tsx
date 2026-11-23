@@ -1,59 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { usePendingImages } from "../hooks/usePendingImages";
+import { usePresence } from "../hooks/usePresence";
+import { usePttGesture } from "../hooks/usePttGesture";
+import { LIMITS } from "../protocol/types";
+import { interrupt, sendText } from "../services/actions";
+import { camera } from "../services/camera";
 import { useConnection } from "../stores/connection";
 import { useGroup } from "../stores/group";
 import { toast } from "../stores/toast";
-import { sendText, interrupt } from "../services/actions";
-import { audioPlayer } from "../services/audioPlayer";
-import { ptt, transcribeWav } from "../services/ptt";
-import { camera } from "../services/camera";
-import { fileToBase64 } from "../utils/base64";
-import { captureCamera, captureScreen } from "../utils/capture";
-import { LIMITS, type ImagePayload, type ImageSource } from "../protocol/types";
-import { usePresence } from "../hooks/usePresence";
-import {
-  AddIcon,
-  CamIcon,
-  CloseIcon,
-  ImageIcon,
-  ScreenShareIcon,
-  StopIcon,
-  SendIcon,
-} from "./icons";
-import { ThinkingControls, useThinking } from "./ThinkingControls";
-
-interface PendingImage {
-  id: number;
-  payload: ImagePayload;
-  preview: string;
-}
-
-type PttPhase = "idle" | "arming" | "recording" | "transcribing";
-
-const HOLD_DELAY_MS = 140;
-const CANCEL_SLIDE_PX = 48;
-const WAVE_BAR_COUNT = 14;
-const INITIAL_WAVE_BARS = Array<number>(WAVE_BAR_COUNT).fill(0.14);
-
-let imageSeq = 0;
-
-function formatDuration(totalSeconds: number): string {
-  const mins = Math.floor(totalSeconds / 60);
-  const secs = totalSeconds % 60;
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
+import { AddIcon, CloseIcon, SendIcon, StopIcon } from "./icons";
+import { MediaSourceMenu } from "./MediaSourceMenu";
+import { PttBar } from "./PttBar";
+import { useThinking } from "./ThinkingControls";
 
 export function InputBar() {
   const { t } = useTranslation();
   const busy = useConnection((s) => s.busy);
   const inGroup = useGroup((s) => s.members.length > 1);
   const [text, setText] = useState("");
-  const [images, setImages] = useState<PendingImage[]>([]);
   const [mediaMenuOpen, setMediaMenuOpen] = useState(false);
-  const [pttPhase, setPttPhase] = useState<PttPhase>("idle");
-  const [pttCancelIntent, setPttCancelIntent] = useState(false);
-  const [pttSeconds, setPttSeconds] = useState(0);
-  const [pttBars, setPttBars] = useState<number[]>(INITIAL_WAVE_BARS);
 
   const mediaMenuPresence = usePresence(mediaMenuOpen, 150);
   const thinking = useThinking();
@@ -63,38 +29,66 @@ export function InputBar() {
   const rowRef = useRef<HTMLDivElement>(null);
   const anchorRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  // 已占用的附图名额：多张图并发编码时 images 状态还没更新，靠它同步计数才能守住上限
-  const imageSlots = useRef(0);
 
-  // 最新值同步到 ref，供异步转写结束后的提交闭包与原生 touch 监听读取，避免拿到过期状态
-  const imagesRef = useRef<PendingImage[]>([]);
-  imagesRef.current = images;
-  const textStateRef = useRef("");
-  textStateRef.current = text;
-  const pttPhaseRef = useRef<PttPhase>("idle");
-  pttPhaseRef.current = pttPhase;
+  const {
+    images,
+    imagesRef,
+    addImage,
+    addUploadedFiles,
+    removeImage,
+    grabAndAdd,
+    clearImages,
+  } = usePendingImages();
+
+  const hasTextRef = useRef(false);
+  hasTextRef.current = text.trim().length > 0;
   const mediaMenuOpenRef = useRef(false);
   mediaMenuOpenRef.current = mediaMenuOpen;
   const sendDisabledRef = useRef(false);
 
-  const gestureRef = useRef({
-    mode: null as "mouse" | "touch" | null,
-    pointerId: null as number | null,
-    startX: 0,
-    startY: 0,
-    movedOut: false,
-    holdTimer: null as number | null,
-    holdTriggered: false,
-    cancelIntent: false,
-    submitting: false,
-  });
-  const detachWinRef = useRef<(() => void) | null>(null);
-  const suppressNextClickRef = useRef(false);
-  const pttStartAtRef = useRef(0);
-  const lastWaveAtRef = useRef(0);
-  const asrAbortRef = useRef<AbortController | null>(null);
+  const sendMessage = async (rawText: string) => {
+    const value = rawText.trim();
+    const currentImages = imagesRef.current;
+    if (!value && currentImages.length === 0) return false;
+    if (value.length > LIMITS.textInputChars) {
+      toast(t("input.tooLong"), "error");
+      return false;
+    }
+    let payload = currentImages.map((i) => i.payload);
+    // 实况开着且没手动附图时，文字轮次也带一帧（对齐老前端）
+    if (payload.length === 0 && camera.isLive) {
+      const frame = await camera.grabImage().catch(() => null);
+      if (frame) payload = [frame];
+    }
+    sendText(value, payload);
+    clearImages();
+    setText("");
+    return true;
+  };
 
-  const pttHolding = pttPhase === "arming" || pttPhase === "recording";
+  const {
+    pttPhase,
+    pttHolding,
+    pttCancelIntent,
+    pttSeconds,
+    pttBars,
+    rowHandlers,
+  } = usePttGesture({
+    rowRef,
+    textRef,
+    hasTextRef,
+    sendDisabledRef,
+    onBeforeStartGesture: () => {
+      if (mediaMenuOpenRef.current) setMediaMenuOpen(false);
+    },
+    onTranscriptReady: async (transcript) => {
+      await sendMessage(transcript);
+    },
+    onTranscriptTooLong: (transcript) => {
+      setText(transcript);
+      toast(t("input.tooLong"), "error");
+    },
+  });
 
   // 窄屏聊天区贴输入框上沿，输入条自身会长高（换行、附图条），高度得上报给 CSS
   useEffect(() => {
@@ -120,139 +114,6 @@ export function InputBar() {
     el.style.height = `${Math.min(el.scrollHeight, 132)}px`;
   }, [text, pttHolding]);
 
-  // 录音计时器
-  useEffect(() => {
-    if (pttPhase !== "recording") return;
-    const id = window.setInterval(() => {
-      setPttSeconds(Math.floor((Date.now() - pttStartAtRef.current) / 1000));
-    }, 250);
-    return () => window.clearInterval(id);
-  }, [pttPhase]);
-
-  const releaseCaptureIfHeld = (pid: number | null) => {
-    if (pid === null) return;
-    try {
-      if (rowRef.current?.hasPointerCapture(pid)) {
-        rowRef.current.releasePointerCapture(pid);
-      }
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const resetGestureState = () => {
-    const g = gestureRef.current;
-    if (g.holdTimer !== null) {
-      window.clearTimeout(g.holdTimer);
-      g.holdTimer = null;
-    }
-    detachWinRef.current?.();
-    const pid = g.mode === "mouse" ? g.pointerId : null;
-    g.mode = null;
-    g.pointerId = null;
-    g.movedOut = false;
-    g.holdTriggered = false;
-    g.cancelIntent = false;
-    releaseCaptureIfHeld(pid);
-  };
-
-  const cancelHoldRecording = () => {
-    resetGestureState();
-    gestureRef.current.submitting = false;
-    ptt.cancel();
-    setPttPhase("idle");
-    setPttCancelIntent(false);
-    setPttSeconds(0);
-    setPttBars(INITIAL_WAVE_BARS);
-  };
-
-  // 按住录音期间：按 Esc、窗口失焦时安全取消，并屏蔽长按菜单/选词事件
-  useEffect(() => {
-    if (!pttHolding) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        cancelHoldRecording();
-      }
-    };
-    const onBlur = () => cancelHoldRecording();
-    const onBlock = (e: Event) => e.preventDefault();
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("blur", onBlur);
-    window.addEventListener("contextmenu", onBlock);
-    window.addEventListener("selectstart", onBlock);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("blur", onBlur);
-      window.removeEventListener("contextmenu", onBlock);
-      window.removeEventListener("selectstart", onBlock);
-    };
-  }, [pttHolding]);
-
-  // 组件卸载清理
-  useEffect(() => {
-    return () => {
-      if (gestureRef.current.holdTimer !== null) {
-        window.clearTimeout(gestureRef.current.holdTimer);
-      }
-      detachWinRef.current?.();
-      ptt.cancel();
-      asrAbortRef.current?.abort();
-    };
-  }, []);
-
-  const grabAndAdd = async (source: "camera" | "screen") => {
-    setMediaMenuOpen(false);
-    try {
-      let blob: Blob | null;
-      // 实况窗口开着就直接从常驻流抓帧，免得二次开摄像头
-      if (source === "camera")
-        blob = camera.isLive ? await camera.grabBlob() : await captureCamera();
-      else blob = await captureScreen();
-      if (blob) await addImage(blob, source, "image/jpeg");
-    } catch {
-      toast(t("error.generic"), "error");
-    }
-  };
-
-  const addImage = async (
-    file: File | Blob,
-    source: ImageSource,
-    mime: string,
-  ) => {
-    if (imageSlots.current >= LIMITS.maxImages) {
-      toast(t("input.imageTooMany"), "error");
-      return;
-    }
-    imageSlots.current += 1;
-    const data = await fileToBase64(file).catch(() => null);
-    if (data === null || data.length > LIMITS.maxImageDataChars) {
-      imageSlots.current -= 1;
-      toast(
-        t(data === null ? "error.generic" : "input.imageTooLarge"),
-        "error",
-      );
-      return;
-    }
-    setImages((prev) => [
-      ...prev,
-      {
-        id: ++imageSeq,
-        payload: { source, mime_type: mime, data },
-        preview: URL.createObjectURL(file),
-      },
-    ]);
-  };
-
-  const removeImage = (id: number) => {
-    imageSlots.current = Math.max(0, imageSlots.current - 1);
-    setImages((prev) => {
-      const target = prev.find((img) => img.id === id);
-      if (target) URL.revokeObjectURL(target.preview);
-      return prev.filter((img) => img.id !== id);
-    });
-  };
-
   // 来源菜单：点菜单外或按 Esc 收起
   useEffect(() => {
     if (!mediaMenuOpen) return;
@@ -261,8 +122,9 @@ export function InputBar() {
       if (
         !anchorRef.current?.contains(target) &&
         !menuRef.current?.contains(target)
-      )
+      ) {
         setMediaMenuOpen(false);
+      }
     };
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -278,36 +140,10 @@ export function InputBar() {
     };
   }, [mediaMenuOpen]);
 
-  const sendMessage = async (rawText: string) => {
-    const value = rawText.trim();
-    const currentImages = imagesRef.current;
-    if (!value && currentImages.length === 0) return false;
-    if (value.length > LIMITS.textInputChars) {
-      toast(t("input.tooLong"), "error");
-      return false;
-    }
-    let payload = currentImages.map((i) => i.payload);
-    // 实况开着且没手动附图时，文字轮次也带一帧（对齐老前端）
-    if (payload.length === 0 && camera.isLive) {
-      const frame = await camera.grabImage().catch(() => null);
-      if (frame) payload = [frame];
-    }
-    sendText(value, payload);
-    currentImages.forEach((i) => URL.revokeObjectURL(i.preview));
-    imageSlots.current = 0;
-    setImages([]);
-    setText("");
-    return true;
-  };
-
-  const submit = async () => {
-    await sendMessage(text);
-  };
-
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      void submit();
+      void sendMessage(text);
     }
   };
 
@@ -321,338 +157,6 @@ export function InputBar() {
         }
         return;
       }
-    }
-  };
-
-  const finishHoldRecording = async () => {
-    const g = gestureRef.current;
-    if (g.submitting) return;
-    g.submitting = true;
-    resetGestureState();
-
-    const result = ptt.stopAndEncode();
-    setPttCancelIntent(false);
-    setPttSeconds(0);
-    setPttBars(INITIAL_WAVE_BARS);
-
-    if (result.status === "empty") {
-      g.submitting = false;
-      setPttPhase("idle");
-      return;
-    }
-    if (result.status === "too-short") {
-      g.submitting = false;
-      setPttPhase("idle");
-      toast(t("input.pttTooShort"));
-      return;
-    }
-
-    if (sendDisabledRef.current) {
-      g.submitting = false;
-      setPttPhase("idle");
-      toast(t("error.serverBusy"), "error");
-      return;
-    }
-
-    setPttPhase("transcribing");
-    const controller = new AbortController();
-    asrAbortRef.current = controller;
-
-    try {
-      const transcript = await transcribeWav(result.wav, controller.signal);
-      if (!transcript) {
-        toast(t("input.pttEmpty"));
-        return;
-      }
-      if (transcript.length > LIMITS.textInputChars) {
-        setText(transcript);
-        toast(t("input.tooLong"), "error");
-        return;
-      }
-      await sendMessage(transcript);
-    } catch (err) {
-      if ((err as DOMException | null)?.name === "AbortError") return;
-      toast(err instanceof Error ? err.message : t("error.generic"), "error");
-    } finally {
-      if (asrAbortRef.current === controller) asrAbortRef.current = null;
-      g.submitting = false;
-      setPttPhase("idle");
-    }
-  };
-
-  const handleGestureMove = (clientX: number, clientY: number) => {
-    const g = gestureRef.current;
-    if (g.pointerId === null) return;
-    if (!g.holdTriggered) {
-      // 尚未进入录音前大幅滑动，视为滑动误触而非长按，取消计时
-      if (Math.hypot(clientX - g.startX, clientY - g.startY) > 24) {
-        if (g.holdTimer !== null) {
-          window.clearTimeout(g.holdTimer);
-          g.holdTimer = null;
-        }
-        g.movedOut = true;
-        if (g.mode === "mouse") {
-          detachWinRef.current?.();
-          g.mode = null;
-          g.pointerId = null;
-        }
-      }
-      return;
-    }
-    const wantCancel = clientY - g.startY < -CANCEL_SLIDE_PX;
-    if (wantCancel !== g.cancelIntent) {
-      g.cancelIntent = wantCancel;
-      setPttCancelIntent(wantCancel);
-    }
-  };
-
-  const finishActiveGesture = (
-    mode: "mouse" | "touch",
-    id: number,
-    forceCancel: boolean,
-    focusOnTap = false,
-  ) => {
-    const g = gestureRef.current;
-    if (g.mode !== mode || g.pointerId !== id) return;
-    const wasTriggered = g.holdTriggered;
-    const wasCancelIntent = g.cancelIntent;
-    const wasMovedOut = g.movedOut;
-    resetGestureState();
-
-    if (!wasTriggered) {
-      if (focusOnTap && !forceCancel && !wasMovedOut) {
-        textRef.current?.focus();
-      }
-      return;
-    }
-
-    window.setTimeout(() => {
-      suppressNextClickRef.current = false;
-    }, 0);
-
-    if (forceCancel || wasCancelIntent) {
-      cancelHoldRecording();
-      return;
-    }
-    void finishHoldRecording();
-  };
-
-  const startHoldRecording = async () => {
-    const g = gestureRef.current;
-    if (g.pointerId === null || g.movedOut) return;
-    g.holdTriggered = true;
-    g.holdTimer = null;
-    suppressNextClickRef.current = true;
-
-    // 真正触发长按后再失焦并接管指针，避免影响短按聚焦输入
-    textRef.current?.blur();
-    window.getSelection()?.removeAllRanges();
-    if (g.mode === "mouse") {
-      try {
-        rowRef.current?.setPointerCapture(g.pointerId);
-      } catch {
-        /* ignore */
-      }
-    }
-
-    setPttPhase("arming");
-    setPttCancelIntent(false);
-    setPttSeconds(0);
-    setPttBars(INITIAL_WAVE_BARS);
-
-    // 进入按住说话即打断当前 AI 播报/生成，避免外放回声被录进麦克风
-    if (useConnection.getState().busy || audioPlayer.isActive()) {
-      interrupt();
-    }
-
-    const ok = await ptt.start({
-      onReady: () => {
-        if (
-          gestureRef.current.pointerId === null ||
-          !gestureRef.current.holdTriggered ||
-          gestureRef.current.submitting
-        ) {
-          return;
-        }
-        pttStartAtRef.current = Date.now();
-        setPttPhase("recording");
-        try {
-          navigator.vibrate?.(15);
-        } catch {
-          /* ignore */
-        }
-      },
-      onLevel: (level) => {
-        const now = performance.now();
-        if (now - lastWaveAtRef.current < 55) return;
-        lastWaveAtRef.current = now;
-        const barHeight = Math.max(0.14, level);
-        setPttBars((prev) => [...prev.slice(1), barHeight]);
-      },
-      onAutoStop: () => {
-        void finishHoldRecording();
-      },
-    });
-
-    if (!ok && gestureRef.current.holdTriggered && !gestureRef.current.submitting) {
-      cancelHoldRecording();
-    }
-  };
-
-  const startHoldRef = useRef(startHoldRecording);
-  startHoldRef.current = startHoldRecording;
-  const moveRef = useRef(handleGestureMove);
-  moveRef.current = handleGestureMove;
-  const finishRef = useRef(finishActiveGesture);
-  finishRef.current = finishActiveGesture;
-
-  // 触屏端使用非 passive 的原生 touchstart/touchmove 监听：
-  // 在输入栏无文字时于 touchstart 立即 preventDefault()，彻底阻止 Android/iOS 弹出原生文本/粘贴菜单并打断录音；
-  // 短按 (<180ms) 在 touchend 中同步 focus() 输入框唤起键盘。桌面鼠标完全不触发 touch 事件，保留右键粘贴。
-  useEffect(() => {
-    const row = rowRef.current;
-    if (!row) return;
-
-    const findTouch = (list: TouchList, id: number): Touch | null => {
-      for (let i = 0; i < list.length; i += 1) {
-        if (list[i].identifier === id) return list[i];
-      }
-      return null;
-    };
-
-    const onTouchStart = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      if (pttPhaseRef.current !== "idle") return;
-      if (textStateRef.current.trim().length > 0) return;
-      if ((e.target as Element | null)?.closest("button, .media-anchor")) return;
-
-      // 关键：必须在原生非 passive 的 touchstart 阻止默认行为，否则移动浏览器约 450ms 后会弹出文本菜单并触发 pointercancel
-      e.preventDefault();
-      if (mediaMenuOpenRef.current) setMediaMenuOpen(false);
-
-      const touch = e.changedTouches[0] ?? e.touches[0];
-      if (!touch) return;
-
-      const g = gestureRef.current;
-      resetGestureState();
-      suppressNextClickRef.current = false;
-
-      const tid = touch.identifier;
-      g.mode = "touch";
-      g.pointerId = tid;
-      g.startX = touch.clientX;
-      g.startY = touch.clientY;
-      g.movedOut = false;
-      g.holdTriggered = false;
-      g.cancelIntent = false;
-      g.submitting = false;
-
-      const onTouchMove = (ev: TouchEvent) => {
-        if (gestureRef.current.mode !== "touch" || gestureRef.current.pointerId !== tid) return;
-        const tItem = findTouch(ev.touches, tid) ?? findTouch(ev.changedTouches, tid);
-        if (!tItem) return;
-        ev.preventDefault();
-        moveRef.current(tItem.clientX, tItem.clientY);
-      };
-      const onTouchEnd = (ev: TouchEvent) => {
-        if (gestureRef.current.mode !== "touch" || gestureRef.current.pointerId !== tid) return;
-        const tItem = findTouch(ev.changedTouches, tid);
-        if (!tItem && findTouch(ev.touches, tid)) return;
-        finishRef.current("touch", tid, false, true);
-      };
-      const onTouchCancel = (ev: TouchEvent) => {
-        if (gestureRef.current.mode !== "touch" || gestureRef.current.pointerId !== tid) return;
-        const tItem = findTouch(ev.changedTouches, tid);
-        if (!tItem && findTouch(ev.touches, tid)) return;
-        finishRef.current("touch", tid, true, false);
-      };
-
-      window.addEventListener("touchmove", onTouchMove, { passive: false });
-      window.addEventListener("touchend", onTouchEnd);
-      window.addEventListener("touchcancel", onTouchCancel);
-      detachWinRef.current = () => {
-        window.removeEventListener("touchmove", onTouchMove);
-        window.removeEventListener("touchend", onTouchEnd);
-        window.removeEventListener("touchcancel", onTouchCancel);
-        detachWinRef.current = null;
-      };
-
-      g.holdTimer = window.setTimeout(() => {
-        void startHoldRef.current();
-      }, HOLD_DELAY_MS);
-    };
-
-    row.addEventListener("touchstart", onTouchStart, { passive: false });
-    return () => {
-      row.removeEventListener("touchstart", onTouchStart);
-    };
-  }, []);
-
-  const onRowPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "touch") return;
-    if (e.pointerType === "mouse" && e.button !== 0) return;
-    if (pttPhase !== "idle") return;
-    // 输入栏有文字时保留长按选词/移动光标能力，不抢占为语音
-    if (textStateRef.current.trim().length > 0) return;
-    if ((e.target as Element | null)?.closest("button, .media-anchor")) return;
-    if (mediaMenuOpen) setMediaMenuOpen(false);
-
-    const g = gestureRef.current;
-    resetGestureState();
-    suppressNextClickRef.current = false;
-
-    const pid = e.pointerId;
-    g.mode = "mouse";
-    g.pointerId = pid;
-    g.startX = e.clientX;
-    g.startY = e.clientY;
-    g.movedOut = false;
-    g.holdTriggered = false;
-    g.cancelIntent = false;
-    g.submitting = false;
-
-    const onMove = (ev: PointerEvent) => {
-      if (gestureRef.current.mode !== "mouse" || ev.pointerId !== gestureRef.current.pointerId) return;
-      moveRef.current(ev.clientX, ev.clientY);
-    };
-    const onUp = (ev: PointerEvent) => {
-      if (gestureRef.current.mode !== "mouse" || ev.pointerId !== gestureRef.current.pointerId) return;
-      finishRef.current("mouse", ev.pointerId, false);
-    };
-    const onCancel = (ev: PointerEvent) => {
-      if (gestureRef.current.mode !== "mouse" || ev.pointerId !== gestureRef.current.pointerId) return;
-      finishRef.current("mouse", ev.pointerId, true);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onCancel);
-    detachWinRef.current = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onCancel);
-      detachWinRef.current = null;
-    };
-
-    g.holdTimer = window.setTimeout(() => {
-      void startHoldRef.current();
-    }, HOLD_DELAY_MS);
-  };
-
-  const onRowClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!suppressNextClickRef.current) return;
-    suppressNextClickRef.current = false;
-    e.preventDefault();
-    e.stopPropagation();
-    textRef.current?.blur();
-  };
-
-  const onRowContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (
-      pttHolding ||
-      gestureRef.current.holdTriggered ||
-      gestureRef.current.pointerId !== null
-    ) {
-      e.preventDefault();
     }
   };
 
@@ -675,33 +179,18 @@ export function InputBar() {
     <div className="input-bar" ref={barRef}>
       {/* 菜单挂在输入条外层：输入条自己有 backdrop-filter，嵌在里面的玻璃只能模糊到输入条本身 */}
       {mediaMenuPresence.mounted && (
-        <div
+        <MediaSourceMenu
           ref={menuRef}
-          className={`media-menu composer-menu${mediaMenuPresence.closing ? " closing" : ""}`}
-          role="menu"
-        >
-          <div className="composer-menu-group">
-            <button
-              role="menuitem"
-              onClick={() => {
-                setMediaMenuOpen(false);
-                fileRef.current?.click();
-              }}
-            >
-              <ImageIcon />
-              <span>{t("input.sourceUpload")}</span>
-            </button>
-            <button role="menuitem" onClick={() => void grabAndAdd("camera")}>
-              <CamIcon />
-              <span>{t("input.sourceCamera")}</span>
-            </button>
-            <button role="menuitem" onClick={() => void grabAndAdd("screen")}>
-              <ScreenShareIcon />
-              <span>{t("input.sourceScreen")}</span>
-            </button>
-          </div>
-          <ThinkingControls />
-        </div>
+          closing={mediaMenuPresence.closing}
+          onUpload={() => {
+            setMediaMenuOpen(false);
+            fileRef.current?.click();
+          }}
+          onCapture={(source) => {
+            setMediaMenuOpen(false);
+            void grabAndAdd(source);
+          }}
+        />
       )}
       {images.length > 0 && (
         <div className="image-strip">
@@ -724,22 +213,12 @@ export function InputBar() {
       <div
         ref={rowRef}
         className={`input-row${hasContent ? " filled" : ""}${pttReady ? " ptt-ready" : ""}${pttHolding ? " ptt-holding" : ""}${pttPhase === "arming" ? " ptt-arming" : ""}${pttCancelIntent ? " ptt-cancel" : ""}${isTranscribing ? " ptt-transcribing" : ""}`}
-        onPointerDown={onRowPointerDown}
-        onPointerMove={(e) => {
-          if (
-            gestureRef.current.mode === "mouse" &&
-            e.pointerId === gestureRef.current.pointerId
-          ) {
-            handleGestureMove(e.clientX, e.clientY);
-          }
-        }}
-        onPointerUp={(e) => finishActiveGesture("mouse", e.pointerId, false)}
-        onPointerCancel={(e) => finishActiveGesture("mouse", e.pointerId, true)}
-        onLostPointerCapture={(e) => finishActiveGesture("mouse", e.pointerId, true)}
-        onClickCapture={onRowClickCapture}
-        onContextMenu={onRowContextMenu}
+        {...rowHandlers}
       >
-        <div className={`media-anchor${pttHolding ? " ptt-hidden" : ""}`} ref={anchorRef}>
+        <div
+          className={`media-anchor${pttHolding ? " ptt-hidden" : ""}`}
+          ref={anchorRef}
+        >
           <button
             className={`icon-btn plus-btn${mediaMenuOpen ? " open" : ""}${thinking.on ? " thinking-on" : ""}`}
             title={
@@ -769,12 +248,7 @@ export function InputBar() {
           hidden
           aria-label={t("input.uploadImage")}
           onChange={(e) => {
-            const files = Array.from(e.target.files ?? []);
-            // 超出的部分整批丢弃并只提示一次，不要每张多余的图各弹一条
-            const room = Math.max(0, LIMITS.maxImages - imageSlots.current);
-            if (files.length > room) toast(t("input.imageTooMany"), "error");
-            for (const f of files.slice(0, room))
-              void addImage(f, "upload", f.type || "image/png");
+            addUploadedFiles(Array.from(e.target.files ?? []));
             e.target.value = "";
           }}
         />
@@ -795,38 +269,12 @@ export function InputBar() {
           onPaste={onPaste}
         />
         {pttHolding && (
-          <div className="ptt-bar" aria-live="polite">
-            <div className="ptt-timer">
-              {pttPhase === "arming" ? (
-                <span className="spinner" aria-hidden="true" />
-              ) : (
-                <>
-                  <span className="ptt-dot" aria-hidden="true" />
-                  <span>{formatDuration(pttSeconds)}</span>
-                </>
-              )}
-            </div>
-            <div className="ptt-waves" aria-hidden="true">
-              {pttBars.map((level, idx) => (
-                <i
-                  key={idx}
-                  style={{
-                    transform: `scaleY(${pttCancelIntent ? 0.16 : level})`,
-                  }}
-                />
-              ))}
-            </div>
-            <span
-              key={pttCancelIntent ? "cancel" : pttPhase}
-              className="ptt-hint"
-            >
-              {pttCancelIntent
-                ? t("input.pttReleaseToCancel")
-                : pttPhase === "arming"
-                  ? t("input.pttArming")
-                  : t("input.pttReleaseToSend")}
-            </span>
-          </div>
+          <PttBar
+            phase={pttPhase}
+            cancelIntent={pttCancelIntent}
+            seconds={pttSeconds}
+            bars={pttBars}
+          />
         )}
         {!pttHolding &&
           (busy ? (
@@ -850,7 +298,7 @@ export function InputBar() {
                 isTranscribing ||
                 (!text.trim() && images.length === 0)
               }
-              onClick={() => void submit()}
+              onClick={() => void sendMessage(text)}
             >
               {isTranscribing ? <span className="spinner" /> : <SendIcon />}
             </button>
