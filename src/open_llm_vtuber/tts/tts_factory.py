@@ -13,6 +13,7 @@ def _build_azure(kwargs: dict) -> TTSInterface:
         pitch=kwargs.get("pitch"),
         rate=kwargs.get("rate"),
         tailing_silence_ms=kwargs.get("tailing_silence_ms", 0),
+        lang=kwargs.get("lang"),
     )
 
 

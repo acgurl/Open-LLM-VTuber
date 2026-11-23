@@ -68,7 +68,49 @@ class FactoryRegistryTests(unittest.TestCase):
             pitch=0,
             rate=1,
             tailing_silence_ms=0,
+            lang=None,
         )
+
+    def test_azure_tts_builder_forwards_optional_lang(self):
+        with patch("open_llm_vtuber.tts.azure_tts.TTSEngine") as engine:
+            TTSFactory.get_tts_engine(
+                "azure_tts",
+                api_key="key",
+                region="region",
+                voice="zh-CN-XiaoxiaoDialectsNeural",
+                pitch="0",
+                rate="1",
+                lang="zh-CN-henan",
+            )
+
+        engine.assert_called_once_with(
+            api_key="key",
+            region="region",
+            voice="zh-CN-XiaoxiaoDialectsNeural",
+            pitch="0",
+            rate="1",
+            tailing_silence_ms=0,
+            lang="zh-CN-henan",
+        )
+
+    def test_azure_tts_ssml_wraps_lang_only_when_configured(self):
+        from open_llm_vtuber.tts.azure_tts import TTSEngine as AzureTTSEngine
+
+        with patch("open_llm_vtuber.tts.azure_tts.speechsdk.SpeechConfig"):
+            plain = AzureTTSEngine("key", "japaneast", "zh-HK-HiuMaanNeural")
+            dialect = AzureTTSEngine(
+                "key",
+                "japaneast",
+                "zh-CN-XiaoxiaoDialectsNeural",
+                lang="zh-CN-henan",
+            )
+
+        plain_ssml = plain._build_ssml("你好")
+        dialect_ssml = dialect._build_ssml("中")
+        self.assertNotIn("<lang ", plain_ssml)
+        self.assertIn('xml:lang="zh-HK"', plain_ssml)
+        self.assertIn('<lang xml:lang="zh-CN-henan"><prosody ', dialect_ssml)
+        self.assertIn("</prosody></lang>", dialect_ssml)
 
     def test_edge_tts_builder_passes_voice_positionally(self):
         with patch("open_llm_vtuber.tts.edge_tts.TTSEngine") as engine:

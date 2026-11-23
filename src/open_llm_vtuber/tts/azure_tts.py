@@ -18,6 +18,7 @@ class TTSEngine(PooledTTSEngine):
         rate=1.0,
         tailing_silence_ms=0,
         max_clients=3,
+        lang: str | None = None,
     ):
         """
         Initialize the Azure Text-to-Speech service
@@ -36,6 +37,9 @@ class TTSEngine(PooledTTSEngine):
             service still keeps a small inherent tail.
         max_clients: int
             number of reusable SpeechSynthesizer connections to keep.
+        lang: str | None
+            optional SSML <lang xml:lang="..."> override for multi-dialect
+            voices (e.g., "zh-CN-henan" with zh-CN-XiaoxiaoDialectsNeural).
         """
         super().__init__(max_clients=max_clients)
         self.speech_config = speechsdk.SpeechConfig(subscription=api_key, region=region)
@@ -48,6 +52,7 @@ class TTSEngine(PooledTTSEngine):
         self.pitch = pitch
         self.rate = rate
         self.tailing_silence_ms = max(0, int(tailing_silence_ms))
+        self.lang = lang.strip() if isinstance(lang, str) and lang.strip() else None
 
     def _create_client(self):
         return speechsdk.SpeechSynthesizer(
@@ -85,6 +90,17 @@ class TTSEngine(PooledTTSEngine):
 
     def _build_ssml(self, text: str) -> str:
         locale = "-".join(self.voice.split("-")[:2])
+        prosody = (
+            f"<prosody pitch={quoteattr(f'{self.pitch}%')} "
+            f"rate={quoteattr(str(self.rate))}>"
+            f"{escape(text)}"
+            "</prosody>"
+        )
+        body = (
+            f"<lang xml:lang={quoteattr(self.lang)}>{prosody}</lang>"
+            if self.lang
+            else prosody
+        )
         return (
             '<speak version="1.0" '
             'xmlns="http://www.w3.org/2001/10/synthesis" '
@@ -92,10 +108,7 @@ class TTSEngine(PooledTTSEngine):
             f"xml:lang={quoteattr(locale)}>"
             f"<voice name={quoteattr(self.voice)}>"
             f'<mstts:silence type="Tailing" value="{self.tailing_silence_ms}ms"/>'
-            f"<prosody pitch={quoteattr(f'{self.pitch}%')} "
-            f"rate={quoteattr(str(self.rate))}>"
-            f"{escape(text)}"
-            "</prosody>"
+            f"{body}"
             "</voice>"
             "</speak>"
         )
