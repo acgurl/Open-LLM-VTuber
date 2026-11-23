@@ -55,7 +55,7 @@ export function InputBar() {
   const [pttSeconds, setPttSeconds] = useState(0);
   const [pttBars, setPttBars] = useState<number[]>(INITIAL_WAVE_BARS);
 
-  const mediaMenuPresence = usePresence(mediaMenuOpen, 140);
+  const mediaMenuPresence = usePresence(mediaMenuOpen, 150);
   const thinking = useThinking();
   const fileRef = useRef<HTMLInputElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
@@ -816,7 +816,10 @@ export function InputBar() {
                 />
               ))}
             </div>
-            <span className="ptt-hint">
+            <span
+              key={pttCancelIntent ? "cancel" : pttPhase}
+              className="ptt-hint"
+            >
               {pttCancelIntent
                 ? t("input.pttReleaseToCancel")
                 : pttPhase === "arming"

@@ -2,18 +2,7 @@
 .place-card {
   display: flex;
   flex-direction: column;
-  animation: place-in 380ms var(--ease-spring) backwards;
-}
-
-@keyframes place-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+  animation: bubble-in-ai 380ms var(--ease-spring) backwards;
 }
 
 .place-head {
@@ -42,6 +31,7 @@
   gap: 2px;
   min-width: 0;
   flex: 1;
+  animation: status-swap 220ms var(--ease-spring);
 }
 
 .place-name {
@@ -80,6 +70,10 @@
     background: var(--chip-hover);
     box-shadow: none;
   }
+
+  .place-head .icon-btn:hover:not(:disabled) > svg {
+    transform: scale(1.1);
+  }
 }
 
 /* 同名多地点：chips 切换，避免多张地图同时拉瓦片 */
@@ -100,16 +94,24 @@
   font-size: 0.78rem;
   cursor: pointer;
   transition:
-    background 160ms,
-    border-color 160ms,
-    color 160ms;
+    background 160ms var(--ease-snap),
+    border-color 160ms var(--ease-snap),
+    color 160ms var(--ease-snap),
+    transform 200ms var(--ease-spring);
 }
 
 @media (hover: hover) {
   .place-chip:hover {
     background: var(--chip-hover);
+    border-color: var(--line-strong);
     color: var(--ink);
+    transform: translateY(-1px);
   }
+}
+
+.place-chip:active {
+  transform: scale(0.95);
+  transition-duration: 90ms;
 }
 
 .place-chip.active {
@@ -129,6 +131,15 @@
   background: var(--inset);
   box-shadow: var(--shadow-inset);
   cursor: zoom-in;
+  transition:
+    border-color 220ms var(--ease-snap),
+    box-shadow 220ms var(--ease-snap);
+}
+
+@media (hover: hover) {
+  .place-map:not(.interactive):hover {
+    border-color: var(--accent-line);
+  }
 }
 
 .place-map.interactive {
@@ -203,6 +214,17 @@
   -webkit-backdrop-filter: blur(6px);
 }
 
+.place-map-veil.closing {
+  pointer-events: none;
+  animation: veil-out 180ms var(--ease-fold) forwards;
+}
+
+@keyframes veil-out {
+  to {
+    opacity: 0;
+  }
+}
+
 .place-map-veil.error {
   display: flex;
   flex-direction: column;
@@ -212,6 +234,7 @@
   padding: 16px;
   text-align: center;
   cursor: default;
+  animation: content-in 240ms var(--ease-snap);
 }
 
 .place-map-veil.error strong {
@@ -242,12 +265,19 @@
   color: var(--ink);
   font: inherit;
   font-size: 0.76rem;
+  box-shadow: var(--shadow-btn);
   cursor: pointer;
   opacity: 0;
   transform: translateY(-4px);
   transition:
     opacity 200ms var(--ease-snap),
-    transform 200ms var(--ease-snap);
+    transform 220ms var(--ease-spring),
+    border-color 180ms var(--ease-snap),
+    color 180ms var(--ease-snap);
+}
+
+.place-map-expand svg {
+  transition: transform 220ms var(--ease-spring);
 }
 
 @media (hover: hover) {
@@ -256,6 +286,21 @@
     opacity: 1;
     transform: none;
   }
+
+  .place-map-expand:hover {
+    border-color: var(--accent-line);
+    color: var(--accent);
+    transform: translateY(-1px);
+  }
+
+  .place-map-expand:hover svg {
+    transform: scale(1.1);
+  }
+}
+
+.place-map-expand:active {
+  transform: scale(0.95);
+  transition-duration: 90ms;
 }
 
 /* 标记：主色圆点 + 扩散环，和舞台上的光尘同一套色 */
@@ -346,6 +391,20 @@
   font: inherit;
   font-size: 0.76rem;
   cursor: pointer;
+  transition:
+    color 160ms var(--ease-snap),
+    opacity 160ms var(--ease-snap),
+    transform 180ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .place-note-toggle:hover {
+    color: var(--accent-strong);
+  }
+}
+
+.place-note-toggle:active {
+  transform: scale(0.95);
 }
 
 .place-foot {
@@ -383,18 +442,29 @@
   font-weight: 500;
   text-decoration: none;
   transition:
-    background 180ms,
+    background 180ms var(--ease-snap),
+    box-shadow 200ms var(--ease-snap),
     transform 220ms var(--ease-spring);
+}
+
+.map-app-primary svg {
+  transition: transform 240ms var(--ease-spring);
 }
 
 @media (hover: hover) {
   .map-app-primary:hover {
     background: color-mix(in oklab, var(--accent) 22%, transparent);
+    box-shadow: 0 8px 20px -12px var(--accent-glow);
+  }
+
+  .map-app-primary:hover svg {
+    transform: translate(1.5px, -1.5px) rotate(4deg);
   }
 }
 
 .map-app-primary:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
+  transition-duration: 90ms;
 }
 
 .map-app-caret {
@@ -407,7 +477,9 @@
   background: var(--accent-soft);
   color: var(--accent);
   cursor: pointer;
-  transition: background 180ms;
+  transition:
+    background 180ms var(--ease-snap),
+    transform 180ms var(--ease-spring);
 }
 
 @media (hover: hover) {
@@ -416,8 +488,13 @@
   }
 }
 
+.map-app-caret:active {
+  transform: scale(0.94);
+  transition-duration: 90ms;
+}
+
 .map-app-caret svg {
-  transition: transform 200ms var(--ease-snap);
+  transition: transform 240ms var(--ease-spring);
 }
 
 .map-app-caret[aria-expanded='true'] svg {
@@ -437,21 +514,38 @@
   padding: 6px;
   border-radius: 14px;
   border: 1px solid var(--line);
-  background: var(--glass-solid);
+  background:
+    radial-gradient(160px circle at var(--mx, 50%) var(--my, 0px), var(--sheen-spot), transparent 72%),
+    linear-gradient(180deg, var(--sheen), transparent 44%),
+    var(--glass-solid);
   backdrop-filter: blur(20px) saturate(1.15);
   -webkit-backdrop-filter: blur(20px) saturate(1.15);
-  box-shadow: var(--shadow-float);
-  animation: map-menu-in 160ms var(--ease-spring);
+  box-shadow: var(--shadow-float), var(--shadow-inset);
+  transform-origin: bottom left;
+  animation: map-menu-in 200ms var(--ease-spring);
+  transition: --sheen-spot 360ms ease;
+}
+
+.map-app-menu.closing {
+  pointer-events: none;
+  animation: map-menu-out 160ms var(--ease-fold) forwards;
 }
 
 @keyframes map-menu-in {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.97);
+    transform: translateY(6px) scale(0.96);
   }
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+@keyframes map-menu-out {
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
   }
 }
 
@@ -470,13 +564,44 @@
   text-align: left;
   text-decoration: none;
   cursor: pointer;
+  animation: menu-item-in 200ms var(--ease-spring) backwards;
+  transition:
+    background 150ms var(--ease-snap),
+    transform 180ms var(--ease-spring);
+}
+
+.map-app-menu > :nth-child(2) {
+  animation-delay: 24ms;
+}
+
+.map-app-menu > :nth-child(3) {
+  animation-delay: 48ms;
+}
+
+.map-app-menu button svg {
+  color: var(--muted);
+  transition:
+    color 150ms var(--ease-snap),
+    transform 200ms var(--ease-spring);
 }
 
 @media (hover: hover) {
   .map-app-menu a:hover,
   .map-app-menu button:hover {
     background: var(--chip-hover);
+    transform: translateX(2px);
   }
+
+  .map-app-menu button:hover svg {
+    color: var(--accent);
+    transform: scale(1.08);
+  }
+}
+
+.map-app-menu a:active,
+.map-app-menu button:active {
+  transform: scale(0.98);
+  transition-duration: 80ms;
 }
 
 /* ---------- 全屏地图：抽屉同层 mask + dialog ---------- */
@@ -495,7 +620,7 @@
     var(--glass-solid);
   backdrop-filter: blur(26px) saturate(1.15);
   -webkit-backdrop-filter: blur(26px) saturate(1.15);
-  box-shadow: 0 0 90px -26px rgba(0, 0, 0, 0.95);
+  box-shadow: 0 0 90px -26px rgba(0, 0, 0, 0.95), var(--shadow-inset);
   z-index: 60;
   overflow: hidden;
   animation: place-full-in 320ms var(--ease-spring);
@@ -503,7 +628,7 @@
 
 .place-fullscreen.closing {
   pointer-events: none;
-  animation: place-full-out 220ms ease-in forwards;
+  animation: place-full-out 220ms var(--ease-fold) forwards;
 }
 
 @keyframes place-full-in {
@@ -557,6 +682,10 @@
     color: var(--ink);
     background: var(--chip-hover);
     box-shadow: none;
+  }
+
+  .place-full-head .icon-btn:hover:not(:disabled) > svg {
+    transform: rotate(90deg);
   }
 }
 

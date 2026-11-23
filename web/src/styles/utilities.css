@@ -1,11 +1,13 @@
-/* 多处共用的小工具：加载圈与通用淡入 */
+/* 多处共用的小工具与共享关键帧：加载圈、通用淡入、状态点/按钮弹入、文案切换、轻晃提示 */
 .spinner {
   width: 15px;
   height: 15px;
   border: 2px solid var(--line-strong);
   border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation:
+    spin 0.8s linear infinite,
+    content-in 180ms ease-out;
   display: inline-block;
 }
 
@@ -21,5 +23,91 @@
   }
   to {
     opacity: 1;
+  }
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes dot-pop {
+  from {
+    transform: scale(0.35);
+  }
+  60% {
+    transform: scale(1.35);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes check-pop {
+  from {
+    transform: scale(0.5) rotate(-14deg);
+  }
+  62% {
+    transform: scale(1.16) rotate(3deg);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes btn-pop {
+  from {
+    transform: scale(0.72);
+  }
+  60% {
+    transform: scale(1.05);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes icon-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.68) rotate(-12deg);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.08) rotate(2deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes status-swap {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+@keyframes error-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  55% {
+    transform: translateX(3px);
+  }
+  80% {
+    transform: translateX(-1.5px);
   }
 }

@@ -30,15 +30,18 @@ export const ThinkBlock = memo(function ThinkBlock({
   const holdTimer = useRef(0);
   const startedAt = useRef<number | null>(active ? Date.now() : null);
   const [seconds, setSeconds] = useState<number | null>(null);
+  const [settled, setSettled] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
 
   useEffect(() => {
     if (active && !wasActive.current) {
       startedAt.current ??= Date.now();
+      setSettled(false);
       if (!touched.current) setOpen(true);
     }
     if (wasActive.current && !active) {
+      setSettled(true);
       if (startedAt.current !== null) {
         setSeconds(
           Math.max(1, Math.round((Date.now() - startedAt.current) / 1000)),
@@ -78,7 +81,9 @@ export const ThinkBlock = memo(function ThinkBlock({
   const body = text.trim();
 
   return (
-    <div className={`tool-card think-card${active ? " status-running" : ""}`}>
+    <div
+      className={`tool-card think-card${active ? " status-running" : settled ? " status-completed" : ""}`}
+    >
       <button
         className="tool-head"
         aria-expanded={open}
@@ -86,12 +91,14 @@ export const ThinkBlock = memo(function ThinkBlock({
         onClick={toggle}
       >
         <span
-          className={`think-mark${active ? " active" : ""}`}
+          className={`think-mark${active ? " active" : settled ? " done" : ""}`}
           aria-hidden="true"
         />
         <span className="tool-name think-name">{t("think.title")}</span>
         <span className="tool-status">
-          {status}
+          <span className="tool-status-text" key={status}>
+            {status}
+          </span>
           {active && (
             <span className="think-live" aria-hidden="true">
               <i />

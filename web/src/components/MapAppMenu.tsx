@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { usePresence } from '../hooks/usePresence';
 import { toast } from '../stores/toast';
 import { amapLink, appleLink, baiduLink, coordText, isIOS } from '../utils/mapLinks';
 import type { Place } from '../utils/places';
@@ -10,6 +11,7 @@ import { ChevronDownIcon, CopyIcon, NavigateIcon } from './icons';
 export function MapAppMenu({ place }: { place: Place }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const { mounted, closing } = usePresence(open, 160);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,8 +65,12 @@ export function MapAppMenu({ place }: { place: Place }) {
       >
         <ChevronDownIcon />
       </button>
-      {open && (
-        <div className="map-app-menu" role="menu" aria-label={t('location.moreMaps')}>
+      {mounted && (
+        <div
+          className={`map-app-menu${closing ? ' closing' : ''}`}
+          role="menu"
+          aria-label={t('location.moreMaps')}
+        >
           <a
             role="menuitem"
             href={baiduLink(place)}

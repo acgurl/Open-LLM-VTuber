@@ -24,7 +24,7 @@ export const PlaceCard = memo(function PlaceCard({ entry }: { entry: PlaceEntry 
         <span className="place-glyph" aria-hidden="true">
           <MapPinIcon />
         </span>
-        <div className="place-titles">
+        <div className="place-titles" key={index}>
           <strong className="place-name">{place.name}</strong>
           {sub && <span className="place-sub">{sub}</span>}
         </div>

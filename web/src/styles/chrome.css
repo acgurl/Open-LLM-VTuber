@@ -4,7 +4,8 @@
 }
 
 .input-row::before,
-.composer-menu::before {
+.composer-menu::before,
+.map-app-menu::before {
   content: '';
   position: absolute;
   inset: 0;
@@ -99,6 +100,12 @@
   color: var(--faint);
 }
 
+.icon-swap {
+  display: inline-grid;
+  place-items: center;
+  animation: icon-pop 280ms var(--ease-spring);
+}
+
 /* ---------- 角色 / 模型切换小岛 ---------- */
 .topbar-picker {
   position: relative;
@@ -148,6 +155,7 @@
 .picker-pill-icon {
   width: 16px;
   color: var(--accent);
+  transition: transform 240ms var(--ease-spring);
 }
 
 .picker-pill-chevron {
@@ -161,6 +169,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  animation: status-swap 220ms var(--ease-spring);
 }
 
 .picker-pill[aria-disabled='true'] {
@@ -172,6 +181,14 @@
     border-color: var(--line-strong);
     transform: translateY(-1px);
     box-shadow: var(--shadow-float), var(--shadow-inset);
+  }
+
+  .picker-pill:hover:not(:where([aria-disabled='true'])) .picker-pill-icon {
+    transform: scale(1.08);
+  }
+
+  .picker-pill:hover:not(:where([aria-disabled='true'])) .picker-pill-chevron {
+    color: var(--muted);
   }
 }
 
@@ -256,14 +273,6 @@
   animation: status-swap 220ms var(--ease-spring);
 }
 
-@keyframes status-swap {
-  from {
-    opacity: 0;
-    transform: translateY(3px);
-    filter: blur(2px);
-  }
-}
-
 .picker-menu {
   position: absolute;
   top: calc(100% + 10px);
@@ -286,7 +295,7 @@
     var(--glass-solid);
   backdrop-filter: blur(var(--blur)) saturate(1.2);
   -webkit-backdrop-filter: blur(var(--blur)) saturate(1.2);
-  box-shadow: var(--shadow-float);
+  box-shadow: var(--shadow-float), var(--shadow-inset);
   /* 桌面端居中挂在小岛下方；窄屏改成左对齐时只需改这个变量 */
   --menu-shift: -50%;
   transform: translateX(var(--menu-shift));
@@ -302,7 +311,7 @@
 
 .picker-menu.closing {
   pointer-events: none;
-  animation: picker-menu-out 160ms var(--ease-snap) forwards;
+  animation: picker-menu-out 160ms var(--ease-fold) forwards;
 }
 
 @keyframes picker-menu-in {
@@ -333,6 +342,7 @@
 }
 
 .picker-tabs {
+  position: relative;
   display: grid;
   grid-auto-columns: minmax(0, 1fr);
   grid-auto-flow: column;
@@ -342,7 +352,37 @@
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 13px;
-  background: var(--chip-hover);
+  background: var(--inset);
+  box-shadow: var(--shadow-inset);
+  isolation: isolate;
+}
+
+.picker-tab-thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  z-index: -1;
+  border-radius: 9px;
+  border: 1px solid var(--accent-line);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.14), transparent 70%),
+    var(--accent-soft);
+  box-shadow:
+    var(--shadow-inset),
+    0 4px 12px -6px var(--accent-glow);
+  transition:
+    transform 340ms var(--ease-spring),
+    width 340ms var(--ease-spring);
+}
+
+html[data-theme='light'] .picker-tab-thumb {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.56)),
+    var(--accent-soft);
+  box-shadow:
+    0 1px 2px rgba(25, 30, 48, 0.08),
+    0 4px 12px -6px var(--accent-glow);
 }
 
 .picker-tabs button {
@@ -361,19 +401,23 @@
   font-size: 0.76rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 160ms var(--ease-snap), color 160ms var(--ease-snap), border-color 160ms var(--ease-snap);
+  transition:
+    color 180ms var(--ease-snap),
+    transform 200ms var(--ease-spring);
 }
 
-.picker-tabs button:hover {
-  color: var(--ink);
-  background: var(--chip-hover);
+@media (hover: hover) {
+  .picker-tabs button:hover:not([aria-selected='true']) {
+    color: var(--ink);
+  }
+}
+
+.picker-tabs button:active {
+  transform: scale(0.95);
 }
 
 .picker-tabs button[aria-selected='true'] {
-  border-color: var(--accent-line);
-  background: linear-gradient(155deg, var(--sheen), transparent 75%), var(--accent-soft);
   color: var(--ink);
-  box-shadow: var(--shadow-inset);
 }
 
 .picker-tabs button span {
@@ -385,10 +429,14 @@
 .picker-tabs button svg {
   width: 14px;
   height: 14px;
+  transition:
+    color 180ms var(--ease-snap),
+    transform 260ms var(--ease-spring);
 }
 
 .picker-tabs button[aria-selected='true'] svg {
   color: var(--accent);
+  transform: scale(1.08);
 }
 
 .picker-tab-panel {
@@ -401,6 +449,18 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+  animation: picker-panel-in 200ms var(--ease-spring);
+}
+
+@keyframes picker-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .picker-option {
@@ -415,14 +475,62 @@
   font: inherit;
   text-align: start;
   cursor: pointer;
+  animation: picker-opt-in 220ms var(--ease-spring) backwards;
   transition:
     background 160ms var(--ease-snap),
-    color 160ms var(--ease-snap);
+    color 160ms var(--ease-snap),
+    transform 200ms var(--ease-spring);
 }
 
-.picker-option:hover,
+.picker-option:nth-child(2) {
+  animation-delay: 20ms;
+}
+
+.picker-option:nth-child(3) {
+  animation-delay: 40ms;
+}
+
+.picker-option:nth-child(4) {
+  animation-delay: 60ms;
+}
+
+.picker-option:nth-child(5) {
+  animation-delay: 80ms;
+}
+
+.picker-option:nth-child(6) {
+  animation-delay: 100ms;
+}
+
+.picker-option:nth-child(n + 7) {
+  animation-delay: 115ms;
+}
+
+@keyframes picker-opt-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (hover: hover) {
+  .picker-option:hover {
+    background: var(--chip-hover);
+    transform: translateX(2px);
+  }
+}
+
 .picker-option:focus-visible {
   background: var(--chip-hover);
+}
+
+.picker-option:active {
+  transform: scale(0.985);
+  transition-duration: 80ms;
 }
 
 .picker-option.selected {
@@ -440,6 +548,7 @@
   padding: 9px 10px;
   color: var(--muted);
   font-size: 0.84rem;
+  animation: content-in 200ms var(--ease-snap);
 }
 
 .picker-option-text {
@@ -475,8 +584,13 @@
   color: var(--accent);
 }
 
-/* 状态点：在线呼吸，异常常亮 */
+.picker-option-check svg {
+  animation: check-pop 340ms var(--ease-spring);
+}
+
+/* 状态点：在线用伪元素做扩散光环（只动 transform/opacity，不逐帧重绘 box-shadow），异常常亮 */
 .dot {
+  position: relative;
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -486,8 +600,18 @@
 
 .dot.online {
   background: var(--ok);
-  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ok) 16%, transparent), 0 0 10px var(--ok);
-  animation: dot-breathe 2.8s ease-in-out infinite;
+  box-shadow: 0 0 8px color-mix(in oklab, var(--ok) 65%, transparent);
+}
+
+.dot.online::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1.5px solid var(--ok);
+  opacity: 0;
+  pointer-events: none;
+  animation: dot-ring 2.8s var(--ease-snap) infinite;
 }
 
 .dot.pending {
@@ -501,11 +625,15 @@
   box-shadow: 0 0 9px color-mix(in oklab, var(--danger) 60%, transparent);
 }
 
-@keyframes dot-breathe {
-  50% {
-    box-shadow:
-      0 0 0 5px color-mix(in oklab, var(--ok) 6%, transparent),
-      0 0 14px color-mix(in oklab, var(--ok) 55%, transparent);
+@keyframes dot-ring {
+  0% {
+    transform: scale(0.55);
+    opacity: 0.62;
+  }
+  70%,
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
   }
 }
 
@@ -557,12 +685,36 @@
 }
 
 /* 图标按下时缩一下，按钮外壳的位移与图标的形变错开，手感更实 */
-.icon-btn > svg {
-  transition: transform 240ms var(--ease-spring);
+.icon-btn > svg,
+.icon-btn > .icon-swap > svg {
+  transition: transform 280ms var(--ease-spring);
 }
 
-.icon-btn:active:not(:disabled) > svg {
+.icon-btn:active:not(:disabled) > svg,
+.icon-btn:active:not(:disabled) > .icon-swap > svg {
   transform: scale(0.84);
+}
+
+@media (hover: hover) {
+  .topbar .settings-btn:hover:not(:disabled) > svg {
+    transform: rotate(45deg);
+  }
+
+  .topbar .new-chat-btn:hover:not(:disabled) > svg {
+    transform: translateY(-1px) rotate(-6deg);
+  }
+
+  .topbar .history-btn:hover:not(:disabled) > svg {
+    transform: scaleX(1.08);
+  }
+
+  .topbar .theme-toggle:hover:not(:disabled) > svg {
+    transform: rotate(16deg) scale(1.06);
+  }
+
+  .topbar .tts-toggle:hover:not(:disabled) > .icon-swap > svg {
+    transform: scale(1.08);
+  }
 }
 
 /* 图标随新快照一起换掉，不要再给它挂挂载动画：

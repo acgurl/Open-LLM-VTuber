@@ -49,6 +49,7 @@ export function ModelPicker() {
       name={name}
       label={label}
       icon={ICONS[kind]}
+      iconKey={kind}
       menuTitle={available.length > 1 ? t('model.title') : category(kind)}
       options={options}
       selectedId={active?.id}

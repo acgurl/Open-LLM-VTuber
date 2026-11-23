@@ -122,13 +122,24 @@ html[data-theme='light'] .sheen-on {
   }
 }
 
-/* 等待首字：一个安静的“对方正在输入”气泡，高度与普通气泡对齐，不与正式回答抢注意力 */
+/* 等待首字：一个安静的“对方正在输入”气泡，高度与普通气泡对齐，带柔和呼吸光衔接流式态 */
 .typing-bubble {
   display: inline-flex;
   align-items: center;
   min-height: 48px;
   padding: 0 17px;
   border-color: var(--line-strong);
+}
+
+.typing-bubble::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 0 22px var(--accent-glow);
+  opacity: 0.2;
+  animation: stream-glow 2.4s ease-in-out infinite;
 }
 
 .typing-dots {
@@ -220,9 +231,10 @@ html[data-theme='light'] .sheen-on {
   cursor: pointer;
   opacity: 0.75;
   transition:
-    color 140ms,
-    opacity 140ms,
-    background 140ms;
+    color 140ms var(--ease-snap),
+    opacity 140ms var(--ease-snap),
+    background 140ms var(--ease-snap),
+    transform 180ms var(--ease-spring);
 }
 
 @media (hover: hover) {
@@ -231,6 +243,10 @@ html[data-theme='light'] .sheen-on {
     color: var(--ink);
     background: var(--chip);
   }
+}
+
+.bubble-copy:active {
+  transform: scale(0.86);
 }
 
 .bubble-copy.copied {
@@ -244,18 +260,6 @@ html[data-theme='light'] .sheen-on {
 
 .bubble-copy.copied svg {
   animation: check-pop 380ms var(--ease-spring);
-}
-
-@keyframes check-pop {
-  from {
-    transform: scale(0.5) rotate(-14deg);
-  }
-  62% {
-    transform: scale(1.16) rotate(3deg);
-  }
-  to {
-    transform: none;
-  }
 }
 
 @media (hover: none) {
@@ -338,6 +342,13 @@ html[data-theme='light'] .sheen-on {
   background: var(--inset);
   overflow: hidden;
   animation: content-in 260ms var(--ease-snap);
+  transition: border-color 200ms var(--ease-snap);
+}
+
+@media (hover: hover) {
+  .code-block:hover {
+    border-color: var(--line-strong);
+  }
 }
 
 .code-block::before {
@@ -380,9 +391,10 @@ html[data-theme='light'] .sheen-on {
   line-height: 1.6;
   cursor: pointer;
   transition:
-    color 160ms,
-    background 160ms,
-    border-color 160ms;
+    color 160ms var(--ease-snap),
+    background 160ms var(--ease-snap),
+    border-color 160ms var(--ease-snap),
+    transform 180ms var(--ease-spring);
 }
 
 @media (hover: hover) {
@@ -391,6 +403,10 @@ html[data-theme='light'] .sheen-on {
     background: var(--chip-hover);
     border-color: var(--line);
   }
+}
+
+.code-copy:active {
+  transform: scale(0.94);
 }
 
 .code-copy.copied {
@@ -535,6 +551,17 @@ html[data-theme='light'] .sheen-on {
   box-shadow: var(--shadow-inset);
   vertical-align: baseline;
   animation: tag-in 240ms var(--ease-spring);
+  transition:
+    border-color 180ms var(--ease-snap),
+    background 180ms var(--ease-snap),
+    transform 220ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .action-tag:hover {
+    border-color: var(--tertiary);
+    transform: translateY(-0.5px);
+  }
 }
 
 .action-tag::before {

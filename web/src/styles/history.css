@@ -36,6 +36,10 @@
   }
 }
 
+.history-item:active {
+  transform: scale(0.988);
+}
+
 .history-item.current {
   border-color: var(--accent-line);
   background-color: var(--accent-soft);
@@ -123,6 +127,10 @@
   }
 }
 
+.history-delete:active {
+  transform: scale(0.9);
+}
+
 @media (hover: none) {
   .history-delete {
     opacity: 0.6;
@@ -167,4 +175,5 @@
 
 .history-item.confirming {
   border-color: var(--danger-line);
+  background-color: color-mix(in oklab, var(--danger-soft) 55%, var(--chip));
 }

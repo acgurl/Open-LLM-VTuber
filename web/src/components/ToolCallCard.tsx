@@ -33,7 +33,11 @@ export const ToolCallCard = memo(function ToolCallCard({ entry }: { entry: ToolE
       <button className="tool-head" aria-expanded={open} onClick={toggle}>
         <span className={`tool-dot ${entry.status}`} />
         <span className="tool-name">{entry.tool_name}</span>
-        <span className="tool-status">{t(`tool.${entry.status}`)}</span>
+        <span className="tool-status">
+          <span className="tool-status-text" key={entry.status}>
+            {t(`tool.${entry.status}`)}
+          </span>
+        </span>
         <span className="think-chevron">▸</span>
       </button>
       <div className={`collapsible${open ? ' open' : ''}`} aria-hidden={!open}>

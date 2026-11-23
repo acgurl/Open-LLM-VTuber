@@ -96,12 +96,17 @@
   -webkit-backdrop-filter: blur(14px);
   box-shadow: var(--shadow-float);
   transform: translateX(-50%);
-  animation: jump-in 300ms var(--ease-spring);
+  animation: jump-in 260ms var(--ease-spring);
   transition:
-    color 160ms,
-    border-color 160ms,
+    color 160ms var(--ease-snap),
+    border-color 160ms var(--ease-snap),
     transform 200ms var(--ease-spring),
     --sheen-spot 360ms ease;
+}
+
+.scroll-jump.closing {
+  pointer-events: none;
+  animation: jump-out 160ms var(--ease-fold) forwards;
 }
 
 @keyframes jump-in {
@@ -112,6 +117,13 @@
   to {
     opacity: 1;
     transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes jump-out {
+  to {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.95);
   }
 }
 
@@ -143,6 +155,11 @@
   .scroll-jump:hover svg {
     transform: translateY(2px);
   }
+}
+
+.scroll-jump:active {
+  transform: translate(-50%, 0) scale(0.95);
+  transition-duration: 90ms;
 }
 
 /* ---------- 推荐问题 ----------
@@ -179,6 +196,7 @@
     color 180ms var(--ease-snap),
     border-color 180ms var(--ease-snap),
     background-color 180ms var(--ease-snap),
+    box-shadow 220ms var(--ease-snap),
     transform 260ms var(--ease-spring),
     --sheen-spot 360ms ease;
 }
@@ -218,6 +236,10 @@
     color: var(--ink);
     border-color: var(--accent-line);
     background-color: var(--accent-soft);
+    box-shadow:
+      var(--shadow-soft),
+      var(--shadow-inset),
+      0 10px 24px -16px var(--accent-glow);
     transform: translateY(-1px);
   }
 
