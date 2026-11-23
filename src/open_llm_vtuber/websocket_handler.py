@@ -23,6 +23,7 @@ from .config_manager.utils import scan_config_alts_directory, scan_bg_directory
 from .storage import HistoryNotFoundError
 from .mcpp.user_servers import validate_server_id
 from .session_factory import build_session_context
+from .speech_models import SPEECH_KINDS, SpeechKind
 from .conversations.conversation_handler import (
     handle_conversation_trigger,
     handle_group_interrupt,
@@ -791,11 +792,12 @@ class WebSocketHandler:
     async def _handle_fetch_models(
         self, websocket: WebSocket, client_uid: str, data: WSMessage
     ) -> None:
-        """Send the LLM models this user may pick and the one in use."""
+        """Send the models this user may pick and the ones in use."""
         context = self.client_contexts[client_uid]
         if not self._group_turn_running(client_uid):
-            # Also drops a choice whose model or access is gone.
-            await context.sync_model_selection()
+            # Refresh speech overrides only when no synthesis is using them.
+            task = self.current_conversation_tasks.get(client_uid)
+            await context.sync_model_selection(sync_speech=task is None or task.done())
         await self._send_json(
             websocket, context.model_list_payload(), ensure_ascii=False
         )
@@ -803,10 +805,14 @@ class WebSocketHandler:
     async def _handle_model_switch(
         self, websocket: WebSocket, client_uid: str, data: dict
     ) -> None:
-        """Answer with another LLM model; ``model: null`` is the character's."""
+        """Switch a model. A null selection follows the current character."""
         context = self.client_contexts[client_uid]
+        kind = data.get("kind", "llm")
+        if kind in SPEECH_KINDS:
+            await self._switch_speech_model(websocket, client_uid, kind, data)
+            return
         model_id = data.get("model")
-        if model_id is not None and not isinstance(model_id, str):
+        if kind != "llm" or (model_id is not None and not isinstance(model_id, str)):
             await self._send_json(
                 websocket, {"type": "error", "message": "Model not available"}
             )
@@ -846,6 +852,39 @@ class WebSocketHandler:
             websocket,
             {"type": "model-switched", "model": current, "thinking": thinking},
         )
+
+    async def _switch_speech_model(
+        self, websocket: WebSocket, client_uid: str, kind: SpeechKind, data: dict
+    ) -> None:
+        context = self.client_contexts[client_uid]
+        model_id = data.get("model")
+        task = self.current_conversation_tasks.get(client_uid)
+        deferred = self._group_turn_running(client_uid) or (
+            task is not None and not task.done()
+        )
+        try:
+            switched = (
+                "model" in data
+                and (model_id is None or isinstance(model_id, str))
+                and await context.select_speech_model(
+                    kind, model_id, apply=not deferred
+                )
+            )
+        except Exception:
+            logger.exception("Failed to switch the speech model")
+            switched = False
+        if switched:
+            await self._send_json(
+                websocket, {"type": "model-switched", "kind": kind, "model": model_id}
+            )
+        else:
+            await self._send_json(
+                websocket,
+                {"type": "error", "kind": kind, "message": "Model not available"},
+            )
+            await self._send_json(
+                websocket, context.model_list_payload(), ensure_ascii=False
+            )
 
     async def _handle_set_thinking(
         self, websocket: WebSocket, client_uid: str, data: dict

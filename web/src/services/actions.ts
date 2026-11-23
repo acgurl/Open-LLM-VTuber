@@ -5,7 +5,11 @@ import { useHistory } from '../stores/history';
 import { useSettings } from '../stores/settings';
 import { useConnection } from '../stores/connection';
 import { useModels } from '../stores/models';
-import type { ImagePayload } from '../protocol/types';
+import { toast } from '../stores/toast';
+import i18n from '../i18n';
+import type { ImagePayload, ModelKind } from '../protocol/types';
+
+const MODEL_SWITCH_TIMEOUT_MS = 10_000;
 
 export function sendText(text: string, images?: ImagePayload[]) {
   const trimmed = text.trim();
@@ -61,7 +65,7 @@ export function fetchConfigs() {
 
 export function switchConfig(file: string) {
   const settings = useSettings.getState();
-  if (!wsClient.ready || settings.switching) return;
+  if (!wsClient.ready || settings.switching || useModels.getState().pending) return;
   // 换角色会清空活动历史与 agent 记忆，先收尾正在进行的一轮
   if (useConnection.getState().busy || audioPlayer.isActive()) interrupt();
   settings.requestConfig(file);
@@ -69,24 +73,34 @@ export function switchConfig(file: string) {
 }
 
 export function fetchModels() {
-  wsClient.send({ type: 'fetch-models' });
+  return wsClient.send({ type: 'fetch-models' });
 }
 
-// id 为 null 表示回到角色预设自带的模型。对话记忆不变，只换回答用的模型。
-export function switchModel(id: string | null) {
+// id 为 null 表示回到当前角色对应分类的预设。语音切换不打断正在进行的一轮。
+export function switchModel(id: string | null, kind: ModelKind = 'llm') {
   const models = useModels.getState();
-  if (models.switching || id === models.current) return;
-  // 服务端会先停掉正在生成的一轮再换模型，本地也同步收尾
-  if (useConnection.getState().busy || audioPlayer.isActive()) interrupt();
-  models.requestSwitch();
-  wsClient.send({ type: 'switch-model', model: id });
+  if (!wsClient.ready || useSettings.getState().switching || models.pending || id === models.catalogs[kind].current) return;
+  if (kind === 'llm' && (useConnection.getState().busy || audioPlayer.isActive())) interrupt();
+  const request = { id, kind };
+  models.requestSwitch(request);
+  if (!wsClient.send({ type: 'switch-model', model: id, ...(kind === 'llm' ? {} : { kind }) })) {
+    models.cancelSwitch(kind);
+    return;
+  }
+  window.setTimeout(() => {
+    // 到时只处理这一次请求，不影响期间已经发出的下一次切换。
+    if (useModels.getState().pending !== request) return;
+    models.cancelSwitch(kind);
+    toast(i18n.t('model.timeout', { category: i18n.t(`model.category.${kind}`) }), 'error');
+    fetchModels();
+  }, MODEL_SWITCH_TIMEOUT_MS);
 }
 
 // 当前模型的思考档位，从下一次请求起生效（正在生成的这一轮不受影响）。
 // 先本地更新让按钮立即响应，服务端随后回一份 model-list 作为准信。
 export function setThinking(level: string) {
   const models = useModels.getState();
-  if (models.switching || level === models.thinking) return;
+  if (models.pending?.kind === 'llm' || level === models.thinking) return;
   models.setThinking(level);
   wsClient.send({ type: 'set-thinking', level });
 }

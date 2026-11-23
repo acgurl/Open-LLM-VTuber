@@ -1,38 +1,60 @@
 import { create } from 'zustand';
-import type { ModelEntry } from '../protocol/types';
+import type { DefaultModelDisplay, ModelEntry, ModelKind } from '../protocol/types';
+
+interface ModelCatalog {
+  options: ModelEntry[];
+  current: string | null; // null 表示跟随角色预设
+  characterDefault?: DefaultModelDisplay;
+}
+
+interface ModelSwitch {
+  kind: ModelKind;
+  id: string | null;
+}
 
 interface ModelsState {
-  models: ModelEntry[]; // 当前账号可选的模型；空表示后台没开这个功能
-  current: string | null; // 正在使用的模型 id；null 表示跟随角色预设
-  switching: boolean; // 已发 switch-model，等服务端确认
-  thinking: string | null; // 当前模型的思考档位；null 表示该模型没有档位可选
-  lastThinkingOn: Record<string, string>; // 每个模型上次开启思考时的强度，重新打开时回到它
-  setList: (models: ModelEntry[], current: string | null, thinking: string | null) => void;
-  requestSwitch: () => void;
-  confirmSwitch: (current: string | null, thinking: string | null) => void;
-  cancelSwitch: () => void;
+  catalogs: Record<ModelKind, ModelCatalog>;
+  pending: ModelSwitch | null;
+  thinking: string | null; // 当前 LLM 的思考档位
+  lastThinkingOn: Record<string, string>;
+  setList: (catalogs: ModelsState['catalogs'], thinking: string | null) => void;
+  requestSwitch: (request: ModelSwitch) => void;
+  confirmSwitch: (kind: ModelKind, current: string | null, thinking: string | null) => void;
+  cancelSwitch: (kind?: ModelKind) => void;
   setThinking: (level: string) => void;
 }
 
 const OFF_IDS = new Set(['off', 'none']);
 
-// 记下“开着思考”的档位，供关掉后再打开时恢复
+// 记下“开着思考”的档位，供关掉后再打开时恢复。
 const remember = (s: ModelsState, current: string | null, level: string | null) =>
   current && level && !OFF_IDS.has(level)
     ? { lastThinkingOn: { ...s.lastThinkingOn, [current]: level } }
     : {};
 
 export const useModels = create<ModelsState>((set) => ({
-  models: [],
-  current: null,
-  switching: false,
+  catalogs: {
+    llm: { options: [], current: null },
+    tts: { options: [], current: null },
+    asr: { options: [], current: null },
+  },
+  pending: null,
   thinking: null,
   lastThinkingOn: {},
-  setList: (models, current, thinking) =>
-    set((s) => ({ models, current, thinking, switching: false, ...remember(s, current, thinking) })),
-  requestSwitch: () => set({ switching: true }),
-  confirmSwitch: (current, thinking) =>
-    set((s) => ({ current, thinking, switching: false, ...remember(s, current, thinking) })),
-  setThinking: (thinking) => set((s) => ({ thinking, ...remember(s, s.current, thinking) })),
-  cancelSwitch: () => set((s) => (s.switching ? { switching: false } : s)),
+  // 异步目录刷新不是切换回执，不能把尚未完成的切换提前解锁。
+  setList: (catalogs, thinking) =>
+    set((s) => ({ catalogs, thinking, ...remember(s, catalogs.llm.current, thinking) })),
+  requestSwitch: (pending) => set({ pending }),
+  confirmSwitch: (kind, current, thinking) => set((s) => ({
+    catalogs: { ...s.catalogs, [kind]: { ...s.catalogs[kind], current } },
+    pending: s.pending?.kind === kind ? null : s.pending,
+    ...(kind === 'llm' ? { thinking, ...remember(s, current, thinking) } : {}),
+  })),
+  cancelSwitch: (kind) => set((s) =>
+    s.pending && (kind === undefined || s.pending.kind === kind) ? { pending: null } : s,
+  ),
+  setThinking: (thinking) => set((s) => ({
+    thinking,
+    ...remember(s, s.catalogs.llm.current, thinking),
+  })),
 }));

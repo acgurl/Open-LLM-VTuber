@@ -1,6 +1,7 @@
 import { wsUrl, redirectToLogin } from './session';
 import { useConnection } from '../stores/connection';
 import { useSettings } from '../stores/settings';
+import { useModels } from '../stores/models';
 import { toast } from '../stores/toast';
 import { LIMITS, type ClientMessage } from '../protocol/types';
 import { handleServerMessage, onConnected } from './incoming';
@@ -96,6 +97,7 @@ class WSClient {
   private onClose(ev: CloseEvent) {
     this.stopHeartbeat();
     useSettings.getState().resetConfigs();
+    useModels.getState().cancelSwitch();
     if (this.gaveUp) return;
     const t = i18n.t.bind(i18n);
     if (ev.code === 4401) {

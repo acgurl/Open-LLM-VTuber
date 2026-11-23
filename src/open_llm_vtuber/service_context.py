@@ -35,6 +35,7 @@ from .llm_catalog import (
     LLMModelCatalog,
     LLMModelEntry,
 )
+from .speech_models import SPEECH_KINDS, SpeechKind, SpeechModelEntry, speech_config_for
 from .utils.dicts import deep_merge
 from .utils.security import redact_secrets, resolve_existing_file_within
 
@@ -103,8 +104,13 @@ class ServiceContext:
         self.character_config: CharacterConfig | None = None
 
         self.live2d_model: Live2dModel | None = None
-        self.asr_engine: ASRInterface | None = None
-        self.tts_engine: TTSInterface | None = None
+        self._character_asr_engine: ASRInterface | None = None
+        self._character_tts_engine: TTSInterface | None = None
+        self._selected_asr_engine: ASRInterface | None = None
+        self._selected_tts_engine: TTSInterface | None = None
+        self.base_speech_config: CharacterConfig | None = None
+        self._speech_choices: dict[SpeechKind, str | None] = {}
+        self._active_speech: dict[SpeechKind, SpeechModelEntry] = {}
         self.agent_engine: AgentInterface | None = None
         # translate_engine can be none if translation is disabled
         self.translate_engine: TranslateInterface | None = None
@@ -152,6 +158,22 @@ class ServiceContext:
         # The user's thinking level per catalog model id; a missing or
         # unknown level means the model's default.
         self.thinking_choices: dict[str, str] = {}
+
+    @property
+    def asr_engine(self) -> ASRInterface | None:
+        return self._selected_asr_engine or self._character_asr_engine
+
+    @asr_engine.setter
+    def asr_engine(self, engine: ASRInterface | None) -> None:
+        self._character_asr_engine = engine
+
+    @property
+    def tts_engine(self) -> TTSInterface | None:
+        return self._selected_tts_engine or self._character_tts_engine
+
+    @tts_engine.setter
+    def tts_engine(self, engine: TTSInterface | None) -> None:
+        self._character_tts_engine = engine
 
     def __str__(self):
         if not self.character_config:
@@ -208,11 +230,11 @@ class ServiceContext:
         logger.info("Closing ServiceContext resources...")
         await self._tooling.close()
         await self._close_agent(self.agent_engine)
-        if self._owns_tts_engine and self.tts_engine is not None:
-            try:
-                self.tts_engine.close()
-            except Exception:
-                logger.exception("Failed to close session TTS engine")
+        self._close_tts(self._selected_tts_engine)
+        self._selected_tts_engine = None
+        self._selected_asr_engine = None
+        if self._owns_tts_engine:
+            self._close_tts(self._character_tts_engine)
             self._owns_tts_engine = False
         logger.info("ServiceContext closed.")
 
@@ -491,7 +513,7 @@ class ServiceContext:
         )
         agent.request_options = dict(level.params) if level and level.params else None
 
-    async def sync_model_selection(self) -> None:
+    async def sync_model_selection(self, *, sync_speech: bool = True) -> None:
         """Re-read the user's stored choice and apply it.
 
         Run before each turn, so a choice made in another tab, an edit to
@@ -510,6 +532,8 @@ class ServiceContext:
                 logger.exception("Failed to read the user's model choice")
         self._apply_model_selection()
         await self.load_thinking_choice()
+        if sync_speech:
+            await self._sync_speech_choices()
 
     async def load_thinking_choice(self) -> None:
         """Re-read and apply the stored thinking level of the active model."""
@@ -570,6 +594,171 @@ class ServiceContext:
             self._apply_model_selection()
         return True
 
+    def _available_speech(self, kind: SpeechKind) -> list[SpeechModelEntry]:
+        if self.llm_catalog is None or self.base_speech_config is None:
+            return []
+        base = getattr(self.base_speech_config, f"{kind}_config")
+        return [
+            entry
+            for entry in self.llm_catalog.available_speech(
+                kind, self.user_id, self.user_emails
+            )
+            if speech_config_for(entry, base) is not None
+        ]
+
+    def _resolve_speech(
+        self, kind: SpeechKind, model_id: str | None
+    ) -> SpeechModelEntry | None:
+        if model_id is None:
+            return None
+        return next(
+            (entry for entry in self._available_speech(kind) if entry.id == model_id),
+            None,
+        )
+
+    def _set_speech_engine(
+        self, kind: SpeechKind, entry: SpeechModelEntry | None, engine
+    ) -> None:
+        if kind == "tts":
+            previous = self._selected_tts_engine
+            self._selected_tts_engine = engine
+            if previous is not engine:
+                self._close_tts(previous)
+        else:
+            self._selected_asr_engine = engine
+        if entry is None:
+            self._active_speech.pop(kind, None)
+        else:
+            self._active_speech[kind] = entry
+
+    def _make_speech_engine(self, entry: SpeechModelEntry):
+        base = getattr(self.base_speech_config, f"{entry.kind}_config")
+        config = speech_config_for(entry, base)
+        kwargs = _engine_kwargs(config, entry.provider)
+        factory = (
+            TTSFactory.get_tts_engine
+            if entry.kind == "tts"
+            else ASRFactory.get_asr_system
+        )
+        try:
+            return factory(entry.provider, **kwargs)
+        except Exception as error:
+            logger.warning(
+                f"Speech preset '{entry.id}' could not initialize ({type(error).__name__})"
+            )
+            return None
+
+    async def _sync_speech_choices(self) -> None:
+        if self.base_speech_config is None:
+            return
+        repository = self.history_repository
+        for kind in SPEECH_KINDS:
+            if repository is not None and self.user_id is not None:
+                try:
+                    self._speech_choices[kind] = await repository.get_user_setting(
+                        user_id=self.user_id, key=f"{kind}_model"
+                    )
+                except Exception:
+                    logger.exception("Failed to read the user's speech preset")
+            entry = self._resolve_speech(kind, self._speech_choices.get(kind))
+            if entry == self._active_speech.get(kind):
+                continue
+            engine = self._make_speech_engine(entry) if entry is not None else None
+            self._set_speech_engine(kind, entry if engine is not None else None, engine)
+
+    async def select_speech_model(
+        self, kind: SpeechKind, model_id: str | None, *, apply: bool
+    ) -> bool:
+        entry = None
+        engine = None
+        changed = False
+        if model_id is not None:
+            entry = self._resolve_speech(kind, model_id)
+            if entry is None:
+                return False
+        if apply and entry != self._active_speech.get(kind):
+            changed = True
+            if entry is not None:
+                engine = self._make_speech_engine(entry)
+                if engine is None:
+                    return False
+        try:
+            if self.history_repository is not None and self.user_id is not None:
+                await self.history_repository.set_user_setting(
+                    user_id=self.user_id, key=f"{kind}_model", value=model_id
+                )
+        except BaseException:
+            if kind == "tts":
+                self._close_tts(engine)
+            raise
+        self._speech_choices[kind] = model_id
+        if changed:
+            self._set_speech_engine(kind, entry, engine)
+        return True
+
+    def _character_llm_display(self, options: list[LLMModelEntry]) -> dict | None:
+        agent = getattr(self.character_config, "agent_config", None)
+        if agent is None:
+            return None
+        if agent.conversation_agent_choice == "hume_ai_agent":
+            return {"name": "Hume EVI", "matches": []}
+        provider = agent.agent_settings.basic_memory_agent.llm_provider
+        config = getattr(agent.llm_configs, provider, None)
+        if config is None:
+            return None
+        settings = config.model_dump()
+        # A preset offering request overrides is still a distinct choice.
+        matches = [
+            entry
+            for entry in options
+            if entry.provider == provider
+            and not entry.thinking_levels
+            and dict(entry.settings) == settings
+        ]
+        return {
+            "name": matches[0].name if matches else settings["model"],
+            "matches": [entry.id for entry in matches],
+        }
+
+    def _character_speech_display(
+        self, kind: SpeechKind, options: list[SpeechModelEntry]
+    ) -> dict | None:
+        config = getattr(self.character_config, f"{kind}_config", None)
+        if config is None:
+            return None
+        provider = getattr(config, f"{kind}_model")
+        settings = _engine_kwargs(config, provider)
+        base = getattr(self.base_speech_config, f"{kind}_config", None)
+        matches = [
+            entry
+            for entry in options
+            if entry.provider == provider
+            and _engine_kwargs(speech_config_for(entry, base), provider) == settings
+        ]
+        # Explicit display fields only: no endpoint, credentials or paths.
+        keys = (
+            ("voice", "model", "model_id", "default_model")
+            if kind == "tts"
+            else ("model",)
+        )
+        name = next((settings[key] for key in keys if settings.get(key)), None)
+        provider_name = {
+            "azure_tts": "Azure Speech",
+            "azure_asr": "Azure Speech",
+            "edge_tts": "Edge TTS",
+            "groq_whisper_asr": "Groq Whisper",
+            "gpt_sovits_tts": "GPT-SoVITS",
+            "openai_tts": "OpenAI TTS",
+            "fish_api_tts": "Fish Audio",
+            "x_tts": "XTTS",
+        }.get(provider, provider.removesuffix(f"_{kind}").replace("_", " ").title())
+        if kind == "tts" and name:
+            name = f"{provider_name} · {name}"
+        return {
+            "name": matches[0].name if matches else (name or provider_name),
+            "matches": [entry.id for entry in matches],
+        }
+
     def model_list_payload(self) -> dict:
         """Build the model-list payload: what this user may pick, and the pick."""
         models = (
@@ -577,12 +766,25 @@ class ServiceContext:
             if isinstance(self.llm_catalog, LLMModelCatalog)
             else []
         )
-        return {
+        payload = {
             "type": "model-list",
             "models": [entry.public_info() for entry in models],
             "current": self.active_model.id if self.active_model else None,
             "thinking": self.thinking_level(),
         }
+        if models and (display := self._character_llm_display(models)) is not None:
+            payload["default_model"] = display
+        for kind in SPEECH_KINDS:
+            options = self._available_speech(kind)
+            active = self._active_speech.get(kind)
+            if options or active is not None:
+                payload[f"{kind}_models"] = [entry.public_info() for entry in options]
+                payload[f"{kind}_current"] = active.id if active else None
+                if (
+                    display := self._character_speech_display(kind, options)
+                ) is not None:
+                    payload[f"{kind}_default_model"] = display
+        return payload
 
     async def load_from_config(self, config: Config) -> None:
         """
@@ -661,8 +863,18 @@ class ServiceContext:
             logger.critical(f"Error initializing Live2D: {e}")
             logger.critical("Try to proceed without Live2D...")
 
+    @staticmethod
+    def _close_tts(engine: TTSInterface | None) -> None:
+        if engine is not None:
+            try:
+                engine.close()
+            except Exception as error:
+                logger.warning(f"Failed to close TTS engine ({type(error).__name__})")
+
     def init_asr(self, asr_config: ASRConfig) -> None:
-        if not self.asr_engine or (self.character_config.asr_config != asr_config):
+        if not self._character_asr_engine or (
+            self.character_config.asr_config != asr_config
+        ):
             logger.info(f"Initializing ASR: {asr_config.asr_model}")
             self.asr_engine = ASRFactory.get_asr_system(
                 asr_config.asr_model,
@@ -674,9 +886,11 @@ class ServiceContext:
             logger.info("ASR already initialized with the same config.")
 
     def init_tts(self, tts_config: TTSConfig) -> None:
-        if not self.tts_engine or (self.character_config.tts_config != tts_config):
+        if not self._character_tts_engine or (
+            self.character_config.tts_config != tts_config
+        ):
             logger.info(f"Initializing TTS: {tts_config.tts_model}")
-            previous_engine = self.tts_engine
+            previous_engine = self._character_tts_engine
             self.tts_engine = TTSFactory.get_tts_engine(
                 tts_config.tts_model,
                 **_engine_kwargs(tts_config, tts_config.tts_model.lower()),

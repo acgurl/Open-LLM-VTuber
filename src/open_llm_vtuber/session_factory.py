@@ -134,5 +134,12 @@ async def build_session_context(
     catalog = getattr(default_context_cache, "llm_catalog", None)
     if isinstance(catalog, LLMModelCatalog):
         session_service_context.llm_catalog = catalog
+        if (
+            default_context_cache.tts_engine is not None
+            and default_context_cache.asr_engine is not None
+        ):
+            session_service_context.base_speech_config = (
+                default_context_cache.character_config
+            )
         await session_service_context.sync_model_selection()
     return session_service_context

@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { fetchConfigs, switchConfig } from '../services/actions';
 import { useConnection } from '../stores/connection';
 import { useSettings } from '../stores/settings';
+import { useModels } from '../stores/models';
 import { TopBarPicker } from './TopBarPicker';
 
 const DOT_CLASS: Record<string, string> = {
@@ -22,6 +23,7 @@ export function CharacterPicker() {
   const configs = useSettings((s) => s.configs);
   const configFile = useSettings((s) => s.configFile);
   const switching = useSettings((s) => s.switching);
+  const modelSwitching = useModels((s) => s.pending !== null);
   const name = confName || t('app.title');
 
   // 服务端只回角色名；同名时优先标记本次连接中确认切到的文件。
@@ -48,7 +50,7 @@ export function CharacterPicker() {
       }))}
       selectedId={currentFile}
       switching={switching}
-      disabled={status !== 'online' || !confName}
+      disabled={status !== 'online' || !confName || modelSwitching}
       busy={busy}
       statusText={switching ? t('status.switching') : statusText}
       emptyHint={t(configs === null ? 'character.loading' : 'character.empty')}
