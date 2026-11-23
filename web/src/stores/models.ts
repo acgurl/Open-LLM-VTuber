@@ -1,10 +1,10 @@
 import { create } from 'zustand';
-import type { DefaultModelDisplay, ModelEntry, ModelKind } from '../protocol/types';
+import type { ModelEntry, ModelKind } from '../protocol/types';
 
 interface ModelCatalog {
   options: ModelEntry[];
   current: string | null; // null 表示跟随角色预设
-  characterDefault?: DefaultModelDisplay;
+  characterDefault?: ModelEntry;
 }
 
 interface ModelSwitch {
@@ -43,18 +43,18 @@ export const useModels = create<ModelsState>((set) => ({
   lastThinkingOn: {},
   // 异步目录刷新不是切换回执，不能把尚未完成的切换提前解锁。
   setList: (catalogs, thinking) =>
-    set((s) => ({ catalogs, thinking, ...remember(s, catalogs.llm.current, thinking) })),
+    set((s) => ({ catalogs, thinking, ...remember(s, catalogs.llm.current ?? catalogs.llm.characterDefault?.id ?? null, thinking) })),
   requestSwitch: (pending) => set({ pending }),
   confirmSwitch: (kind, current, thinking) => set((s) => ({
     catalogs: { ...s.catalogs, [kind]: { ...s.catalogs[kind], current } },
     pending: s.pending?.kind === kind ? null : s.pending,
-    ...(kind === 'llm' ? { thinking, ...remember(s, current, thinking) } : {}),
+    ...(kind === 'llm' ? { thinking, ...remember(s, current ?? s.catalogs.llm.characterDefault?.id ?? null, thinking) } : {}),
   })),
   cancelSwitch: (kind) => set((s) =>
     s.pending && (kind === undefined || s.pending.kind === kind) ? { pending: null } : s,
   ),
   setThinking: (thinking) => set((s) => ({
     thinking,
-    ...remember(s, s.catalogs.llm.current, thinking),
+    ...remember(s, s.catalogs.llm.current ?? s.catalogs.llm.characterDefault?.id ?? null, thinking),
   })),
 }));

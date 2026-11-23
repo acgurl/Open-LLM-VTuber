@@ -118,12 +118,18 @@ FastAPI（src/open_llm_vtuber/server.py）
 - [uv](https://docs.astral.sh/uv/)
 - Node.js 20+ 与 npm
 - `ffmpeg` 在 `PATH` 中
-- 描述所用 Live2D 模型的 `model_dict.json`
-- `characters/` 下的角色预设（默认模板引用 `mao_pro`）
+- 描述所用 Live2D 模型的 `model_dict.json`；默认角色引用其中的 `mao_pro` 条目。
+- 使用默认模型清单时：可访问的 Ollama 服务（`ollama pull qwen2.5:latest`）、可访问 Edge TTS 的网络，以及用于语音识别的 Groq API Key。
 
 ### 启动
 
+全新安装请在启动前复制三份最小模型清单，并为服务进程设置 `GROQ_API_KEY`，或在 `asr_models.yaml` 中填写密钥。
+如需换用其他提供商，先配置模型条目，再修改角色引用，详见[模型清单](#模型清单)。
+
 ```bash
+cp config_templates/llm_models.default.yaml llm_models.yaml
+cp config_templates/tts_models.default.yaml tts_models.yaml
+cp config_templates/asr_models.default.yaml asr_models.yaml
 uv sync
 
 cd web
@@ -140,6 +146,7 @@ uv run run_server.py
 
 - 如果不存在 `conf.yaml`，会从 `config_templates/conf.default.yaml` 复制一份。
 - 如果不存在 `mcp_servers.json`，会从 `config_templates/mcp_servers.default.json` 复制一份。
+- **必须手动准备 LLM、TTS、ASR 三份清单**：服务不会自动创建，请按上面的步骤复制模板。
 - **不会自动创建 `model_dict.json`。** 它是每个部署自己的模型清单，按设计不纳入版本管理，请在启动
   前放到项目根目录。一个最小条目如下：
 
@@ -166,10 +173,13 @@ uv run run_server.py
 
 | 路径 | 用途 | 是否纳入 Git |
 | --- | --- | --- |
-| `conf.yaml` | 主配置：host/port、存储、认证、agent、LLM、ASR、TTS、VAD、默认角色 | 否 |
-| `characters/*.yaml` | 角色预设（人设、模型名、头像、可选的引擎覆盖） | 大部分否 |
+| `conf.yaml` | 主配置：host/port、存储、认证、Agent 行为、默认角色及其模型引用 | 否 |
+| `characters/*.yaml` | 角色预设（人设、Live2D 模型名、头像、必填的模型引用、可选的 `allowed_users`） | 大部分否 |
 | `model_dict.json` | Live2D 模型元数据：URL、缩放、口型增益、表情/动作映射 | 否 |
 | `mcp_servers.json` | 部署级 MCP 服务器，可能含 token | 否 |
+| `llm_models.yaml` | 必需的语言模型清单，供角色和选择器使用；可能含 API Key | 否 |
+| `tts_models.yaml` | 必需的语音合成清单；可能含 API Key | 否 |
+| `asr_models.yaml` | 必需的语音识别清单；可能含 API Key | 否 |
 | `web/` | 前端源码；`npm run build` 输出到 `web/dist` | 是 |
 | `data/storage/` | SQLite 历史与旧版导入/归档数据 | 否 |
 | `avatars/`、`backgrounds/`、`live2d-models/`、`models/` | 运行时资源，只有一部分纳入版本管理 | 部分 |
@@ -258,8 +268,20 @@ MCP 分为两层：
 docker build -f dockerfile -t open-llm-vtuber:local .
 ```
 
-准备一个至少包含 `conf.yaml` 的 `conf/` 目录。可选地把 `model_dict.json`、`characters/`、
-`live2d-models/`、`avatars/`、`backgrounds/` 放进 `conf/`，启动脚本会把它们链接到 `/app`。然后运行：
+准备一个包含 `conf.yaml` 和三份模型清单的 `conf/` 目录。首次部署可执行：
+
+```bash
+mkdir -p conf
+cp config_templates/conf.ZH.default.yaml conf/conf.yaml
+cp config_templates/llm_models.default.yaml conf/llm_models.yaml
+cp config_templates/tts_models.default.yaml conf/tts_models.yaml
+cp config_templates/asr_models.default.yaml conf/asr_models.yaml
+```
+
+然后配置提供商。如果 Ollama 在容器外运行，请确保容器能访问 LLM 清单中的 `base_url`。将 `GROQ_API_KEY`
+传入容器（例如先在宿主机导出，再给 `docker run` 加上 `-e GROQ_API_KEY`），或在挂载的
+`conf/asr_models.yaml` 中配置密钥。也可以把 `model_dict.json`、`characters/`、`live2d-models/`、
+`avatars/`、`backgrounds/` 放进 `conf/`，启动脚本会把它们链接到 `/app`。然后运行：
 
 ```bash
 docker run -d --name open-llm-vtuber --restart unless-stopped --network host \
@@ -309,7 +331,63 @@ Git 中实际跟踪的那一部分资源。
 | `en_unhelpful_ai.yaml` | unhelpful_ai | `mao_pro` |
 
 新增角色时复制一份预设，修改 `character_name`、`conf_uid`、`live2d_model_name` 和
-`persona_prompt`，再把文件放进 `characters/`。前端下次 `fetch-configs` 时会自动发现它。
+`persona_prompt`，并明确填写三个 `model_refs`，再保存到 `characters/`。可参考[角色配置示例](../characters/README.md)。
+
+### 模型清单
+
+三份清单均必需，可在 `conf.yaml` 中分别设置路径。相对路径以服务进程的工作目录为准。
+
+| `system_config` 配置项 | 默认文件 | 顶层键 | 模板 |
+| --- | --- | --- | --- |
+| `llm_models_file` | `llm_models.yaml` | `models` | [默认](../config_templates/llm_models.default.yaml) · [示例](../config_templates/llm_models.example.yaml) |
+| `tts_models_file` | `tts_models.yaml` | `tts_models` | [默认](../config_templates/tts_models.default.yaml) · [示例](../config_templates/tts_models.example.yaml) |
+| `asr_models_file` | `asr_models.yaml` | `asr_models` | [默认](../config_templates/asr_models.default.yaml) · [示例](../config_templates/asr_models.example.yaml) |
+
+`conf.yaml` 的默认角色和 `characters/*.yaml` 中的**每个**角色都必须明确填写三个模型 ID，即使与默认角色相同。
+必需引用缺失或无效时，角色加载失败，不会回退到内联配置或旧的合并清单。
+
+```yaml
+character_config:
+  model_refs:
+    llm: local-qwen
+    tts: edge-default
+    asr: groq-whisper
+```
+
+连接器的 `system_config.connectors.instances[].character` 是对默认角色的部分覆盖：不写 `model_refs` 则全部继承，
+只写部分项目则仅覆盖对应的模型 ID。
+
+- LLM 参数直接写在 `models` 的条目下；语音条目的 `settings` 要填写提供商所需的参数。`pyttsx3_tts` 无需参数，写 `settings: {}`。
+- 运行时按需独立检查各清单是否变动。某个文件格式错误时，保留该文件上一次成功加载的版本，不影响其他清单更新。
+- 网页端可按账号覆盖角色的默认模型。选回“角色默认”时，使用该角色对应的模型引用。
+- 模型可以用 `allowed_users` 限制为指定的内部用户 ID 或已验证的登录邮箱。公开角色（包括默认角色）只能引用公开模型；
+  受限角色引用受限模型时，角色允许名单的每一项都必须也出现在模型允许名单中（忽略大小写和首尾空白）。
+- 运行时清单可能包含服务地址和密钥，请勿提交到 Git。`${ENV_VAR}` 从服务进程的环境变量取值。
+- 使用模型清单的角色应配置 `basic_memory_agent`；`hume_ai_agent` 无法使用清单引用的 LLM，因此不支持用作此配置下的角色 Agent。
+
+#### 从合并模型清单升级
+
+**启动新版前**，先备份 `conf.yaml`、`characters/` 和现有的合并清单，不要用默认模板覆盖已有条目。
+
+1. 将 `models:` 及其条目留在 `llm_models.yaml`（或原 `llm_models_file` 指向的文件）。
+2. 将完整的 `tts_models:` 小节复制到 `tts_models.yaml`，将完整的 `asr_models:` 小节复制到 `asr_models.yaml`，
+   各自保留为顶层键，再从 LLM 文件删除这两个小节。Docker 部署时，将默认文件名的三份清单放在 `conf/`。
+3. 不要改动任何条目的 `id`，以保留角色引用和账号已保存的选择。只有在使用非默认路径时，才需要设置
+   `system_config.tts_models_file` 和 `system_config.asr_models_file`。
+
+服务不会自动拆分旧清单，也不会从 LLM 文件中回读语音预设。
+
+#### 从旧版内联模型配置升级
+
+备份 `conf.yaml`、`characters/` 和已有清单，在**启动新版前**手动迁移，不要用最小模板覆盖已有条目。
+
+1. 将每个角色原先实际使用的提供商参数迁入对应的清单条目。把旧的 `llm_provider` 在 `agent_config.llm_configs`
+   中对应的参数直接写到 LLM 条目下；将 `tts_config` / `asr_config` 中选中的提供商参数放进语音条目的 `settings`。
+   已有清单中依赖继承的语音条目也要补齐 `settings`。
+2. 给默认角色及每个独立角色填写 `model_refs.llm`、`model_refs.tts`、`model_refs.asr`，删除旧的内联模型配置。
+   保留 Agent 行为设置和 `tts_preprocessor_config`。如果连接器原来内联覆盖了模型，改为在 `character.model_refs` 中引用对应的清单条目。
+
+服务不会自动将旧的内联提供商参数转换为清单条目；仅复制最小模板并不能迁移已有部署。
 
 ## 开发
 
@@ -348,7 +426,7 @@ src/open_llm_vtuber/
   config_manager/             带类型校验的 YAML 配置
 web/                          React + Vite 前端源码
 characters/                   角色预设
-config_templates/             默认 conf.yaml 与 mcp_servers.json
+config_templates/             主配置、模型清单和 MCP 服务器模板
 tests/                        unittest 测试集
 ```
 
@@ -366,8 +444,8 @@ tests/                        unittest 测试集
 - OIDC 模式下，会话 Cookie 为 `HttpOnly`、`Secure`（可配置）、`SameSite=Lax`；没有有效会话的
   WebSocket 会以 `4401` 关闭，跨域 WebSocket 以 `1008` 关闭。
 - 生成的 TTS 文件位于 `/cache/<user_id>/`，已登录用户无法获取其他用户的文件。
-- `conf.yaml`、`mcp_servers.json`、`model_dict.json`、`data/` 以及大部分模型/角色资源都被 Git 和
-  `.dockerignore` 排除。不要把 API key 或 MCP token 写进受版本管理的文件。
+- `conf.yaml`、`llm_models.yaml`、`tts_models.yaml`、`asr_models.yaml`、`mcp_servers.json`、`model_dict.json`、
+  `data/` 以及大部分模型/角色资源都被 Git 和 `.dockerignore` 排除。不要把 API key 或 MCP token 写进受版本管理的文件。
 - 云 ASR/TTS 会把音频或文本发送给第三方。ASR 只有云端选项；TTS 无法接受时请改用自建服务（GPT-SoVITS、CosyVoice、XTTS、Spark）。
 - 默认的 single 模式没有认证。不要在没有任何反向代理或访问控制的情况下直接暴露到公网；需要公开
   访问时请启用 OIDC。
@@ -377,7 +455,7 @@ tests/                        unittest 测试集
 - 没有桌面客户端和桌宠模式，本 fork 只提供网页端。
 - agent 工作记忆按 WebSocket 连接隔离；可以从 SQLite 重新载入历史，但并发标签页之间不共享记忆。
 - OIDC 没有 refresh token；会话过期后需要重新登录。
-- 大部分配置修改需要重启；只有角色/背景切换和用户级 MCP 能在运行时生效。
+- 大部分配置修改需要重启。清单内容在运行时独立刷新；修改清单路径仍需要重启。
 - 浏览器本地 MCP 受浏览器权限限制，无法访问任意内网服务。
 - B 站直播（`scripts/run_bilibili_live.py`）依赖 `blivedm`，本仓库不内置也不作为依赖发布：需手动将 <https://github.com/xfgryujk/blivedm> 克隆到仓库根目录的 `blivedm/`，并安装 `bilibili` extra（`uv sync --extra bilibili`）。Docker 镜像不包含它。
 - Live2D 示例模型有独立的许可条款（见下）。

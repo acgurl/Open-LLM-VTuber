@@ -120,7 +120,7 @@ The codebase uses the missing `_cleanup_failed_connection` method pattern - when
 - **Docs**: `docs/` — `BACKEND_API.md` (WS/HTTP contract), `HANDOFF.md` (production deployment + change log), `README.CN.md`, `audits/`
 - **Config upgrade/sync** (runs on every start): `src/open_llm_vtuber/upgrade_codes/`
 - **Utility scripts**: `scripts/` (Bilibili live client, Live2D cache warmer)
-- **Runtime paths kept at the repo root on purpose**: `conf.yaml`, `model_dict.json`, `mcp_servers.json`, `llm_models.yaml`, `characters/`, `avatars/`, `backgrounds/`, `live2d-models/`, `prompts/`, `web_tool/` — the server resolves them relative to the working directory and the container start script symlinks `/app/conf/*` onto them
+- **Runtime paths kept at the repo root on purpose**: `conf.yaml`, `model_dict.json`, `mcp_servers.json`, `llm_models.yaml`, `tts_models.yaml`, `asr_models.yaml`, `characters/`, `avatars/`, `backgrounds/`, `live2d-models/`, `prompts/`, `web_tool/` — the server resolves them relative to the working directory and the container start script symlinks `/app/conf/*` onto them
 
 ## Development Guidelines
 

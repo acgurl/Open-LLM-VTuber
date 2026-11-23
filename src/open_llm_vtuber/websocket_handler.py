@@ -154,6 +154,29 @@ class WebSocketHandler:
             return True
         return self.client_users.get(client_uid) == user_id
 
+    async def resolve_asr_context(
+        self, client_uid: str, user_id: str
+    ) -> ServiceContext | None:
+        """Find an owned session and refresh only ASR when it has no active turn."""
+        if not self.has_client(client_uid, user_id):
+            return None
+        context = self.client_contexts.get(client_uid)
+        if context is None:
+            return None
+
+        def still_connected() -> bool:
+            return (
+                self.has_client(client_uid, user_id)
+                and self.client_contexts.get(client_uid) is context
+            )
+
+        def can_apply() -> bool:
+            return still_connected() and not self._speech_turn_running(client_uid)
+
+        if can_apply():
+            await context.sync_asr_choice(can_apply=can_apply)
+        return context if still_connected() else None
+
     @staticmethod
     async def _send_json(websocket: WebSocket, payload: dict, **dumps_kwargs) -> None:
         await websocket.send_text(json.dumps(payload, **dumps_kwargs))
@@ -796,8 +819,9 @@ class WebSocketHandler:
         context = self.client_contexts[client_uid]
         if not self._group_turn_running(client_uid):
             # Refresh speech overrides only when no synthesis is using them.
-            task = self.current_conversation_tasks.get(client_uid)
-            await context.sync_model_selection(sync_speech=task is None or task.done())
+            await context.sync_model_selection(
+                sync_speech=not self._speech_turn_running(client_uid)
+            )
         await self._send_json(
             websocket, context.model_list_payload(), ensure_ascii=False
         )
@@ -858,10 +882,7 @@ class WebSocketHandler:
     ) -> None:
         context = self.client_contexts[client_uid]
         model_id = data.get("model")
-        task = self.current_conversation_tasks.get(client_uid)
-        deferred = self._group_turn_running(client_uid) or (
-            task is not None and not task.done()
-        )
+        deferred = self._speech_turn_running(client_uid)
         try:
             switched = (
                 "model" in data
@@ -907,6 +928,12 @@ class WebSocketHandler:
             )
         await self._send_json(
             websocket, context.model_list_payload(), ensure_ascii=False
+        )
+
+    def _speech_turn_running(self, client_uid: str) -> bool:
+        task = self.current_conversation_tasks.get(client_uid)
+        return (task is not None and not task.done()) or self._group_turn_running(
+            client_uid
         )
 
     def _group_turn_running(self, client_uid: str) -> bool:

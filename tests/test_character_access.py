@@ -15,6 +15,11 @@ from open_llm_vtuber.config_manager.utils import (
 )
 
 
+DEFAULT_MODEL_REFS_YAML = (
+    "  model_refs: {llm: local-qwen, tts: edge-default, asr: groq-whisper}\n"
+)
+
+
 class IsUserAllowedTests(unittest.TestCase):
     def test_missing_or_empty_list_is_public(self) -> None:
         for value in (None, [], "", [""], ["   "]):
@@ -58,17 +63,18 @@ class FilteredScanTests(unittest.TestCase):
         self.alts.mkdir()
 
         (self.root / "conf.yaml").write_text(
-            "character_config:\n  conf_name: Default\n  allowed_users: ['only-owner']\n",
+            "character_config:\n  conf_name: Default\n  allowed_users: ['only-owner']\n"
+            + DEFAULT_MODEL_REFS_YAML,
             encoding="utf-8",
         )
         (self.alts / "open.yaml").write_text(
-            "character_config:\n  conf_name: Open\n",
+            "character_config:\n  conf_name: Open\n" + DEFAULT_MODEL_REFS_YAML,
             encoding="utf-8",
         )
         (self.alts / "private.yaml").write_text(
             "character_config:\n"
             "  conf_name: Private\n"
-            "  allowed_users: ['u1', 'Alice']\n",
+            "  allowed_users: ['u1', 'Alice']\n" + DEFAULT_MODEL_REFS_YAML,
             encoding="utf-8",
         )
         (self.alts / "broken.yaml").write_text(
@@ -136,10 +142,17 @@ class SwitchAccessTests(unittest.IsolatedAsyncioTestCase):
         self.alt_path = self.presets / "private.yaml"
         self.alt_path.write_text("character_config: {}\n", encoding="utf-8")
 
-        self.base_character_config = {"conf_uid": "base", "character_name": "Base"}
+        refs = {"llm": "local-qwen", "tts": "edge-default", "asr": "groq-whisper"}
+        self.base_character_config = {
+            "conf_uid": "base",
+            "character_name": "Base",
+            "allowed_users": ["only-owner"],
+            "model_refs": refs.copy(),
+        }
         self.alt_character_config = {
             "character_name": "Private",
             "allowed_users": ["u1"],
+            "model_refs": refs.copy(),
         }
 
         self.context = ServiceContext()
@@ -219,7 +232,13 @@ class SwitchAccessTests(unittest.IsolatedAsyncioTestCase):
         validate_config, load_from_config = await self.run_switch()
 
         validate_config.assert_called_once()
-        load_from_config.assert_awaited_once()
+        self.assertEqual(
+            validate_config.call_args.args[0]["character_config"]["allowed_users"],
+            ["alice@example.com"],
+        )
+        load_from_config.assert_awaited_once_with(
+            validate_config.return_value, public=False
+        )
         self.assertEqual(self.websocket.sent[-1]["type"], "config-switched")
 
     async def test_allows_switch_for_public_preset(self) -> None:
@@ -230,7 +249,13 @@ class SwitchAccessTests(unittest.IsolatedAsyncioTestCase):
         validate_config, load_from_config = await self.run_switch()
 
         validate_config.assert_called_once()
-        load_from_config.assert_awaited_once()
+        self.assertEqual(
+            validate_config.call_args.args[0]["character_config"]["allowed_users"], []
+        )
+        load_from_config.assert_awaited_once_with(
+            validate_config.return_value, public=False
+        )
+        self.assertEqual(self.websocket.sent[-1]["type"], "config-switched")
 
 
 @unittest.skipUnless(HAS_RUNTIME, "Full runtime dependencies are unavailable")
@@ -242,13 +267,16 @@ class FetchConfigsHandlerTests(unittest.IsolatedAsyncioTestCase):
         self.alts.mkdir()
 
         (self.root / "conf.yaml").write_text(
-            "character_config:\n  conf_name: Default\n", encoding="utf-8"
+            "character_config:\n  conf_name: Default\n" + DEFAULT_MODEL_REFS_YAML,
+            encoding="utf-8",
         )
         (self.alts / "open.yaml").write_text(
-            "character_config:\n  conf_name: Open\n", encoding="utf-8"
+            "character_config:\n  conf_name: Open\n" + DEFAULT_MODEL_REFS_YAML,
+            encoding="utf-8",
         )
         (self.alts / "private.yaml").write_text(
-            "character_config:\n  conf_name: Private\n  allowed_users: ['u1']\n",
+            "character_config:\n  conf_name: Private\n  allowed_users: ['u1']\n"
+            + DEFAULT_MODEL_REFS_YAML,
             encoding="utf-8",
         )
 
@@ -261,12 +289,11 @@ class FetchConfigsHandlerTests(unittest.IsolatedAsyncioTestCase):
 
     async def fetch_filenames(self, user_id: str, display_name: str):
         handler = WebSocketHandler(default_context_cache=Mock())
-        handler.client_contexts["client"] = SimpleNamespace(
-            system_config=SimpleNamespace(config_alts_dir=str(self.alts)),
-            character_allowed=lambda character_config: is_user_allowed(
-                character_config.get("allowed_users"), user_id, display_name
-            ),
-        )
+        context = ServiceContext()
+        context.system_config = SimpleNamespace(config_alts_dir=str(self.alts))
+        context.user_id = user_id
+        context.user_display_name = display_name
+        handler.client_contexts["client"] = context
         websocket = FakeWebSocket()
 
         await handler._handle_fetch_configs(websocket, "client", {})

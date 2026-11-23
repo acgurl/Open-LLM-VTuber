@@ -132,6 +132,9 @@ class ConfigSynchronizer:
         def merge(d_user, d_default, path=""):
             for k, v in d_default.items():
                 current_path = f"{path}.{k}" if path else k
+                # Existing deployments must select their own catalog entries.
+                if current_path == "character_config.model_refs":
+                    continue
                 if k not in d_user:
                     d_user[k] = v
                     new_keys.append(current_path)

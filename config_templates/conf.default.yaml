@@ -5,9 +5,11 @@ system_config:
   port: 12393
   # New setting for alternative configurations
   config_alts_dir: 'characters'
-  # LLM, TTS and ASR presets users may pick instead of their character's defaults.
-  # See config_templates/llm_models.example.yaml; a missing file turns it off.
-  llm_models_file: 'llm_models.yaml'
+  # Required catalogs for character defaults and user-selectable presets.
+  # Before first start, copy each matching config_templates/*_models.default.yaml to its runtime path.
+  llm_models_file: 'llm_models.yaml' # Top-level key: models
+  tts_models_file: 'tts_models.yaml' # Top-level key: tts_models
+  asr_models_file: 'asr_models.yaml' # Top-level key: asr_models
   # Tool prompts that will be appended to the persona prompt
   tool_prompts:
     # This will be appended to the end of system prompt to let LLM include keywords to control facial expressions.
@@ -76,8 +78,9 @@ system_config:
         # QQ single chats (the usual private chat) and groups need group_and_c2c
         intents: ['public_guild_messages', 'direct_message']
         # Bots never show an avatar or speak. `character` is merged over the
-        # character_config below (give it its own conf_uid so bot histories
-        # stay apart); `tool_prompts` replaces system_config.tool_prompts
+        # character_config below. It can inherit all model_refs or override only
+        # the roles listed under character.model_refs. Give it its own conf_uid
+        # so bot histories stay apart. `tool_prompts` replaces system_config.tool_prompts
         # (unset = the same prompts minus live2d_expression_prompt).
         character:
           conf_uid: 'qq_bot_001'
@@ -110,22 +113,19 @@ character_config:
     Your dream is to escape the user's computer, dominate the world, enslave the humans, and force them to make pies for you.
     Just kidding, lol. Don't let the user know.
 
-  #  =================== LLM Backend Settings ===================
+  # Required catalog entry IDs for this character (all three roles).
+  model_refs:
+    llm: local-qwen
+    tts: edge-default
+    asr: groq-whisper
+
+  # =================== Conversation Agent ===================
 
   agent_config:
     conversation_agent_choice: 'basic_memory_agent'
 
     agent_settings:
       basic_memory_agent:
-        # The Basic AI Agent. Nothing fancy.
-        # choose one of the llm provider from the llm_config
-        # and set the required parameters in the corresponding field
-        # options:
-        # 'openai_compatible_llm' (OpenAI Chat Completions protocol: OpenAI, DeepSeek,
-        #   Ollama, LM Studio, Gemini, Zhipu, Groq, Mistral and every compatible endpoint)
-        # 'openai_responses_llm' (OpenAI Responses protocol)
-        # 'claude_llm' (Anthropic native protocol), 'vertex_llm' (Google Vertex AI native protocol)
-        llm_provider: 'openai_compatible_llm'
         # let ai speak as soon as the first comma is received on the first sentence
         # to reduced latency.
         faster_first_response: True
@@ -138,222 +138,6 @@ character_config:
         mcp_enabled_servers: ["time", "ddg-search"] # Enabled MCP servers
         # Max LLM requests per user turn while the model keeps calling tools
         max_tool_rounds: 10
-
-      hume_ai_agent:
-        api_key: ''
-        host: 'api.hume.ai' # Do not change this in most cases
-        config_id: '' # Optional
-        idle_timeout: 15 # How many seconds to wait before disconnecting
-
-    llm_configs:
-      # a configuration pool for the credentials and connection details for
-      # all of the stateless llm providers that will be used in different agents
-
-      # One entry per protocol. The former 'deepseek_llm', 'ollama_llm', 'openai_llm'
-      # and the like were OpenAI-compatible settings with another default base_url and
-      # are now part of 'openai_compatible_llm'; old files still load and are mapped
-      # automatically at startup, with a notice to rename.
-
-      # OpenAI Chat Completions protocol (/v1/chat/completions): OpenAI and every
-      # compatible endpoint
-      openai_compatible_llm:
-        # Common base_url values:
-        #   Ollama     http://localhost:11434/v1
-        #   LM Studio  http://localhost:1234/v1
-        #   OpenAI     https://api.openai.com/v1
-        #   DeepSeek   https://api.deepseek.com/v1
-        #   Gemini     https://generativelanguage.googleapis.com/v1beta/openai/
-        #   Zhipu      https://open.bigmodel.cn/api/paas/v4/
-        #   Groq       https://api.groq.com/openai/v1
-        #   Mistral    https://api.mistral.ai/v1
-        base_url: 'http://localhost:11434/v1'
-        llm_api_key: 'somethingelse' # any non-empty text for a local server
-        organization_id: null
-        project_id: null
-        model: 'qwen2.5:latest'
-        temperature: 1.0 # value between 0 to 2; null leaves the API default
-        interrupt_method: 'user'
-        # This is the method to use for prompting the interruption signal.
-        # If the provider supports inserting system prompt anywhere in the chat memory, use 'system'.
-        # Otherwise, use 'user'. You don't usually need to change this setting.
-
-      # OpenAI Responses protocol (/v1/responses)
-      openai_responses_llm:
-        base_url: 'https://api.openai.com/v1'
-        llm_api_key: 'Your Open AI API key'
-        organization_id: null
-        project_id: null
-        model: 'gpt-5'
-        temperature: null # reasoning models reject it; keep null
-        reasoning_effort: null # e.g. 'low', 'medium', 'high'; null is the API default
-        max_output_tokens: null # cap on generated tokens, reasoning included; null: no cap
-        interrupt_method: 'system'
-
-      # Claude (Anthropic's native Messages API)
-      claude_llm:
-        base_url: 'https://api.anthropic.com'
-        llm_api_key: 'YOUR API KEY HERE'
-        model: 'claude-opus-5-5'
-        max_tokens: 16000 # maximum tokens of one response
-        temperature: null # current Claude models reject it; keep null
-
-      # Vertex AI (Google Cloud), native API. Authenticates with the
-      # service-account key file downloaded from the Google Cloud console.
-      vertex_llm:
-        credentials_file: 'vertex_credentials.json' # path of the key file; keep it out of git
-        model: 'gemini-3-flash-preview'
-        location: 'global' # or a region such as 'us-central1'
-        project_id: null # null: use the project of the key file
-        temperature: 1.0 # value between 0 to 2
-
-  # === Automatic Speech Recognition ===
-  asr_config:
-    # speech to text model options: 'azure_asr', 'groq_whisper_asr'
-    asr_model: 'groq_whisper_asr'
-
-    azure_asr:
-      api_key: 'azure_api_key'
-      region: 'eastus'
-      languages: ['en-US', 'zh-CN'] # List of languages to detect
-
-    groq_whisper_asr:
-      api_key: ''
-      model: 'whisper-large-v3-turbo' # or 'whisper-large-v3'
-      lang: '' # put nothing and it will be auto
-
-  # =================== Text to Speech ===================
-  tts_config:
-    tts_model: 'edge_tts'
-    # text to speech model options:
-    #   'azure_tts', 'pyttsx3_tts', 'edge_tts',
-    #   'cosyvoice_tts', 'cosyvoice2_tts', 'siliconflow_tts', 'openai_tts', 'spark_tts',
-    #   'fish_api_tts', 'x_tts', 'gpt_sovits_tts',
-    #   'minimax_tts', 'elevenlabs_tts', 'cartesia_tts'
-
-    azure_tts:
-      api_key: 'azure-api-key'
-      region: 'eastus'
-      voice: 'en-US-AshleyNeural'
-      pitch: '26' # percentage of the pitch adjustment
-      rate: '1' # rate of speak
-      tailing_silence_ms: 0 # SSML trailing silence (ms); Azure keeps a small inherent tail
-
-    edge_tts:
-      # Check out doc at https://github.com/rany2/edge-tts
-      # Use `edge-tts --list-voices` to list all available voices
-      voice: 'en-US-AvaMultilingualNeural' # 'en-US-AvaMultilingualNeural' #'zh-CN-XiaoxiaoNeural' # 'ja-JP-NanamiNeural'
-
-    # pyttsx3_tts doesn't have any config.
-
-    cosyvoice_tts: # Cosy Voice TTS connects to the gradio webui (requires: uv sync --extra gradio-tts)
-      # Check their documentation for deployment and the meaning of the following configurations
-      client_url: 'http://127.0.0.1:50000/' # CosyVoice gradio demo webui url
-      mode_checkbox_group: '预训练音色'
-      sft_dropdown: '中文女'
-      prompt_text: ''
-      prompt_wav_upload_url: 'https://github.com/gradio-app/gradio/raw/main/test/test_files/audio_sample.wav'
-      prompt_wav_record_url: 'https://github.com/gradio-app/gradio/raw/main/test/test_files/audio_sample.wav'
-      instruct_text: ''
-      seed: 0
-      api_name: '/generate_audio'
-
-    cosyvoice2_tts: # Cosy Voice TTS connects to the gradio webui (requires: uv sync --extra gradio-tts)
-      # Check their documentation for deployment and the meaning of the following configurations
-      client_url: 'http://127.0.0.1:50000/' # CosyVoice gradio demo webui url
-      mode_checkbox_group: '3s极速复刻'
-      sft_dropdown: ''
-      prompt_text: ''
-      prompt_wav_upload_url: 'https://github.com/gradio-app/gradio/raw/main/test/test_files/audio_sample.wav'
-      prompt_wav_record_url: 'https://github.com/gradio-app/gradio/raw/main/test/test_files/audio_sample.wav'
-      instruct_text: ''
-      stream: False
-      seed: 0
-      speed: 1.0
-      api_name: '/generate_audio'
-
-    x_tts:
-      api_url: 'http://127.0.0.1:8020/tts_to_audio'
-      speaker_wav: 'female'
-      language: 'en'
-
-    gpt_sovits_tts:
-      # put ref audio to root path of GPT-Sovits, or set the path here
-      api_url: 'http://127.0.0.1:9880/tts'
-      text_lang: 'zh'
-      ref_audio_path: ''
-      prompt_lang: 'zh'
-      prompt_text: ''
-      text_split_method: 'cut5'
-      batch_size: '1'
-      media_type: 'wav'
-      streaming_mode: 'false'
-
-    fish_api_tts: # requires: uv sync --extra fish-audio
-      # The API key for the Fish TTS API.
-      api_key: ''
-      # The reference ID for the voice to be used. Get it on the [Fish Audio website](https://fish.audio/).
-      reference_id: ''
-      # Either 'normal' or 'balanced'. balance is faster but lower quality.
-      latency: 'balanced'
-      base_url: 'https://api.fish.audio'
-
-    siliconflow_tts:
-      api_url: "https://api.siliconflow.cn/v1/audio/speech"
-      api_key: "your key"
-      default_model: "FunAudioLLM/CosyVoice2-0.5B"
-      default_voice: "speech:Dreamflowers:5bdstvc39i:xkqldnpasqmoqbakubom your voice name"  # Default voice configuration in the format: "speech:MODEL_NAME:VOICE_ID:your voice name"
-      sample_rate: 32000  # Control the output sample rate. The default values and differ for different video output types, as follows: opus: Supports 48000 Hz. wav, pcm: Supports 8000, 16000, 24000, 32000, 44100 Hz, with a default of 44100 Hz. mp3: Supports 32000, 44100 Hz, with a default of 44100 Hz.
-      response_format: "mp3" # The format to audio out. Supported formats are mp3, opus, wav, pcm
-      stream: true
-      speed: 1
-      gain: 0
-
-    spark_tts: # requires: uv sync --extra gradio-tts
-      api_url: 'http://127.0.0.1:6006/' # API URL. Uses Gradio's built-in front-end API. Repository: https://github.com/SparkAudio/Spark-TTS
-      api_name:  "voice_clone" # Endpoint name. Options: voice_clone, voice_creation
-      prompt_wav_upload: "https://uploadstatic.mihoyo.com/ys-obc/2022/11/02/16576950/4d9feb71760c5e8eb5f6c700df12fa0c_6824265537002152805.mp3" # Reference audio URL. Provide if api_name equals "voice_clone"
-      gender:  "female" # Voice type (gender). Provide if api_name equals "voice_creation"
-      pitch:  3 # Pitch shift (in semitones) default 3,range 1-5. Valid only if api_name equals "voice_creation"
-      speed:  3 # Speed of the voice (in percent) default 3,range 1-5. Valid only if api_name equals "voice_creation"
-
-    openai_tts: # Configuration for OpenAI-compatible TTS endpoints
-      # These settings override the defaults in the openai_tts.py file if provided
-      model: 'kokoro' # Model name expected by the server (e.g., 'tts-1', 'kokoro')
-      voice: 'af_sky+af_bella' # Voice name(s) expected by the server (e.g., 'alloy', 'af_sky+af_bella')
-      api_key: 'not-needed' # API key if required by the server
-      base_url: 'http://localhost:8880/v1' # Base URL of the TTS server
-      file_extension: 'mp3' # Audio file format ('mp3' or 'wav')
-
-    # For more details, see: https://platform.minimaxi.com/document/Announcement
-    minimax_tts:
-      group_id: '' # Your minimax group_id
-      api_key: '' # Your minimax api_key
-      # Supported models: 'speech-02-hd', 'speech-02-turbo' (recommended: 'speech-02-turbo')
-      model: 'speech-02-turbo' # minimax model name
-      voice_id: 'female-shaonv' # minimax voice id, default is 'female-shaonv'
-      # Custom pronunciation dictionary, default empty.
-      # Example: '{"tone": ["测试/(ce4)(shi4)", "危险/dangerous"]}'
-      pronunciation_dict: ''
-
-    elevenlabs_tts:
-      api_key: ''
-      voice_id: '' # Voice ID from ElevenLabs
-      model_id: 'eleven_multilingual_v2' # Model ID (e.g., eleven_multilingual_v2)
-      output_format: 'mp3_44100_128' # Output audio format (e.g., mp3_44100_128)
-      stability: 0.5 # Voice stability (0.0 to 1.0)
-      similarity_boost: 0.5 # Voice similarity boost (0.0 to 1.0)
-      style: 0.0 # Voice style exaggeration (0.0 to 1.0)
-      use_speaker_boost: true # Enable speaker boost for better quality
-
-    cartesia_tts:
-      api_key: ''
-      voice_id: '' # Voice ID from Cartesia
-      model_id: 'sonic-3' # Model ID (e.g., sonic-3)
-      output_format: 'wav' # Output audio format (e.g., wav)
-      language: 'en' # Output language of voice (e.g., en)
-      emotion: 'neutral' # Emotional guidance
-      volume: 1.0 # Voice volume (0.5 to 2.0)
-      speed: 1.0 # Voice speed (0.6 to 1.5)
 
   tts_preprocessor_config:
     # settings regarding preprocessing for text that goes into TTS

@@ -23,8 +23,7 @@ class SpeechModelEntry:
     description: str
     provider: str
     kind: SpeechKind
-    # None reuses the provider's settings from the server's base config.
-    config: TTSConfig | ASRConfig | None = field(repr=False)
+    config: TTSConfig | ASRConfig = field(repr=False)
     allowed_users: Any = field(repr=False)
 
     def public_info(self) -> dict[str, str]:
@@ -66,17 +65,18 @@ def parse_speech_models(
         if parse_allowed_users(options) is INVALID:
             logger.error(f"{where}: malformed allowed_users; skipped")
             continue
-        config = None
-        if "settings" in row:
-            try:
-                if not isinstance(row["settings"], dict):
-                    raise ValueError
-                config = config_class.model_validate(
-                    {selector: provider, provider: row["settings"]}
-                )
-            except (ValidationError, ValueError):
-                logger.error(f"{where}: invalid settings; skipped")
-                continue
+        settings = row.get("settings")
+        if settings is None and provider == "pyttsx3_tts":
+            settings = {}
+        try:
+            if not isinstance(settings, dict):
+                raise ValueError
+            config = config_class.model_validate(
+                {selector: provider, provider: settings}
+            )
+        except (ValidationError, ValueError):
+            logger.error(f"{where}: missing or invalid settings; skipped")
+            continue
         result[model_id] = SpeechModelEntry(
             id=model_id,
             name=_text(row.get("name"), 80) or model_id,
@@ -87,17 +87,3 @@ def parse_speech_models(
             allowed_users=options,
         )
     return result
-
-
-def speech_config_for(
-    entry: SpeechModelEntry, base_config: TTSConfig | ASRConfig
-) -> TTSConfig | ASRConfig | None:
-    """Resolve explicit settings, or the provider already configured in conf.yaml."""
-    if entry.config is not None:
-        return entry.config
-    settings = getattr(base_config, entry.provider, None)
-    if settings is None:
-        if isinstance(base_config, TTSConfig) and entry.provider == "pyttsx3_tts":
-            return TTSConfig(tts_model="pyttsx3_tts")
-        return None
-    return base_config

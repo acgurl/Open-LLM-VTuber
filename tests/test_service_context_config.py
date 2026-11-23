@@ -6,7 +6,12 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 from open_llm_vtuber import service_context as service_context_module
+from open_llm_vtuber.config_manager import read_yaml, validate_config
+from open_llm_vtuber.llm_catalog import LLMModelCatalog
 from open_llm_vtuber.service_context import ServiceContext
+
+
+DEFAULT_REFS = {"llm": "local-qwen", "tts": "edge-default", "asr": "groq-whisper"}
 
 
 class FakeWebSocket:
@@ -29,10 +34,13 @@ class HandleConfigSwitchTests(unittest.IsolatedAsyncioTestCase):
         self.base_character_config = {
             "conf_uid": "base",
             "character_name": "Base",
+            "allowed_users": ["owner"],
+            "model_refs": DEFAULT_REFS.copy(),
             "nested": {"a": 1, "b": 2},
         }
         self.alt_character_config = {
             "character_name": "Alt",
+            "model_refs": {**DEFAULT_REFS, "llm": "deepseek-chat"},
             "nested": {"b": 3},
         }
 
@@ -84,11 +92,13 @@ class HandleConfigSwitchTests(unittest.IsolatedAsyncioTestCase):
                 "character_config": {
                     "conf_uid": "base",
                     "character_name": "Alt",
+                    "allowed_users": [],
+                    "model_refs": {**DEFAULT_REFS, "llm": "deepseek-chat"},
                     "nested": {"a": 1, "b": 3},
                 },
             }
         )
-        load_from_config.assert_awaited_once_with(self.validated)
+        load_from_config.assert_awaited_once_with(self.validated, public=False)
         self.assertEqual(
             self.websocket.sent,
             [
@@ -129,7 +139,31 @@ class HandleConfigSwitchTests(unittest.IsolatedAsyncioTestCase):
                 "character_config": self.base_character_config,
             }
         )
-        load_from_config.assert_awaited_once_with(self.validated)
+        load_from_config.assert_awaited_once_with(self.validated, public=True)
+
+    async def test_preset_cannot_inherit_missing_model_refs(self) -> None:
+        for refs in (None, {"llm": "local-qwen", "tts": "edge-default"}):
+            with self.subTest(refs=refs):
+                if refs is None:
+                    del self.alt_character_config["model_refs"]
+                else:
+                    self.alt_character_config["model_refs"] = refs
+                self.websocket.sent.clear()
+                with (
+                    patch.object(
+                        service_context_module, "read_yaml", side_effect=self.read_yaml
+                    ),
+                    patch.object(service_context_module, "validate_config") as validate,
+                    patch.object(ServiceContext, "load_from_config") as load,
+                ):
+                    await self.context.handle_config_switch(self.websocket, "alt.yaml")
+
+                self.assertEqual(
+                    self.websocket.sent,
+                    [{"type": "error", "message": "Failed to switch configuration"}],
+                )
+                validate.assert_not_called()
+                load.assert_not_awaited()
 
     async def test_rejects_path_outside_presets_with_generic_error(self) -> None:
         with (
@@ -211,37 +245,62 @@ class ModelConfPayloadTests(unittest.TestCase):
         self.assertNotIn("client_uid", payload)
 
 
-class EngineInitTests(unittest.TestCase):
+class CharacterEngineLoadTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.context = ServiceContext()
-        self.context.character_config = SimpleNamespace(
-            tts_config=None, asr_config=None
+        self.config_data = read_yaml("config_templates/conf.default.yaml")
+        catalogs = {
+            kind: read_yaml(f"config_templates/{kind}_models.default.yaml")
+            for kind in ("llm", "tts", "asr")
+        }
+        catalogs["tts"]["tts_models"].append(
+            {"id": "pyttsx3-default", "provider": "pyttsx3_tts"}
+        )
+        catalogs["asr"]["asr_models"][0]["settings"]["api_key"] = "test-groq-key"
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        paths = {}
+        for kind, catalog in catalogs.items():
+            path = Path(temp_dir.name) / f"{kind}_models.yaml"
+            path.write_text(json.dumps(catalog), encoding="utf-8")
+            paths[kind] = str(path)
+        self.context.llm_catalog = LLMModelCatalog(
+            paths["llm"], tts_path=paths["tts"], asr_path=paths["asr"]
         )
 
-    def test_tts_engine_without_sub_config_gets_no_kwargs(self):
-        from open_llm_vtuber.config_manager.tts import TTSConfig
+    async def load_character(self, tts_ref):
+        self.config_data["character_config"]["model_refs"]["tts"] = tts_ref
+        config = validate_config(self.config_data)
+        with (
+            patch.object(self.context.llm_catalog, "client"),
+            patch.object(self.context, "init_live2d"),
+            patch.object(self.context, "_init_mcp_components"),
+            patch.object(self.context, "init_agent"),
+            patch.object(service_context_module.TTSFactory, "get_tts_engine") as tts,
+            patch.object(service_context_module.ASRFactory, "get_asr_system") as asr,
+        ):
+            await self.context.load_from_config(config)
 
-        config = TTSConfig(tts_model="pyttsx3_tts")
-        with patch.object(
-            service_context_module.TTSFactory, "get_tts_engine"
-        ) as get_engine:
-            self.context.init_tts(config)
+        asr.assert_called_once_with(
+            "groq_whisper_asr",
+            api_key="test-groq-key",
+            model="whisper-large-v3-turbo",
+            lang=None,
+        )
+        self.assertIs(self.context.asr_engine, asr.return_value)
+        self.assertIs(self.context.tts_engine, tts.return_value)
+        self.assertEqual(self.context.character_config.model_refs.tts, tts_ref)
+        return tts
 
-        get_engine.assert_called_once_with("pyttsx3_tts")
-        self.assertIs(self.context.tts_engine, get_engine.return_value)
-        self.assertIs(self.context.character_config.tts_config, config)
+    async def test_tts_engine_without_sub_config_gets_no_kwargs(self):
+        tts = await self.load_character("pyttsx3-default")
 
-    def test_tts_engine_with_sub_config_gets_its_fields(self):
-        from open_llm_vtuber.config_manager.tts import TTSConfig
+        tts.assert_called_once_with("pyttsx3_tts")
 
-        config = TTSConfig(tts_model="edge_tts", edge_tts={"voice": "v"})
-        with patch.object(
-            service_context_module.TTSFactory, "get_tts_engine"
-        ) as get_engine:
-            self.context.init_tts(config)
+    async def test_tts_engine_with_sub_config_gets_its_fields(self):
+        tts = await self.load_character("edge-default")
 
-        self.assertEqual(get_engine.call_args.args, ("edge_tts",))
-        self.assertEqual(get_engine.call_args.kwargs["voice"], "v")
+        tts.assert_called_once_with("edge_tts", voice="en-US-AvaMultilingualNeural")
 
 
 if __name__ == "__main__":

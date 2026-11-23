@@ -1,0 +1,33 @@
+# TTS catalog examples / 语音合成清单示例
+# Start with tts_models.default.yaml and copy only configured entries into the
+# runtime tts_models.yaml (system_config.tts_models_file in conf.yaml).
+# 先用 tts_models.default.yaml，再将已配置的条目加入运行时 tts_models.yaml
+# （由 conf.yaml 的 system_config.tts_models_file 指定）。
+# Each entry needs complete provider settings; nothing is inherited from conf.yaml.
+# 每个条目都要填写完整 settings，不从 conf.yaml 继承。
+
+tts_models:
+  - id: edge-default
+    name: Edge TTS
+    provider: edge_tts
+    settings:
+      voice: en-US-AvaMultilingualNeural
+
+  # - id: azure-hiumaan
+  #   name: Azure · 曉曼（香港粵語）
+  #   provider: azure_tts
+  #   settings:
+  #     api_key: '${AZURE_SPEECH_KEY}'
+  #     region: eastus # Use the region of your Azure Speech resource.
+  #     voice: zh-HK-HiuMaanNeural
+  #     pitch: '0'
+  #     rate: '1'
+  # - id: edge-xiaoxiao
+  #   name: Edge · 晓晓
+  #   provider: edge_tts
+  #   settings:
+  #     voice: zh-CN-XiaoxiaoNeural
+  # - id: pyttsx3-default
+  #   name: System Voice
+  #   provider: pyttsx3_tts
+  #   settings: {} # This provider has no settings. 此服务无需参数。

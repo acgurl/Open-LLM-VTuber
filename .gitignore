@@ -76,8 +76,10 @@ conf.yaml.backup
 tmp/
 private/
 mcp_servers.json
-# user-selectable LLM models; holds API keys
+# Runtime model catalogs may contain API keys.
 llm_models.yaml
+tts_models.yaml
+asr_models.yaml
 # Vertex AI service-account key
 vertex_credentials.json
 

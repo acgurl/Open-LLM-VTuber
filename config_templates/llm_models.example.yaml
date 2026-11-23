@@ -1,30 +1,27 @@
-# User-selectable language and speech presets / 网页端可选的语言模型和语音预设
+# LLM catalog examples / 语言模型清单示例
 #
-# Copy this file to the project root as `llm_models.yaml` (the path is
-# `system_config.llm_models_file` in conf.yaml). Without that file the feature
-# is off and every session uses the LLM of its character preset.
-# 把本文件复制到项目根目录并命名为 `llm_models.yaml`（路径由 conf.yaml 的
-# `system_config.llm_models_file` 指定）。没有这个文件时功能关闭，所有会话都用
-# 角色预设自带的 LLM。
+# For a fresh install, copy llm_models.default.yaml instead. Add only the
+# examples you have configured to your runtime llm_models.yaml (path set by
+# system_config.llm_models_file in conf.yaml). Every standalone character
+# must explicitly reference an ID for each of llm, tts and asr under model_refs.
+# 全新安装请先复制 llm_models.default.yaml，再按需添加已经配好的示例到运行时
+# llm_models.yaml（路径由 conf.yaml 的 system_config.llm_models_file 指定）。
+# 每个独立角色都必须在 model_refs 中明确填写 llm、tts 和 asr 三个模型 ID。
 #
-# - Edits take effect within a few seconds; no restart is needed.
-#   修改后几秒内自动生效，不用重启。
-# - A user's choice is stored per account and replaces the character's LLM for
-#   the web UI and the message connectors. "Character default" in the picker
-#   goes back to the preset's own LLM.
-#   用户的选择按账号保存，网页端和消息连接器都会用它代替角色预设的 LLM；
-#   选择器里的“角色默认”即回到预设自带的 LLM。
-# - This file holds API keys: keep it out of git (it is ignored by default)
-#   and readable only by the service account. `${ENV_VAR}` is substituted.
-#   本文件含 API 密钥：不要提交到 git（默认已忽略），权限设为仅服务账号可读。
-#   支持 `${环境变量}` 替换。
+# The web picker can override a character's defaults per account. The
+# "Character default" choice uses the ID from that character's model_refs.
+# 网页端可按账号覆盖角色默认模型；选择“角色默认”会使用该角色 model_refs 中的 ID。
+#
+# Keep the runtime file out of Git and readable only by the service account.
+# ${ENV_VAR} placeholders use the server process environment.
+# 请勿提交运行时文件，并仅允许服务账号读取。${ENV_VAR} 会从服务进程环境取值。
 
 models:
   - id: deepseek-chat # stable key stored as the user's choice: letters, digits, . _ : -
     name: DeepSeek Chat # shown in the picker
     description: 响应快，适合日常对话 # optional, shown under the name
-    # Any provider of `agent_config.llm_configs` in conf.yaml. The remaining
-    # keys are that provider's settings, exactly as in conf.yaml.
+    # LLM provider settings are top-level fields on the entry.
+    # LLM 提供商参数直接填写在条目内，不放在 settings 下。
     # Providers: openai_compatible_llm (Chat Completions), openai_responses_llm
     # (Responses API), claude_llm, vertex_llm.
     provider: openai_compatible_llm
@@ -120,39 +117,3 @@ models:
     base_url: http://localhost:11434/v1
     llm_api_key: not-needed
     model: qwen2.5:latest
-
-# Optional speech presets. Uncomment only working providers that should be
-# selectable. Without `settings`, reuse the corresponding provider configured
-# under `character_config.tts_config` / `asr_config` in the base conf.yaml.
-# 只取消注释你已配好且愿意对用户开放的服务。省略 settings 时，复用基础
-# conf.yaml 中 character_config.tts_config / asr_config 的同名服务配置。
-#
-# tts_models:
-#   - id: azure-voice
-#     name: Azure 语音
-#     provider: azure_tts
-#   - id: azure-hiumaan
-#     name: Azure · 曉曼（香港粵語）
-#     provider: azure_tts
-#     settings:
-#       api_key: your-azure-speech-key
-#       region: eastus # Use the region of your Azure Speech resource.
-#       voice: zh-HK-HiuMaanNeural
-#       pitch: '0'
-#       rate: '1'
-#   - id: edge-xiaoxiao
-#     name: Edge · 晓晓
-#     provider: edge_tts
-#     # Optional complete provider settings (same fields as conf.yaml).
-#     # 也可以直接指定一套完整的同名服务子配置，例如另一种音色。
-#     settings:
-#       voice: zh-CN-XiaoxiaoNeural
-#
-# asr_models:
-#   - id: groq-whisper
-#     name: Groq Whisper
-#     provider: groq_whisper_asr
-#   - id: azure-asr
-#     name: Azure 语音识别
-#     provider: azure_asr
-#     allowed_users: [alice@example.com]

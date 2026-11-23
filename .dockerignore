@@ -6,6 +6,8 @@
 /mcp_servers.json
 /mcp_servers.json.*
 /llm_models.yaml
+/tts_models.yaml
+/asr_models.yaml
 /model_dict.json
 /backup-*.tar.gz
 # Avatars

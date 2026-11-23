@@ -10,13 +10,15 @@ const OFF_IDS = new Set(["off", "none"]);
 export const isOffLevel = (id: string | null) => id === null || OFF_IDS.has(id);
 
 // 当前模型的思考档位信息。adjustable 为 false 时按钮仍显示，但锁定不可点：
-// 只有一档（始终思考 / 不支持思考），或模型没声明档位（角色预设的 LLM 也算这种）。
+// 只有一档（始终思考 / 不支持思考），或当前模型没声明档位。
 export function useThinking() {
-  const { options: models, current } = useModels((s) => s.catalogs.llm);
+  const { options: models, current, characterDefault } = useModels((s) => s.catalogs.llm);
   const level = useModels((s) => s.thinking);
   const switching = useModels((s) => s.pending?.kind === 'llm');
   const lastOn = useModels((s) => s.lastThinkingOn);
-  const info = models.find((m) => m.id === current)?.thinking;
+  const model = current === null ? characterDefault : models.find((m) => m.id === current);
+  const modelId = model?.id ?? null;
+  const info = model?.thinking;
   const levels = info?.levels ?? [];
   const active =
     levels.find((l) => l.id === level) ??
@@ -28,12 +30,12 @@ export function useThinking() {
   return {
     adjustable: levels.length > 1,
     known: levels.length > 0,
-    modelId: current,
+    modelId,
     active,
     on: active !== null && !isOffLevel(active.id),
     offLevel,
     onLevels,
-    lastOn: current ? lastOn[current] : undefined,
+    lastOn: modelId ? lastOn[modelId] : undefined,
     switching,
   };
 }

@@ -565,7 +565,7 @@ Cookie（`auth/manager.py`）：
 
 1. `{"type":"full-text","text":"Connection established"}`
 2. `{"type":"set-model-and-conf", ..., "client_uid":"<uid>"}`
-3. `{"type":"model-list", "models":[...], "current":...}`（见第 24 节；未配置模型目录时 `models` 为空）
+3. `{"type":"model-list", "models":[...], "current":...}`（见第 24 节）
 4. `{"type":"group-update", ...}`
 5. `{"type":"group-update", ...}`（重复一次，来自 `_store_client_data` 与 `_send_initial_messages` 各调一次；无害，前端做幂等处理即可）
 
@@ -933,9 +933,12 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 
 ## 16. `POST /asr` 独立转写接口
 
-`multipart/form-data`，字段名 `file`（`routes.py:344-382`）。
+`multipart/form-data`：`file` 为必填音频文件；`client_uid` 为可选文本字段。
 
-要求（`utils/audio.py:21-50`）：**WAV 容器、单声道、16-bit PCM、恰好 16000 Hz、≤120 秒、≤10 MiB**。解码为小端 int16 后除以 32768 归一化。
+- 网页按住说话（PTT）上传时，发送当前 `/client-ws` 的 `client_uid`，不发送模型 ID。后端核对该连接仍有效且属于当前已认证用户，再使用该连接实际生效的 ASR（用户覆盖或角色默认）。空闲时会先刷新该用户保存的 ASR 偏好；进行中的单聊或群聊不会被 PTT 切换引擎。
+- 独立调用者不传 `client_uid`，仍使用服务端默认上下文的 ASR。传入空值、无效值、已断开的连接或其他用户的连接 ID 时一律拒绝，不回退到默认 ASR。
+
+音频要求：**WAV 容器、单声道、16-bit PCM、恰好 16000 Hz、≤120 秒、≤10 MiB**。解码为小端 int16 后除以 32768 归一化。
 
 响应：
 
@@ -944,11 +947,10 @@ A ← {"type":"group-update","members":["A","B"],"is_owner":true}
 | 200 | `{"text": "转写结果"}` |
 | 400 | `{"error": "Audio must be mono"}` / `"Audio must be 16-bit PCM"` / `"Audio must be 16000 Hz"` / `"Audio exceeds the 120-second limit"` / `"Invalid WAV file: ..."` / `"Empty audio file"` / `"Empty audio data"` |
 | 401 | `{"error": "Authentication required"}`（仅 oidc） |
+| 404 | `{"error": "Unknown client"}`（提供了不可用或不属于当前用户的 `client_uid`） |
 | 413 | `{"error": "Audio file is too large"}` |
 | 429 | `{"error": "Too many concurrent transcription requests"}`（并发上限 **16**） |
 | 500 | `{"error": "Internal server error during transcription"}` |
-
-用的是**默认上下文的 ASR 引擎**，不随角色切换而变（`default_context_cache.asr_engine`，`routes.py:371`）。
 
 ---
 
@@ -1479,31 +1481,45 @@ system_config:
 
 ## 24. 用户可选模型与语音预设
 
-默认每个会话用角色预设指定的 LLM（`agent_config.agent_settings.basic_memory_agent.llm_provider` → `llm_configs`）。部署方在 `llm_models.yaml` 里声明模型目录后，用户可以在网页端自己选模型；选择按账号保存，与角色预设解耦。实现在 `llm_catalog.py`、`service_context.py`（`sync_model_selection` / `select_model` / `model_list_payload`）和 `websocket_handler.py`（`_handle_fetch_models` / `_handle_model_switch`）。
+每个网页角色（含 `conf.yaml` 的默认角色）必须在自身的 `character_config.model_refs` 显式声明 `llm`、`tts`、`asr` 三个稳定 ID，分别引用三份清单。必需引用缺失或无效时，角色加载失败；不回退到旧的内联配置或合并清单。用户手动选择是独立的账号级覆盖，清除覆盖即跟随当前角色。文字连接器可继承默认角色的引用，只初始化 LLM。
+
+```yaml
+character_config:
+  model_refs: {llm: deepseek-chat, tts: edge-voice, asr: whisper}
+```
 
 ### 24.1 配置文件
 
-路径由 `system_config.llm_models_file` 指定（默认 `llm_models.yaml`，相对工作目录；Docker 镜像启动时把 `/app/conf/llm_models.yaml` 链接过来）。模板见 `config_templates/llm_models.example.yaml`。
+三份清单均必需，分别通过 `conf.yaml` 的 `system_config` 配置。相对路径以服务进程的工作目录为准；Docker 默认从挂载的 `/app/conf/` 下链接这三个默认文件名。
+
+| `system_config` 配置项 | 默认文件 | 顶层键 | 示例 |
+| --- | --- | --- | --- |
+| `llm_models_file` | `llm_models.yaml` | `models` | [LLM](../config_templates/llm_models.example.yaml) |
+| `tts_models_file` | `tts_models.yaml` | `tts_models` | [TTS](../config_templates/tts_models.example.yaml) |
+| `asr_models_file` | `asr_models.yaml` | `asr_models` | [ASR](../config_templates/asr_models.example.yaml) |
+
+旧合并清单需[手动拆分](./README.CN.md#从合并模型清单升级)：保留原有顶层键和每个条目的 ID。运行时不从 LLM 文件回读语音预设。
+
+`llm_models.yaml` 示例：
 
 ```yaml
 models:
   - id: deepseek-chat          # 稳定键：字母数字和 . _ : -，最长 64；保存为用户的选择
     name: DeepSeek Chat        # 选择器里显示的名字（缺省用 id，最长 80）
     description: 响应快        # 可选，显示在名字下方（最长 200）
-    provider: openai_compatible_llm  # agent_config.llm_configs 里的任一 provider
+    provider: openai_compatible_llm  # 使用 Chat Completions 协议
     base_url: https://api.deepseek.com/v1
     llm_api_key: ${DEEPSEEK_API_KEY}
     model: deepseek-chat
-    allowed_users:             # 可选；不写或为空 = 所有人可用
-      - alice@example.com
 ```
 
 - 除 `id` / `name` / `description` / `provider` / `allowed_users` 外的键就是该 provider 在 `llm_configs` 里的设置（含 `interrupt_method`），用同一套 pydantic 类校验；支持 `${ENV}` 替换。
-- **provider 按协议只有 4 个（2026-11-15）**：`openai_compatible_llm`（Chat Completions，OpenAI / DeepSeek / Ollama / LM Studio / Gemini / 智谱 / Groq / Mistral 等所有兼容端点）、`openai_responses_llm`（OpenAI Responses API，`/v1/responses`）、`claude_llm`（Anthropic Messages）、`vertex_llm`（Vertex AI 原生）。旧的 `openai_llm` / `ollama_llm` / `lmstudio_llm` / `gemini_llm` / `zhipu_llm` / `deepseek_llm` / `groq_llm` / `mistral_llm` / `stateless_llm_with_template` 已删除，但在 `conf.yaml`、角色文件和 `llm_models.yaml` 里仍可加载：校验时自动映射为 `openai_compatible_llm` 并补上原来的默认 `base_url`（及 Ollama / LM Studio 的占位 key、原默认 `interrupt_method`），日志给一次 WARNING 提示改名，磁盘文件不改写（`config_manager/llm_migration.py`）。角色选中的旧 provider 会成为 `openai_compatible_llm` 小节；未被选中的旧小节被忽略。`keep_alive` / `unload_at_exit` / `template` 不再生效。
+- **provider 按协议只有 4 个（2026-11-15）**：`openai_compatible_llm`（Chat Completions，OpenAI / DeepSeek / Ollama / LM Studio / Gemini / 智谱 / Groq / Mistral 等所有兼容端点）、`openai_responses_llm`（OpenAI Responses API，`/v1/responses`）、`claude_llm`（Anthropic Messages）、`vertex_llm`（Vertex AI 原生）。LLM 清单仍接受旧的 provider 名称（如 `openai_llm`、`ollama_llm`、`deepseek_llm`）：校验时映射为 `openai_compatible_llm` 并补上对应默认设置，记 WARNING，不改写磁盘（`config_manager/llm_migration.py`）。这不替代角色的 `model_refs`。`keep_alive` / `unload_at_exit` / `template` 不再生效。
 - LLM 出错（连不上、限流、鉴权失败等）时后端抛 `LLMError`，Agent 把它的提示文本（`Error calling the chat endpoint: ...`）作为本轮回复发给前端并朗读，但**不写入对话记忆和历史上下文**；WS 消息形状不变。
 - `allowed_users` 与角色预设完全同一规则（`config_manager/access.py`）：内部 user_id 或已验证的登录邮箱，大小写不敏感，**不匹配显示名**。写成非字符串列表的条目对所有人不可用。
-- **文件不存在 = 功能关闭**，行为与之前完全一致。文件每 5 秒内按 mtime 重新加载，不用重启；解析失败时沿用上一份目录（不会因为笔误放宽或丢失权限），单个条目非法只跳过该条并记 ERROR（日志只写出错的字段名，不写值）。
-- 该文件含密钥：已加入 `.gitignore` / `.dockerignore`，生产上权限设为 600。
+- 运行时按需独立检查各文件的变动，只重载变动的清单。某一文件格式错误时保留该文件上一次成功加载的版本，不阻塞其他清单更新。初次加载时如果没有可用清单来解析必需的角色引用，加载失败；有效文件中缺失或无效的必需引用同样会导致角色加载失败。
+- 角色的默认绑定在加载角色时解析；账号覆盖按需刷新。公开角色只能引用公开条目；受限角色引用受限条目时，模型允许名单必须覆盖角色允许名单。单个非法条目跳过并记 ERROR。
+- 运行时清单可能含密钥：不要提交到 Git 或打进镜像，生产上权限设为 600。
 
 ### 24.2 LLM 消息（语音见 24.6）
 
@@ -1512,10 +1528,10 @@ models:
 | C→S | `fetch-models` | 无 | 回 `model-list`。同时重新读取该用户保存的选择并应用 |
 | C→S | `switch-model` | `model`: string \| null | `null` = 回到角色预设自带的 LLM。成功回 `model-switched`；模型不存在或无权限回 `error`（`Model not available`）并紧跟一条最新的 `model-list` |
 | C→S | `set-thinking` | `level`: string | 设定当前模型的思考档位，见 24.5 |
-| S→C | `model-list` | `models`: `[{id,name,description,thinking?}]`，`current`: string \| null，`thinking`: string \| null | 只含当前账号可用的模型；`current` 是此刻实际在用的目录模型，`null` 表示在用角色预设的 LLM；`thinking` 是 `current` 生效的思考档位（无档位为 `null`）。**连接建立时主动推送一次**（见 7.4）。`models` 为空时不显示 LLM 分类；语音分类独立判断 |
+| S→C | `model-list` | `models`: `[{id,name,description,thinking?}]`，`current`: string \| null，`thinking`: string \| null | 只含当前账号可用的模型；`current` 是生效的账号覆盖，`null` 表示跟随角色；`thinking` 是实际生效模型的思考档位（无档位为 `null`）。**连接建立时主动推送一次**（见 7.4）。`models` 为空时不显示 LLM 分类；语音分类独立判断 |
 | S→C | `model-switched` | `model`: string \| null，`thinking`: string \| null | 切换已生效；`thinking` 同上（群聊轮次中延后生效时为 `null`） |
 
-- 目录选项仅下发 `id` / `name` / `description` 和档位的 `id` / `name`。角色默认配置仅下发显示所需的名称和等价目录 ID；不下发端点、凭据、路径或思考档位的 `params`。
+- 目录选项仅下发 `id` / `name` / `description` 和档位的 `id` / `name`。角色默认项同样只下发目录项公开字段；不下发端点、凭据、路径或思考档位的 `params`。
 - 权限在服务端三处校验：下发列表时、`switch-model` 时、**每一轮对话开始前**（`conversation_utils.sync_turn_model`）。所以把某人从 `allowed_users` 移除、删除模型或改了模型配置，都在对方下一条消息生效，不需要重连；失去权限的会话自动回落到角色预设的 LLM，保存的选择保留（权限恢复后自动生效）。
 - 切换**只替换 agent 使用的 LLM 客户端**：对话记忆、当前历史、工具（MCP）和系统提示词不变，`history_uid` 不变，不需要重建历史。`interrupt_method` 跟随所选模型。
 - 单聊中有一轮正在进行时，`switch-model` 先按 `interrupt-signal`（`text:""`）打断，语义同 13.2 的 `switch-config`（没有回执，前端自己停播放、收气泡）。群聊轮次进行中时只保存选择，该成员的下一轮生效，此时 `model-switched.model` 是刚保存的值。
@@ -1525,15 +1541,15 @@ models:
 
 - 选择按**账号**保存一份（不分角色、不分设备）：SQLite schema **v8** 新增 `user_settings(user_id, key, value, updated_at)`，键 `llm_model`；`HistoryRepository.get_user_setting` / `set_user_setting`。`null` 选择即删除该行。
 - 作用于该账号的所有会话：网页端各标签页（其它标签页在下一轮或下次 `fetch-models` 时跟上）、`switch-config` 换角色之后、以及消息连接器（QQ 等）会话。single 模式下账号是 `storage.default_user_id`。
-- 只对 `basic_memory_agent` 生效；`hume_ai_agent` 角色忽略选择，`model-list.current` 恒为 `null`。
+- 网页角色使用 `basic_memory_agent`；Hume EVI 不消费外部 LLM，不能作为强制目录引用的角色。
 
 ### 24.4 前端参考实现
 
-`web/src/components/ModelPicker.tsx`：顶栏角色选择旁的独立入口，按有可选项的分类展示页签。`model-list` 可选字段 `default_model`、`tts_default_model`、`asr_default_model` 均为 `{name, matches}`：`name` 是角色实际配置的模型或音色显示名，`matches` 是当前账号目录中与角色配置等价的条目 ID。前端用该名称代替「角色默认」，合并等价行；选中该行仍发送 `model: null`，跟随角色。三类均无选项时不显示入口。打开菜单或更换角色后发送 `fetch-models`；`switch-model` 发出后等 `model-switched`、`error` 或超时再解除 loading。
+`web/src/components/ModelPicker.tsx`：`default_model`、`tts_default_model`、`asr_default_model` 是后端已经解析的目录项（LLM 可带公开的思考档位）。前端直接显示该项的名称，不比较配置；选择「跟随角色」发送 `model: null`，不发送默认项 ID。打开菜单或换角色后发送 `fetch-models`，`switch-model` 后等待回执。
 
 ### 24.5 思考档位（2026-11-15）
 
-目录模型可以在 `llm_models.yaml` 里声明思考档位，用户在输入框左侧的思考按钮里选择。没有声明档位的模型（以及角色预设自带的 LLM）请求不带任何额外字段，行为与之前一致；前端仍显示思考按钮但置灰锁定。
+目录模型可以在 `llm_models.yaml` 里声明思考档位，用户在输入框左侧的思考按钮里选择。没有声明档位的模型请求不带任何额外字段，行为与之前一致；前端仍显示思考按钮但置灰锁定。
 
 ```yaml
   - id: deepseek-flash
@@ -1563,28 +1579,35 @@ models:
 
 ### 24.6 语音合成（TTS）和语音识别（ASR）
 
-在同一个模型目录文件中声明 `tts_models`、`asr_models`，与 `models` 并列，不必另建配置文件。例如：
+`tts_models.yaml` 示例（顶层键 `tts_models`）：
 
 ```yaml
 tts_models:
   - id: edge-voice
     name: Edge 语音
     provider: edge_tts
+    settings: {voice: zh-CN-XiaoxiaoNeural}
   - id: another-voice
     name: Edge · 云希
     provider: edge_tts
     settings: {voice: zh-CN-YunxiNeural}
+```
+
+`asr_models.yaml` 示例（顶层键 `asr_models`）：
+
+```yaml
 asr_models:
   - id: whisper
     name: Groq Whisper
     provider: groq_whisper_asr
+    settings: {api_key: "${GROQ_API_KEY}", model: whisper-large-v3, lang: zh}
 ```
 
-- 未写 `settings` 时复用基础 `conf.yaml` 的 `character_config.tts_config` / `asr_config` 下同名 provider 设置；也可以通过 `settings` 填写一份完整的 provider 子配置。只把已配好且要对用户开放的服务加入目录；不会把配置文件里的示例服务或其他角色的设置自动公开。`allowed_users` 与 LLM 规则相同。
-- `model-list` 增加可选的 `tts_models`、`asr_models`（均只含 `{id,name,description}`）及各自的 `tts_current`、`asr_current`（`null` 表示角色默认）。初次连接、`fetch-models` 和相关错误恢复时随原消息下发；无目录且无生效预设时省略对应字段。
+- `settings` 是完整的 provider 子配置；不从角色或 `conf.yaml` 继承。无配置的本地 `pyttsx3_tts` 可省略。访问规则与 LLM 相同。
+- `tts_models`、`asr_models` 只含 `{id,name,description}`；`tts_current`、`asr_current` 为生效的覆盖，`null` 表示跟随角色。初次连接和 `fetch-models` 会下发角色实际引用的语音条目。
 - `switch-model` 要明确发送 `kind: "tts"` 或 `"asr"` 和 `model`（预设 id 或 `null`）；成功回相同 `kind`、`model` 的 `model-switched`，失败回附同一 `kind` 的 `error`，再回 `model-list`。不传 `kind` 的旧客户端仍只操作 LLM。
 - 两类选择分别保存为 `user_settings.tts_model` 和 `user_settings.asr_model`，按账号隔离。选「角色默认」只清除相应覆盖，随更换角色自动使用新角色的语音配置；手动选择则保留。语音切换不重建对话、不会启用已关闭的播放设置；当前有一轮在进行时，不打断该轮，新选择从下一轮生效。
-- 作用范围是网页对话使用的麦克风识别与消息朗读，不改 `/tts-ws` 独立合成、`/proxy-ws` 或文字连接器；角色自行产生的音频（如 Hume 原生音频）不再经 TTS 处理。目录移除、权限撤销或已保存预设初始化失败时，下一轮回落到角色设置。
+- 实时语音与长按说话共享会话 ASR。独立 `/tts-ws` 和不带 `client_uid` 的 `/asr` 使用部署默认角色绑定，不加载网页用户覆盖。覆盖项被移除、失去权限或初始化失败时，回到角色明确引用的条目。
 
 ---
 

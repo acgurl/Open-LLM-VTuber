@@ -1,0 +1,9 @@
+# Minimal TTS catalog / 最小语音合成清单：copy to tts_models.yaml before starting.
+# See tts_models.example.yaml for additional providers and configuration examples.
+
+tts_models:
+  - id: edge-default
+    name: Edge TTS
+    provider: edge_tts
+    settings:
+      voice: en-US-AvaMultilingualNeural # Or / 也可用 zh-CN-XiaoxiaoNeural.

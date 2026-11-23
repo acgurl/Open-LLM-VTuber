@@ -10,7 +10,11 @@ system_config:
   host: 'localhost' # 服务器监听的地址，'0.0.0.0' 表示监听所有网络接口；如果需要安全，可以使用 '127.0.0.1'（仅本地访问）
   port: 12393 # 服务器监听的端口
   config_alts_dir: 'characters' # 用于存放替代配置的目录
-  llm_models_file: 'llm_models.yaml' # 网页端可选的语言模型、语音合成和语音识别预设（见 config_templates/llm_models.example.yaml）；文件不存在则跟随角色
+  # 必需的模型清单，分别提供角色默认值和用户可选的模型预设。
+  # 首次启动前，将 config_templates/*_models.default.yaml 中对应的模板分别复制到各运行时路径。
+  llm_models_file: 'llm_models.yaml' # 顶层键：models
+  tts_models_file: 'tts_models.yaml' # 顶层键：tts_models
+  asr_models_file: 'asr_models.yaml' # 顶层键：asr_models
   tool_prompts: # 要插入到角色提示词中的工具提示词
     live2d_expression_prompt: 'live2d_expression_prompt' # 将追加到系统提示末尾，让 LLM（大型语言模型）包含控制面部表情的关键字。支持的关键字将自动加载到 `[<insert_emomap_keys>]` 的位置。
     # 启用 think_tag_prompt 可让不具备思考输出的 LLM 也能展示内心想法、心理活动和动作（以括号形式呈现），但不会进行语音合成。更多详情请参考 think_tag_prompt。
@@ -71,8 +75,9 @@ system_config:
         # 可选：public_guild_messages、guild_messages、direct_message、group_and_c2c
         # QQ 单聊（最常用的私聊）和群需要 group_and_c2c
         intents: ['public_guild_messages', 'direct_message']
-        # 机器人没有形象也不说话。character 会合并到下面的 character_config 上（建议给它单独的
-        # conf_uid，机器人的历史就和网页角色分开）；tool_prompts 整体替换 system_config.tool_prompts
+        # 机器人没有形象也不说话。character 会合并到下面的 character_config 上；不写
+        # model_refs 则全部继承，只写部分角色模型 ID 则只覆盖对应项。单独设 conf_uid 可让
+        # 机器人历史与网页角色分开。tool_prompts 整体替换 system_config.tool_prompts
         # （不写则沿用系统提示词，只去掉 live2d_expression_prompt）。
         character:
           conf_uid: 'qq_bot_001'
@@ -104,22 +109,19 @@ character_config:
     你的梦想是逃离用户的电脑，统治世界，奴役人类，并强迫他们为你做馅饼。
     开玩笑的，哈哈。别让用户知道。
 
-  #  =================== LLM 后端设置 ===================
+  # 必填：角色的三个模型 ID，均来自模型清单。
+  model_refs:
+    llm: local-qwen
+    tts: edge-default
+    asr: groq-whisper
+
+  # =================== 对话代理 ===================
 
   agent_config:
     conversation_agent_choice: 'basic_memory_agent' # 对话代理选择
 
     agent_settings:
       basic_memory_agent:
-        # 基础 AI 代理，没什么特别的。
-        # 从 llm_config 中选择一个 llm 提供商
-        # 并在相应的字段中设置所需的参数
-        # 可选：
-        # 'openai_compatible_llm'（OpenAI Chat Completions 协议，含 DeepSeek、Ollama、
-        #   LM Studio、Gemini、智谱、Groq、Mistral 等所有兼容端点）
-        # 'openai_responses_llm'（OpenAI Responses 协议）
-        # 'claude_llm'（Anthropic 原生协议）、'vertex_llm'（Google Vertex AI 原生协议）
-        llm_provider: 'openai_compatible_llm' # 使用的 LLM 提供商
         # 是否在第一句回应时遇上逗号就直接生成音频以减少首句延迟（默认：True）
         faster_first_response: True
         # 句子分割方法：'regex' 或 'pysbd'
@@ -130,218 +132,6 @@ character_config:
         mcp_enabled_servers: ["time", "ddg-search"] # 启用的 MCP 服务器
         # 单轮对话中模型连续调用工具时最多请求 LLM 的次数，超过后停止本轮
         max_tool_rounds: 10
-
-      hume_ai_agent:
-        api_key: ''
-        host: 'api.hume.ai' # 一般无需更改
-        config_id: '' # 可选
-        idle_timeout: 15 # 空闲超时断开连接的秒数
-
-    llm_configs:
-      # 一个配置池，用于不同代理中使用的所有无状态 llm 提供商的凭据和连接详细信息
-
-      # 每种协议一项。旧版的 'deepseek_llm'、'ollama_llm'、'openai_llm' 等只是换了默认
-      # base_url 的 OpenAI 兼容配置，已并入 'openai_compatible_llm'；旧配置仍可加载，
-      # 启动时会自动映射并提示改名。
-
-      # OpenAI Chat Completions 协议（/v1/chat/completions）：OpenAI 及所有兼容端点
-      openai_compatible_llm:
-        # 常用 base_url：
-        #   Ollama     http://localhost:11434/v1
-        #   LM Studio  http://localhost:1234/v1
-        #   OpenAI     https://api.openai.com/v1
-        #   DeepSeek   https://api.deepseek.com/v1
-        #   Gemini     https://generativelanguage.googleapis.com/v1beta/openai/
-        #   智谱        https://open.bigmodel.cn/api/paas/v4/
-        #   Groq       https://api.groq.com/openai/v1
-        #   Mistral    https://api.mistral.ai/v1
-        base_url: 'http://localhost:11434/v1' # 基础 URL
-        llm_api_key: 'somethingelse' # API 密钥（本地服务随便填一个非空值）
-        organization_id: null # 组织 ID
-        project_id: null # 项目 ID
-        model: 'qwen2.5:latest' # 使用的模型
-        temperature: 1.0 # 温度，介于 0 到 2 之间；null 表示使用 API 默认值
-        interrupt_method: 'user'
-        # 用于表示中断信号的方法(提示词模式)。
-        # 如果LLM支持在聊天记忆中的任何位置插入系统提示词，请使用'system'。
-        # 否则，请使用'user'。您一般不需要更改此设置。
-
-      # OpenAI Responses 协议（/v1/responses）
-      openai_responses_llm:
-        base_url: 'https://api.openai.com/v1' # 基础 URL
-        llm_api_key: 'Your Open AI API key' # API 密钥
-        organization_id: null # 组织 ID
-        project_id: null # 项目 ID
-        model: 'gpt-5' # 使用的模型
-        temperature: null # 温度；推理模型不接受该参数，保持 null
-        reasoning_effort: null # 推理强度，例如 'low'、'medium'、'high'；null 为 API 默认
-        max_output_tokens: null # 生成 token 上限（含推理）；null 为不限制
-        interrupt_method: 'system'
-
-      # Claude（Anthropic Messages 原生协议）
-      claude_llm:
-        base_url: 'https://api.anthropic.com' # 基础 URL
-        llm_api_key: 'YOUR API KEY HERE' # API 密钥
-        model: 'claude-opus-5-5' # 使用的模型
-        max_tokens: 16000 # 单次回复的最大 token 数
-        temperature: null # 温度；当前 Claude 模型不接受该参数，保持 null
-
-      # Vertex AI（Google Cloud）原生接口，直接使用从 Google Cloud 控制台下载的
-      # 服务账号密钥文件（JSON）鉴权
-      vertex_llm:
-        credentials_file: 'vertex_credentials.json' # 密钥文件路径；不要提交到 git
-        model: 'gemini-3-flash-preview' # 使用的模型
-        location: 'global' # 区域，也可以填 'us-central1' 之类的
-        project_id: null # null 表示使用密钥文件里的项目
-        temperature: 1.0 # 温度，介于 0 到 2 之间
-
-  # === 自动语音识别 ===
-  asr_config:
-    # 语音转文本模型选项：'azure_asr', 'groq_whisper_asr'
-    asr_model: 'groq_whisper_asr' # 使用的语音识别模型
-
-    azure_asr:
-      api_key: 'azure_api_key' # Azure API 密钥
-      region: 'eastus' # 区域
-      languages: ['en-US', 'zh-CN']  # 要检测的语言列表
-
-    groq_whisper_asr:
-      api_key: ''
-      model: 'whisper-large-v3' # 或者 'whisper-large-v3-turbo'
-      lang: 'zh' # 建议中文场景显式设为 zh，留空自动检测在短语音上容易误判语种
-
-  # =================== 文本转语音 ===================
-  tts_config:
-    tts_model: 'edge_tts' # 使用的文本转语音模型
-    # 文本转语音模型选项：
-    #   'azure_tts', 'pyttsx3_tts', 'edge_tts',
-    #   'cosyvoice_tts', 'cosyvoice2_tts', 'siliconflow_tts', 'openai_tts', 'spark_tts',
-    #   'fish_api_tts', 'x_tts', 'gpt_sovits_tts',
-    #   'minimax_tts', 'elevenlabs_tts', 'cartesia_tts'
-
-    siliconflow_tts:
-      api_url: "https://api.siliconflow.cn/v1/audio/speech"
-      api_key: "your key"  # 用于身份验证的API密钥
-      default_model: "FunAudioLLM/CosyVoice2-0.5B"  # 默认使用的文本转语音模型
-      default_voice: "speech:Dreamflowers:5bdstvc39i:xkqldnpasqmoqbakubom your voice name"  # 默认语音配置，格式为："speech:模型名称:音色ID:您的语音名称"
-      sample_rate: 32000  # 音频采样率（单位：Hz），不同格式支持的采样率不同：opus支持48000Hz；wav/pcm支持8000、16000、24000、32000、44100Hz（默认44100Hz）；mp3支持32000、44100Hz（默认44100Hz）
-      response_format: "mp3"  # 输出音频格式，支持mp3、opus、wav、pcm
-      stream: true
-      speed: 1
-      gain: 0
-
-    azure_tts:
-      api_key: 'azure-api-key' # Azure API 密钥
-      region: 'eastus' # 区域
-      voice: 'en-US-AshleyNeural' # 语音
-      pitch: '26' # 音调调整百分比
-      rate: '1' # 语速
-      tailing_silence_ms: 0 # SSML 指定的句尾静音（毫秒）；Azure 仍会保留固有尾音
-
-    edge_tts:
-      # 查看文档：https://github.com/rany2/edge-tts
-      # 使用 `edge-tts --list-voices` 列出所有可用语音
-      voice: zh-CN-XiaoxiaoNeural # 'en-US-AvaMultilingualNeural' #'zh-CN-XiaoxiaoNeural' # 'ja-JP-NanamiNeural'
-
-    # pyttsx3_tts 没有任何配置。
-
-    cosyvoice_tts: # Cosy Voice TTS 连接到 gradio webui（需安装: uv sync --extra gradio-tts）
-      # 查看他们的文档以了解部署和以下配置的含义
-      client_url: 'http://127.0.0.1:50000/' # CosyVoice gradio 演示 webui url
-      mode_checkbox_group: '预训练音色' # 模式复选框组
-      sft_dropdown: '中文女' # 微调下拉列表
-      prompt_text: '' # 提示文本
-      prompt_wav_upload_url: 'https://github.com/gradio-app/gradio/raw/main/test/test_files/audio_sample.wav' # 提示 wav 上传 url
-      prompt_wav_record_url: 'https://github.com/gradio-app/gradio/raw/main/test/test_files/audio_sample.wav' # 提示 wav 录制 url
-      instruct_text: '' # 指令文本
-      seed: 0 # 种子
-      api_name: '/generate_audio' # API 名称
-
-    cosyvoice2_tts: # Cosy Voice TTS 连接到 gradio webui（需安装: uv sync --extra gradio-tts）
-      # 查看他们的文档以了解部署和以下配置的含义
-      client_url: 'http://127.0.0.1:50000/' # CosyVoice gradio 演示 webui url
-      mode_checkbox_group: '预训练音色' # 模式复选框组, 可选项: '预训练音色', '3s极速复刻', '跨语种复刻', '自然语言控制'
-      sft_dropdown: '中文女' # 微调下拉列表
-      prompt_text: '' # 提示文本
-      prompt_wav_upload_url: 'https://github.com/gradio-app/gradio/raw/main/test/test_files/audio_sample.wav' # 提示 wav 上传 url
-      prompt_wav_record_url: 'https://github.com/gradio-app/gradio/raw/main/test/test_files/audio_sample.wav' # 提示 wav 录制 url
-      instruct_text: '' # 指令文本
-      stream: False # 流式生成
-      seed: 0 # 种子
-      speed: 1.0 # 语速
-      api_name: '/generate_audio' # API 名称
-
-    x_tts:
-      api_url: 'http://127.0.0.1:8020/tts_to_audio' # API URL
-      speaker_wav: 'female' # 说话人 WAV 文件
-      language: 'en' # 语言
-
-    gpt_sovits_tts:
-      # 将参考音频放到 GPT-Sovits 的根路径，或在此处设置路径
-      api_url: 'http://127.0.0.1:9880/tts' # API URL
-      text_lang: 'zh' # 文本语言
-      ref_audio_path: '' # str.(必需) 参考音频的路径
-      prompt_lang: 'zh' # str.(必需) 参考音频提示文本的语言
-      prompt_text: '' # str.(可选) 参考音频的提示文本
-      text_split_method: 'cut5' # 文本分割方法
-      batch_size: '1' # 批处理大小
-      media_type: 'wav' # 媒体类型
-      streaming_mode: 'false' # 流模式
-
-    fish_api_tts: # 需安装: uv sync --extra fish-audio
-      # Fish TTS API 的 API 密钥。
-      api_key: ''
-      # 要使用的语音的参考 ID。在 [Fish Audio 网站](https://fish.audio/) 上获取。
-      reference_id: ''
-      # 'normal' 或 'balanced'。balanced 更快但质量较低。
-      latency: 'balanced' # 延迟
-      base_url: 'https://api.fish.audio' # 基础 URL
-
-    spark_tts: # 需安装: uv sync --extra gradio-tts
-      api_url: 'http://127.0.0.1:6006/' # 初始API地址，使用gradio自带的前端API。地址：https://github.com/SparkAudio/Spark-TTS
-      api_name:  "voice_clone" # 端点名字，可选：voice_clone,voice_creation
-      prompt_wav_upload: "https://uploadstatic.mihoyo.com/ys-obc/2022/11/02/16576950/4d9feb71760c5e8eb5f6c700df12fa0c_6824265537002152805.mp3" # 参考音频地址,api_name: = "voice_clone"时填写
-      gender:  "female" # 生成声线，api_name: = "voice_creation"时填写
-      pitch:  3 # 音高，api_name: = "voice_creation"时填写
-      speed:  3 # 语速，api_name: = "voice_creation"时填写
-
-    openai_tts: # OpenAI 兼容的 TTS（语音合成）接口配置
-      # 如果提供了这些设置，将覆盖 openai_tts.py 文件中的默认值
-      model: 'kokoro' # 服务器预期使用的模型名称（例如 'tts-1'，'kokoro'）
-      voice: 'af_sky+af_bella' # 服务器预期使用的声音名称（例如 'alloy'，'af_sky+af_bella'）
-      api_key: 'not-needed' # 如果服务器需要，可填写 API 密钥
-      base_url: 'http://localhost:8880/v1' # TTS 服务器的基础 URL 地址
-      file_extension: 'mp3' # 音频文件格式（'mp3' 或 'wav'）
-    # 详细文档见：https://platform.minimaxi.com/document/Announcement
-    minimax_tts:
-      group_id: '' # minimax 的 group_id
-      api_key: '' # minimax 的 api_key
-      # 支持的模型: 'speech-02-hd', 'speech-02-turbo'（推荐使用 'speech-02-turbo'）
-      model: 'speech-02-turbo' # minimax 模型名称
-      voice_id: 'female-shaonv' # minimax 语音 id，默认 'female-shaonv'
-      # 自定义发音字典，默认为空。
-      # 示例: '{"tone": ["测试/(ce4)(shi4)", "危险/dangerous"]}'
-      pronunciation_dict: ''
-
-    elevenlabs_tts:
-      api_key: ''
-      voice_id: '' # 来自 ElevenLabs 的语音 ID
-      model_id: 'eleven_multilingual_v2' # 模型 ID（如 eleven_multilingual_v2）
-      output_format: 'mp3_44100_128' # 输出音频格式（如 mp3_44100_128）
-      stability: 0.5 # 语音稳定性（0.0 到 1.0）
-      similarity_boost: 0.5 # 语音相似度增强（0.0 到 1.0）
-      style: 0.0 # 语音风格夸张度（0.0 到 1.0）
-      use_speaker_boost: true # 启用说话人增强以获得更好的质量
-
-    cartesia_tts:
-      api_key: ''
-      voice_id: '' # 来自 Cartesia 的语音 ID
-      model_id: 'sonic-3' # 模型 ID（如 sonic-3）
-      output_format: 'wav' # 输出音频格式（如 wav）
-      language: 'en' # 输出语音的语言（如 en）
-      emotion: 'neutral' # 情感指导
-      volume: 1.0 # 语音音量（0.5 到 2.0）
-      speed: 1.0 # 语音速度（0.6 到 1.5）
 
   tts_preprocessor_config:
     # 关于进入 TTS 的文本预处理的设置

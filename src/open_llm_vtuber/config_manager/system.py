@@ -7,6 +7,11 @@ from .storage import StorageConfig
 from .connectors import ConnectorsConfig
 
 
+DEFAULT_LLM_MODELS_FILE = "llm_models.yaml"
+DEFAULT_TTS_MODELS_FILE = "tts_models.yaml"
+DEFAULT_ASR_MODELS_FILE = "asr_models.yaml"
+
+
 class SystemConfig(I18nMixin):
     """System configuration settings."""
 
@@ -16,7 +21,9 @@ class SystemConfig(I18nMixin):
     config_alts_dir: str = Field(..., alias="config_alts_dir")
     tool_prompts: dict[str, str] = Field(..., alias="tool_prompts")
     enable_proxy: bool = Field(False, alias="enable_proxy")
-    llm_models_file: str = Field("llm_models.yaml", alias="llm_models_file")
+    llm_models_file: str = Field(DEFAULT_LLM_MODELS_FILE, alias="llm_models_file")
+    tts_models_file: str = Field(DEFAULT_TTS_MODELS_FILE, alias="tts_models_file")
+    asr_models_file: str = Field(DEFAULT_ASR_MODELS_FILE, alias="asr_models_file")
     storage: StorageConfig = Field(default_factory=StorageConfig, alias="storage")
     auth: AuthConfig = Field(default_factory=AuthConfig, alias="auth")
     connectors: ConnectorsConfig = Field(
@@ -39,9 +46,13 @@ class SystemConfig(I18nMixin):
             zh="启用代理模式以支持多个客户端使用一个 ws 连接",
         ),
         "llm_models_file": Description(
-            en="YAML catalog of language and speech presets users may pick in the web UI "
-            "(missing file: sessions use character defaults)",
-            zh="网页端可选的语言模型和语音预设目录（文件不存在时使用角色默认配置）",
+            en="YAML catalog of language models", zh="语言模型目录文件"
+        ),
+        "tts_models_file": Description(
+            en="YAML catalog of text-to-speech models", zh="语音合成模型目录文件"
+        ),
+        "asr_models_file": Description(
+            en="YAML catalog of speech-to-text models", zh="语音识别模型目录文件"
         ),
         "storage": Description(
             en="Chat history storage settings",

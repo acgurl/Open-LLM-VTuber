@@ -21,23 +21,25 @@ def _build_basic_memory_agent(
     kwargs: dict,
 ) -> AgentInterface:
     basic_memory_settings: dict = agent_settings.get("basic_memory_agent", {})
-    llm_provider: str = basic_memory_settings.get("llm_provider")
-
-    if not llm_provider:
-        raise ValueError("LLM provider not specified for basic memory agent")
-
-    if not isinstance(llm_configs, dict):
-        raise ValueError("LLM configuration pool is missing")
-
-    llm_config = llm_configs.get(llm_provider)
-    if not llm_config:
-        raise ValueError(f"Configuration not found for LLM provider: {llm_provider}")
-    llm_config = dict(llm_config)
-    interrupt_method: Literal["system", "user"] = llm_config.pop(
-        "interrupt_method", "user"
-    )
-
-    llm = StatelessLLMFactory.create_llm(llm_provider=llm_provider, **llm_config)
+    bound_llm = kwargs.get("bound_llm")
+    if bound_llm is not None:
+        llm, interrupt_method = bound_llm
+    else:
+        llm_provider = basic_memory_settings.get("llm_provider")
+        if not llm_provider:
+            raise ValueError("LLM provider not specified for basic memory agent")
+        if not isinstance(llm_configs, dict):
+            raise ValueError("LLM configuration pool is missing")
+        llm_config = llm_configs.get(llm_provider)
+        if not llm_config:
+            raise ValueError(
+                f"Configuration not found for LLM provider: {llm_provider}"
+            )
+        llm_config = dict(llm_config)
+        interrupt_method: Literal["system", "user"] = llm_config.pop(
+            "interrupt_method", "user"
+        )
+        llm = StatelessLLMFactory.create_llm(llm_provider=llm_provider, **llm_config)
 
     tool_prompts = kwargs.get("system_config", {}).get("tool_prompts", {})
     tool_manager: ToolManager | None = kwargs.get("tool_manager")
