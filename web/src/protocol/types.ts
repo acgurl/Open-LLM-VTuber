@@ -122,6 +122,7 @@ export interface HistorySummary {
 export interface ConfigFileEntry {
   filename: string;
   name: string;
+  is_default?: boolean;
 }
 
 export const MODEL_KINDS = ['llm', 'tts', 'asr'] as const;

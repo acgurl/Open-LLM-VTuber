@@ -19,6 +19,7 @@ class SystemConfig(I18nMixin):
     host: str = Field(..., alias="host")
     port: int = Field(..., alias="port")
     config_alts_dir: str = Field(..., alias="config_alts_dir")
+    default_character: str | None = Field(None, alias="default_character")
     tool_prompts: dict[str, str] = Field(..., alias="tool_prompts")
     enable_proxy: bool = Field(False, alias="enable_proxy")
     llm_models_file: str = Field(DEFAULT_LLM_MODELS_FILE, alias="llm_models_file")
@@ -36,6 +37,10 @@ class SystemConfig(I18nMixin):
         "port": Description(en="Server port number", zh="服务器端口号"),
         "config_alts_dir": Description(
             en="Directory for alternative configurations", zh="备用配置目录"
+        ),
+        "default_character": Description(
+            en="Default character preset filename inside config_alts_dir",
+            zh="默认角色预设文件名（位于 config_alts_dir 目录内）",
         ),
         "tool_prompts": Description(
             en="Tool prompts to be inserted into persona prompt",

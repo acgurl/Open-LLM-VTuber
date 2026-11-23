@@ -30,10 +30,19 @@ export function CharacterPicker() {
   const currentFile =
     configs?.find((c) => c.filename === configFile && c.name === confName)?.filename ??
     configs?.find((c) => c.name === confName)?.filename;
+  const defaultConfig = configs?.find((c) => c.filename === 'conf.yaml');
+  const defaultMatch = defaultConfig
+    ? configs?.find((c) => c.filename !== 'conf.yaml' && c.name === defaultConfig.name)
+    : undefined;
+  const visibleConfigs = (configs ?? []).filter(
+    (c) => !(defaultMatch && c.filename === 'conf.yaml'),
+  );
   const nameCounts = new Map<string, number>();
-  for (const config of configs ?? []) {
+  for (const config of visibleConfigs) {
     nameCounts.set(config.name, (nameCounts.get(config.name) ?? 0) + 1);
   }
+  const selectedId =
+    defaultMatch && currentFile === defaultMatch.filename ? 'conf.yaml' : currentFile;
 
   return (
     <TopBarPicker
@@ -42,13 +51,16 @@ export function CharacterPicker() {
       label={switching ? `${name} · ${t('status.switching')}` : t('character.pick', { name })}
       icon={<span className={DOT_CLASS[status] ?? 'dot'} />}
       menuTitle={t('character.title')}
-      options={(configs ?? []).map((config) => ({
-        id: config.filename,
-        name: config.name,
-        description: config.filename === 'conf.yaml' ? t('character.default')
-          : (nameCounts.get(config.name) ?? 0) > 1 ? config.filename.replace(/\.yaml$/, '') : undefined,
-      }))}
-      selectedId={currentFile}
+      options={visibleConfigs.map((config) => {
+        const isDefault = Boolean(config.is_default) || config.filename === 'conf.yaml' || config.filename === defaultMatch?.filename;
+        return {
+          id: defaultMatch && config.filename === defaultMatch.filename ? 'conf.yaml' : config.filename,
+          name: config.name,
+          description: isDefault ? t('character.default')
+            : (nameCounts.get(config.name) ?? 0) > 1 ? config.filename.replace(/\.yaml$/, '') : undefined,
+        };
+      })}
+      selectedId={selectedId}
       switching={switching}
       disabled={status !== 'online' || !confName || modelSwitching}
       busy={busy}

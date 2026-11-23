@@ -10,7 +10,8 @@ import chardet
 from loguru import logger
 
 from .main import Config
-from ..utils.security import redact_secrets
+from ..utils.dicts import deep_merge
+from ..utils.security import redact_secrets, resolve_existing_file_within
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -55,6 +56,38 @@ def read_yaml(config_path: str, *, log_parse_error: bool = True) -> dict[str, An
         raise
 
 
+def resolve_default_character(config_data: dict) -> dict:
+    """Merge ``system_config.default_character`` into ``character_config`` when needed."""
+    sys_cfg = config_data.get("system_config")
+    if not isinstance(sys_cfg, dict):
+        return config_data
+    default_character = sys_cfg.get("default_character")
+    if not isinstance(default_character, str) or not default_character.strip():
+        return config_data
+
+    char_cfg = config_data.get("character_config")
+    # Presets already resolved by character switching carry their own conf_uid.
+    if isinstance(char_cfg, dict) and char_cfg.get("conf_uid"):
+        return config_data
+
+    chars_dir = sys_cfg.get("config_alts_dir") or "characters"
+    preset_path = resolve_existing_file_within(
+        chars_dir, default_character.strip(), allowed_suffixes={".yaml"}
+    )
+    preset_data = read_yaml(str(preset_path)) or {}
+    preset_char = preset_data.get("character_config")
+    if not isinstance(preset_char, dict):
+        raise ValueError(
+            f"Default character preset {default_character} must define a character_config mapping"
+        )
+
+    merged_char = deep_merge(
+        char_cfg if isinstance(char_cfg, dict) else {}, preset_char
+    )
+    merged_char["allowed_users"] = []
+    return {**config_data, "character_config": merged_char}
+
+
 def validate_config(config_data: dict) -> Config:
     """
     Validate configuration data against the Config model.
@@ -70,6 +103,8 @@ def validate_config(config_data: dict) -> Config:
     """
     if not isinstance(config_data, dict):
         raise ValueError("Configuration root must be a mapping")
+
+    config_data = resolve_default_character(config_data)
 
     try:
         return Config(**config_data)
@@ -163,19 +198,35 @@ def scan_config_alts_directory(
     """
     config_files = []
 
-    # Add default config first
+    # Add default config first when conf.yaml defines its own character rather
+    # than referencing a preset in config_alts_dir.
     try:
         default_config = read_yaml("conf.yaml") or {}
     except Exception as e:
         logger.error(f"Failed to read default config: {e}")
         default_config = {}
 
-    config_files.append(
-        {
-            "filename": "conf.yaml",
-            "name": _config_display_name(default_config, "conf.yaml"),
-        }
+    default_sys = (
+        default_config.get("system_config")
+        if isinstance(default_config, dict)
+        else None
     )
+    default_character = (
+        default_sys.get("default_character")
+        if isinstance(default_sys, dict)
+        and isinstance(default_sys.get("default_character"), str)
+        else None
+    )
+    default_character = default_character.strip() if default_character else None
+
+    if not default_character:
+        config_files.append(
+            {
+                "filename": "conf.yaml",
+                "name": _config_display_name(default_config, "conf.yaml"),
+                "is_default": True,
+            }
+        )
 
     # Scan other configs. One malformed file must not hide every other preset.
     for root, _, files in os.walk(config_alts_dir):
@@ -213,9 +264,15 @@ def scan_config_alts_directory(
                         logger.debug(f"Hiding character config {full_path}")
                         continue
 
-            config_files.append({"filename": relative_path, "name": name})
+            entry: dict[str, Any] = {"filename": relative_path, "name": name}
+            if default_character and relative_path == default_character:
+                entry["is_default"] = True
+            config_files.append(entry)
 
-    config_files[1:] = sorted(config_files[1:], key=lambda item: item["filename"])
+    if default_character:
+        config_files = sorted(config_files, key=lambda item: item["filename"])
+    else:
+        config_files[1:] = sorted(config_files[1:], key=lambda item: item["filename"])
     logger.debug(f"Found config files: {config_files}")
     return config_files
 
