@@ -48,7 +48,7 @@ class ScanConfigAltsDirectoryTests(unittest.TestCase):
 
         self.assertEqual(
             configs[0],
-            {"filename": "conf.yaml", "name": "Default Character"},
+            {"filename": "conf.yaml", "name": "Default Character", "is_default": True},
         )
         names = {item["filename"]: item["name"] for item in configs}
         self.assertEqual(names["alpha.yaml"], "Alpha")

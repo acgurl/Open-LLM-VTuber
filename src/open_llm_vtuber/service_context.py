@@ -56,6 +56,7 @@ from .config_manager import (
     validate_config,
 )
 from .config_manager.access import is_user_allowed
+from .config_manager.utils import resolve_default_character
 
 # Tool prompts that are injected per turn (or, for MCP, by the agent from the
 # live tool list) rather than baked into the persona system prompt.
@@ -1065,7 +1066,12 @@ class ServiceContext:
     def _load_character_config_data(self, config_file_name: str) -> tuple[Any, dict]:
         """Return the merged character config plus the preset's own raw mapping."""
         if config_file_name == "conf.yaml":
-            character_config_data = read_yaml("conf.yaml").get("character_config")
+            conf_data = read_yaml("conf.yaml")
+            if isinstance(conf_data, dict):
+                conf_data = resolve_default_character(conf_data)
+                character_config_data = conf_data.get("character_config")
+            else:
+                character_config_data = None
             raw_character_config: dict = {}
         else:
             # Resolve inside the character presets directory; the raw client
