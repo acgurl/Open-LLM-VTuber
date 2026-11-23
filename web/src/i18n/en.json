@@ -229,11 +229,20 @@
     "switched": "Switched to {{name}}"
   },
   "model": {
-    "title": "Model",
-    "pick": "Switch model (current: {{name}})",
+    "title": "Models",
+    "pick": "Switch models ({{category}}: {{name}})",
+    "category": { "llm": "Language model", "tts": "Speech synthesis", "asr": "Speech recognition" },
+    "tab": { "llm": "Chat", "tts": "Voice", "asr": "Recognition" },
     "default": "Character default",
-    "defaultDesc": "Use the model this character is configured with",
-    "switched": "Switched to {{name}}"
+    "followAgain": "Select to follow this character again",
+    "defaultDesc": {
+      "llm": "Use this character's default language model",
+      "tts": "Use this character's default speech synthesis model",
+      "asr": "Use this character's default speech recognition model"
+    },
+    "switching": "Switching {{category}}…",
+    "switched": "{{category}} switched to {{name}}",
+    "timeout": "No confirmation for {{category}} switch. Try again shortly."
   },
   "thinking": {
     "label": "Think",

@@ -166,19 +166,27 @@ export function handleServerMessage(msg: ServerMessage) {
       toast(t('character.switched', { name: conn.confName }), 'success');
       // 切换后 history_uid 被清空，重建
       wsClient.send({ type: 'create-new-history' });
+      wsClient.send({ type: 'fetch-models' });
       break;
     }
 
     case 'model-list':
-      useModels.getState().setList(msg.models ?? [], msg.current ?? null, msg.thinking ?? null);
+      useModels.getState().setList({
+        llm: { options: msg.models ?? [], current: msg.current ?? null, characterDefault: msg.default_model },
+        tts: { options: msg.tts_models ?? [], current: msg.tts_current ?? null, characterDefault: msg.tts_default_model },
+        asr: { options: msg.asr_models ?? [], current: msg.asr_current ?? null, characterDefault: msg.asr_default_model },
+      }, msg.thinking ?? null);
       break;
 
     case 'model-switched': {
+      const kind = msg.kind ?? 'llm';
       const models = useModels.getState();
-      models.confirmSwitch(msg.model ?? null, msg.thinking ?? null);
-      const name =
-        models.models.find((m) => m.id === msg.model)?.name ?? t('model.default');
-      toast(t('model.switched', { name }), 'success');
+      models.confirmSwitch(kind, msg.model, msg.thinking ?? null);
+      const { options, characterDefault } = models.catalogs[kind];
+      const name = msg.model === null
+        ? characterDefault?.name ?? t('model.default')
+        : options.find((m) => m.id === msg.model)?.name ?? msg.model;
+      toast(t('model.switched', { category: t(`model.category.${kind}`), name }), 'success');
       break;
     }
 
@@ -227,8 +235,13 @@ export function handleServerMessage(msg: ServerMessage) {
       break;
 
     case 'error':
-      useSettings.getState().cancelConfigSwitch();
-      useModels.getState().cancelSwitch();
+      if (msg.kind !== undefined) {
+        useModels.getState().cancelSwitch(msg.kind);
+      } else if (msg.message === 'Model not available') {
+        useModels.getState().cancelSwitch('llm');
+      } else {
+        useSettings.getState().cancelConfigSwitch();
+      }
       toast(translateServer(msg.message), 'error');
       break;
   }

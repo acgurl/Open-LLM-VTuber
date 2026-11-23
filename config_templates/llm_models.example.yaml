@@ -1,4 +1,4 @@
-# User-selectable LLM models / 用户可在网页端选择的 LLM 模型
+# User-selectable language and speech presets / 网页端可选的语言模型和语音预设
 #
 # Copy this file to the project root as `llm_models.yaml` (the path is
 # `system_config.llm_models_file` in conf.yaml). Without that file the feature
@@ -120,3 +120,39 @@ models:
     base_url: http://localhost:11434/v1
     llm_api_key: not-needed
     model: qwen2.5:latest
+
+# Optional speech presets. Uncomment only working providers that should be
+# selectable. Without `settings`, reuse the corresponding provider configured
+# under `character_config.tts_config` / `asr_config` in the base conf.yaml.
+# 只取消注释你已配好且愿意对用户开放的服务。省略 settings 时，复用基础
+# conf.yaml 中 character_config.tts_config / asr_config 的同名服务配置。
+#
+# tts_models:
+#   - id: azure-voice
+#     name: Azure 语音
+#     provider: azure_tts
+#   - id: azure-hiumaan
+#     name: Azure · 曉曼（香港粵語）
+#     provider: azure_tts
+#     settings:
+#       api_key: your-azure-speech-key
+#       region: eastus # Use the region of your Azure Speech resource.
+#       voice: zh-HK-HiuMaanNeural
+#       pitch: '0'
+#       rate: '1'
+#   - id: edge-xiaoxiao
+#     name: Edge · 晓晓
+#     provider: edge_tts
+#     # Optional complete provider settings (same fields as conf.yaml).
+#     # 也可以直接指定一套完整的同名服务子配置，例如另一种音色。
+#     settings:
+#       voice: zh-CN-XiaoxiaoNeural
+#
+# asr_models:
+#   - id: groq-whisper
+#     name: Groq Whisper
+#     provider: groq_whisper_asr
+#   - id: azure-asr
+#     name: Azure 语音识别
+#     provider: azure_asr
+#     allowed_users: [alice@example.com]

@@ -327,6 +327,82 @@
   letter-spacing: 0.06em;
 }
 
+.model-menu[role='dialog'] {
+  width: min(308px, calc(100vw - 32px));
+  overflow: hidden;
+}
+
+.picker-tabs {
+  display: grid;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+  gap: 3px;
+  flex: none;
+  margin: 1px 3px 5px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--chip-hover);
+}
+
+.picker-tabs button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 36px;
+  min-width: 0;
+  padding: 5px 3px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 160ms var(--ease-snap), color 160ms var(--ease-snap), border-color 160ms var(--ease-snap);
+}
+
+.picker-tabs button:hover {
+  color: var(--ink);
+  background: var(--chip-hover);
+}
+
+.picker-tabs button[aria-selected='true'] {
+  border-color: var(--accent-line);
+  background: linear-gradient(155deg, var(--sheen), transparent 75%), var(--accent-soft);
+  color: var(--ink);
+  box-shadow: var(--shadow-inset);
+}
+
+.picker-tabs button span {
+  display: grid;
+  flex: none;
+  place-items: center;
+}
+
+.picker-tabs button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.picker-tabs button[aria-selected='true'] svg {
+  color: var(--accent);
+}
+
+.picker-tab-panel {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.picker-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .picker-option {
   display: flex;
   align-items: center;
@@ -354,6 +430,7 @@
 }
 
 .picker-pill:focus-visible,
+.picker-tabs button:focus-visible,
 .picker-option:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;

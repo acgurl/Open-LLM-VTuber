@@ -230,10 +230,19 @@
   },
   "model": {
     "title": "模型",
-    "pick": "切换模型（当前：{{name}}）",
+    "pick": "切换模型（{{category}}：{{name}}）",
+    "category": { "llm": "语言模型", "tts": "语音合成", "asr": "语音识别" },
+    "tab": { "llm": "对话", "tts": "合成", "asr": "识别" },
     "default": "角色默认",
-    "defaultDesc": "使用当前角色预设的模型",
-    "switched": "已切换到 {{name}}"
+    "followAgain": "点击恢复跟随当前角色",
+    "defaultDesc": {
+      "llm": "使用当前角色预设的语言模型",
+      "tts": "使用当前角色预设的语音合成模型",
+      "asr": "使用当前角色预设的语音识别模型"
+    },
+    "switching": "正在切换{{category}}…",
+    "switched": "{{category}}已切换为 {{name}}",
+    "timeout": "切换{{category}}未收到确认，请稍后重试"
   },
   "thinking": {
     "label": "思考",

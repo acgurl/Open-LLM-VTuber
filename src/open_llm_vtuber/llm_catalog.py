@@ -68,6 +68,12 @@ from .config_manager.access import (
 from .config_manager.llm_migration import migrate_model_entry
 from .config_manager.stateless_llm import StatelessLLMConfigs
 from .config_manager.utils import read_yaml
+from .speech_models import (
+    SPEECH_KINDS,
+    SpeechKind,
+    SpeechModelEntry,
+    parse_speech_models,
+)
 
 DEFAULT_MODELS_FILE = "llm_models.yaml"
 # Key of the per-user setting that stores the chosen model id.
@@ -346,6 +352,7 @@ class LLMModelCatalog:
         self._checked_at: float | None = None
         self._signature: tuple | None = ()
         self._entries: dict[str, LLMModelEntry] = {}
+        self._speech_entries: dict[SpeechKind, dict[str, SpeechModelEntry]] = {}
         # Clients are shared by every session using the model, like the
         # character's own LLM client is.
         self._clients: dict[str, tuple[LLMModelEntry, StatelessLLMInterface]] = {}
@@ -380,11 +387,17 @@ class LLMModelCatalog:
                         f"{self.path} is gone; model selection is now disabled"
                     )
                 self._entries = {}
+                self._speech_entries = {}
                 self._clients.clear()
                 return self._entries
 
             try:
-                entries = parse_models(read_yaml(self.path), self.path)
+                data = read_yaml(self.path)
+                entries = parse_models(data, self.path)
+                speech_entries = {
+                    kind: parse_speech_models(data, kind, self.path)
+                    for kind in SPEECH_KINDS
+                }
             except (OSError, ValueError, yaml.YAMLError) as error:
                 logger.error(
                     f"{self.path} cannot be loaded ({type(error).__name__}); "
@@ -393,6 +406,7 @@ class LLMModelCatalog:
                 return self._entries
 
             self._entries = entries
+            self._speech_entries = speech_entries
             for model_id in list(self._clients):
                 if entries.get(model_id) != self._clients[model_id][0]:
                     del self._clients[model_id]
@@ -432,6 +446,16 @@ class LLMModelCatalog:
         if not is_user_allowed(entry.allowed_users, user_id, emails):
             return None
         return entry
+
+    def available_speech(
+        self, kind: SpeechKind, user_id: str | None, emails: tuple[str, ...]
+    ) -> list[SpeechModelEntry]:
+        self._current()  # Refresh both sections from the same file snapshot.
+        return [
+            entry
+            for entry in self._speech_entries.get(kind, {}).values()
+            if is_user_allowed(entry.allowed_users, user_id, emails)
+        ]
 
     def client(self, entry: LLMModelEntry) -> StatelessLLMInterface:
         """The shared LLM client of a model, created on first use."""

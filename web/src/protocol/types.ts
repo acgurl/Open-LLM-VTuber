@@ -124,7 +124,9 @@ export interface ConfigFileEntry {
   name: string;
 }
 
-/** 后台 llm_models.yaml 里当前账号可选的一个模型（不含地址与密钥）。 */
+export const MODEL_KINDS = ['llm', 'tts', 'asr'] as const;
+export type ModelKind = (typeof MODEL_KINDS)[number];
+
 export interface ThinkingLevel {
   id: string; // 例如 off / low / high；off 表示不思考
   name: string; // 后台配置的显示名，空时前端按 id 翻译
@@ -135,11 +137,17 @@ export interface ThinkingInfo {
   default: string;
 }
 
+/** 目录选项仅携带显示与选择所需的信息。 */
 export interface ModelEntry {
   id: string;
   name: string;
   description: string;
   thinking?: ThinkingInfo; // 可选思考档位；没有时不显示思考按钮
+}
+
+export interface DefaultModelDisplay {
+  name: string;
+  matches: string[]; // Directory entries with the same effective configuration.
 }
 
 export type ControlText =
@@ -164,9 +172,16 @@ export type ServerMessage =
       type: 'model-list';
       models: ModelEntry[];
       current: string | null;
-      thinking?: string | null; // 当前模型的思考档位
+      thinking?: string | null; // 当前 LLM 的思考档位
+      default_model?: DefaultModelDisplay;
+      tts_models?: ModelEntry[];
+      tts_current?: string | null;
+      tts_default_model?: DefaultModelDisplay;
+      asr_models?: ModelEntry[];
+      asr_current?: string | null;
+      asr_default_model?: DefaultModelDisplay;
     }
-  | { type: 'model-switched'; model: string | null; thinking?: string | null }
+  | { type: 'model-switched'; model: string | null; kind?: ModelKind; thinking?: string | null }
   | { type: 'control'; text: ControlText | string }
   | {
       type: 'text-delta';
@@ -204,7 +219,7 @@ export type ServerMessage =
   | { type: 'local-mcp-unregistered'; server_id: string; success: boolean }
   | { type: 'local-mcp-error'; server_id: string; message: string }
   | { type: 'local-mcp-config'; servers: LocalMcpServerConfig[] }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string; kind?: ModelKind };
 
 export type ClientMessage =
   | { type: 'text-input'; text: string; images?: ImagePayload[] }
@@ -220,7 +235,7 @@ export type ClientMessage =
   | { type: 'fetch-configs' }
   | { type: 'switch-config'; file: string }
   | { type: 'fetch-models' }
-  | { type: 'switch-model'; model: string | null }
+  | { type: 'switch-model'; model: string | null; kind?: ModelKind }
   | { type: 'set-thinking'; level: string }
   | { type: 'request-init-config' }
   | { type: 'fetch-backgrounds' }
