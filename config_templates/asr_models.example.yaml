@@ -1,0 +1,25 @@
+# ASR catalog examples / 语音识别清单示例
+# Start with asr_models.default.yaml and copy only configured entries into the
+# runtime asr_models.yaml (system_config.asr_models_file in conf.yaml).
+# 先用 asr_models.default.yaml，再将已配置的条目加入运行时 asr_models.yaml
+# （由 conf.yaml 的 system_config.asr_models_file 指定）。
+# Each entry needs complete provider settings; nothing is inherited from conf.yaml.
+# 每个条目都要填写完整 settings，不从 conf.yaml 继承。
+
+asr_models:
+  - id: groq-whisper
+    name: Groq Whisper
+    provider: groq_whisper_asr
+    settings:
+      api_key: '${GROQ_API_KEY}'
+      model: whisper-large-v3-turbo
+      lang: null
+
+  # - id: azure-asr
+  #   name: Azure 语音识别
+  #   provider: azure_asr
+  #   allowed_users: [alice@example.com]
+  #   settings:
+  #     api_key: '${AZURE_SPEECH_KEY}'
+  #     region: eastus
+  #     languages: [en-US, zh-CN]

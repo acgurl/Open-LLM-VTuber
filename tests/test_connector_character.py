@@ -1,21 +1,26 @@
 import unittest
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from open_llm_vtuber import session_factory
+from open_llm_vtuber import service_context as service_context_module, session_factory
 from open_llm_vtuber.config_manager.utils import read_yaml, validate_config
 from open_llm_vtuber.connectors.formatting import strip_markdown
+from open_llm_vtuber.llm_catalog import LLMModelCatalog
 from open_llm_vtuber.service_context import ServiceContext
 
 
 def _default_context():
     config = validate_config(read_yaml("config_templates/conf.ZH.default.yaml"))
-    return SimpleNamespace(
-        config=config,
-        system_config=config.system_config,
-        character_config=config.character_config,
-        history_repository=object(),
+    context = ServiceContext()
+    context.config = config
+    context.system_config = config.system_config
+    context.character_config = config.character_config
+    context.history_repository = object()
+    context.llm_catalog = LLMModelCatalog(
+        "config_templates/llm_models.default.yaml",
+        tts_path="config_templates/tts_models.default.yaml",
+        asr_path="config_templates/asr_models.default.yaml",
     )
+    return context
 
 
 class ConnectorBaseContextTests(unittest.IsolatedAsyncioTestCase):
@@ -45,7 +50,11 @@ class ConnectorBaseContextTests(unittest.IsolatedAsyncioTestCase):
             config.character_config.agent_config,
             default.character_config.agent_config,
         )
+        self.assertEqual(
+            config.character_config.model_refs, default.character_config.model_refs
+        )
         self.assertIs(context.history_repository, default.history_repository)
+        self.assertIs(context.llm_catalog, default.llm_catalog)
         self.assertIsNone(context.user_id)
         # The web character is not modified.
         self.assertNotEqual(default.character_config.conf_uid, "qq_bot_001")
@@ -62,24 +71,38 @@ class ConnectorBaseContextTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(prompts, expected)
 
     async def test_load_headless_creates_no_avatar_or_speech_engines(self):
-        config = validate_config(read_yaml("config_templates/conf.ZH.default.yaml"))
-        context = ServiceContext()
+        default = _default_context()
         with (
+            patch.object(default.llm_catalog, "client") as client,
             patch.object(ServiceContext, "_init_mcp_components", new=AsyncMock()),
             patch.object(ServiceContext, "init_agent", new=AsyncMock()) as init_agent,
             patch.object(ServiceContext, "init_live2d") as init_live2d,
-            patch.object(ServiceContext, "init_tts") as init_tts,
-            patch.object(ServiceContext, "init_asr") as init_asr,
+            patch.object(ServiceContext, "init_translate") as init_translate,
+            patch.object(service_context_module.TTSFactory, "get_tts_engine") as tts,
+            patch.object(service_context_module.ASRFactory, "get_asr_system") as asr,
         ):
-            await context.load_headless(config)
+            context = await session_factory.build_connector_base_context(
+                default, character={}, tool_prompts=None
+            )
 
+        config = context.config
         init_live2d.assert_not_called()
-        init_tts.assert_not_called()
-        init_asr.assert_not_called()
-        init_agent.assert_awaited_once()
+        init_translate.assert_not_called()
+        tts.assert_not_called()
+        asr.assert_not_called()
+        client.assert_called_once()
+        llm_entry = client.call_args.args[0]
+        self.assertEqual(llm_entry.id, config.character_config.model_refs.llm)
+        init_agent.assert_awaited_once_with(
+            config.character_config.agent_config,
+            config.character_config.persona_prompt,
+            llm_entry=llm_entry,
+            bound_llm=(client.return_value, llm_entry.interrupt_method),
+        )
         self.assertIsNone(context.live2d_model)
         self.assertIsNone(context.tts_engine)
         self.assertIsNone(context.asr_engine)
+        self.assertIsNone(context.translate_engine)
 
 
 class StripMarkdownTests(unittest.TestCase):

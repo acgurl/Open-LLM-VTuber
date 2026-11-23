@@ -1,4 +1,5 @@
 import i18n from '../i18n';
+import { useConnection } from '../stores/connection';
 import { toast } from '../stores/toast';
 import { mapMicError } from './mic';
 import { redirectToLogin } from './session';
@@ -349,8 +350,14 @@ function writeAscii(view: DataView, offset: number, text: string): void {
 
 export async function transcribeWav(wav: Blob, signal?: AbortSignal): Promise<string> {
   const t = i18n.t.bind(i18n);
+  const { clientUid, status } = useConnection.getState();
+  if (status !== 'online' || !clientUid) {
+    throw new Error(t(status === 'online' ? 'status.connecting' : 'status.offline'));
+  }
+
   const form = new FormData();
   form.append('file', wav, 'recording.wav');
+  form.append('client_uid', clientUid);
 
   const response = await fetch('/asr', {
     method: 'POST',

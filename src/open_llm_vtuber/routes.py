@@ -8,7 +8,7 @@ from fastapi import APIRouter, WebSocket, UploadFile, File, Request, Response
 from starlette.responses import JSONResponse
 from starlette.websockets import WebSocketDisconnect
 from loguru import logger
-from .auth import AuthManager, Identity, default_user_id
+from .auth import AuthManager, Identity, default_user_id, request_user_id
 from .auth.middleware import IDENTITY_SCOPE_KEY
 from .config_manager.asset_access import LIVE2D_MOUNT, CharacterAssetAccess
 from .service_context import ServiceContext
@@ -219,9 +219,23 @@ def _scan_live2d_models(live2d_dir: str) -> list[dict]:
     return valid_characters
 
 
+def _new_ws_handler(
+    default_context_cache: ServiceContext, auth: AuthManager | None
+) -> WebSocketHandler:
+    return WebSocketHandler(
+        default_context_cache,
+        auth_manager=auth,
+        max_connections_per_user=(
+            auth.config.max_connections_per_user if auth is not None else 4
+        ),
+    )
+
+
 def init_client_ws_route(
     default_context_cache: ServiceContext,
     auth: AuthManager | None = None,
+    *,
+    ws_handler: WebSocketHandler | None = None,
 ) -> APIRouter:
     """
     Create and return API routes for handling the `/client-ws` WebSocket connections.
@@ -229,20 +243,15 @@ def init_client_ws_route(
     Args:
         default_context_cache: Default service context cache for new sessions.
         auth: Authentication manager; omitted only by isolated tests.
+        ws_handler: Optional connection registry shared with the /asr route.
 
     Returns:
         APIRouter: Configured router with WebSocket endpoint.
     """
 
     router = APIRouter()
-    max_connections_per_user = (
-        auth.config.max_connections_per_user if auth is not None else 4
-    )
-    ws_handler = WebSocketHandler(
-        default_context_cache,
-        auth_manager=auth,
-        max_connections_per_user=max_connections_per_user,
-    )
+    if ws_handler is None:
+        ws_handler = _new_ws_handler(default_context_cache, auth)
 
     @router.websocket("/client-ws")
     async def websocket_endpoint(websocket: WebSocket):
@@ -370,10 +379,12 @@ class _WebToolRoutes:
         default_context_cache: ServiceContext,
         auth: AuthManager | None,
         asset_access: CharacterAssetAccess | None,
+        ws_handler: WebSocketHandler | None,
     ) -> None:
         self.default_context_cache = default_context_cache
         self.auth = auth
         self.asset_access = asset_access
+        self.ws_handler = ws_handler
         self.asr_semaphore = asyncio.Semaphore(MAX_CONCURRENT_ASR)
         self.tts_slots = asyncio.Semaphore(MAX_TTS_CONNECTIONS)
 
@@ -396,13 +407,29 @@ class _WebToolRoutes:
             }
         )
 
-    async def transcribe_audio(self, file: UploadFile = File(...)):
-        """
-        Endpoint for transcribing audio using the ASR engine
-        """
-        # Authentication is enforced by AuthRedirectMiddleware: /asr is not a
-        # public path, so in OIDC mode a request without a session never
-        # reaches this handler.
+    async def transcribe_audio(self, request: Request, file: UploadFile = File(...)):
+        """Transcribe using a live session's ASR, or the standalone default."""
+        user_id = request_user_id(request, self.auth, self.default_context_cache)
+        if user_id is None:
+            return _json_error(401, "Authentication required")
+
+        # FastAPI treats an empty optional Form string as omitted. Inspect the
+        # parsed fields so empty, duplicate, and non-text IDs fail closed too.
+        client_uids = (await request.form()).getlist("client_uid")
+        client_uid = None
+        ws_handler = self.ws_handler
+        if client_uids:
+            candidate = client_uids[0]
+            if (
+                len(client_uids) != 1
+                or not isinstance(candidate, str)
+                or not candidate
+                or ws_handler is None
+                or not ws_handler.has_client(candidate, user_id)
+            ):
+                return _json_error(404, "Unknown client")
+            client_uid = candidate
+
         try:
             contents = await file.read(MAX_ASR_UPLOAD_BYTES + 1)
             logger.info(f"Received audio upload: {len(contents)} bytes")
@@ -422,9 +449,17 @@ class _WebToolRoutes:
                 return _json_error(429, "Too many concurrent transcription requests")
 
             async with self.asr_semaphore:
-                text = await self.default_context_cache.asr_engine.async_transcribe_np(
-                    audio_array
-                )
+                context = self.default_context_cache
+                if client_uid is not None and ws_handler is not None:
+                    context = await ws_handler.resolve_asr_context(client_uid, user_id)
+                    if context is None:
+                        return _json_error(404, "Unknown client")
+                engine = context.asr_engine
+                if engine is None:
+                    return _json_error(
+                        500, "Internal server error during transcription"
+                    )
+                text = await engine.async_transcribe_np(audio_array)
             logger.info(f"Transcription result: {text}")
             return {"text": text}
 
@@ -468,6 +503,7 @@ def init_webtool_routes(
     auth: AuthManager | None = None,
     *,
     asset_access: CharacterAssetAccess | None = None,
+    ws_handler: WebSocketHandler | None = None,
 ) -> APIRouter:
     """
     Create and return API routes for handling web tool interactions.
@@ -476,13 +512,14 @@ def init_webtool_routes(
         default_context_cache: Default service context cache for new sessions.
         auth: Authentication manager; omitted only by isolated tests.
         asset_access: Hides restricted Live2D folders from /live2d-models/info.
+        ws_handler: Optional connection registry for session-bound /asr requests.
 
     Returns:
         APIRouter: Configured router with WebSocket endpoint.
     """
 
     router = APIRouter()
-    handlers = _WebToolRoutes(default_context_cache, auth, asset_access)
+    handlers = _WebToolRoutes(default_context_cache, auth, asset_access, ws_handler)
     router.add_api_route("/web-tool", web_tool_redirect, methods=["GET"])
     router.add_api_route("/web_tool", web_tool_redirect_alt, methods=["GET"])
     router.add_api_route(
@@ -490,4 +527,27 @@ def init_webtool_routes(
     )
     router.add_api_route("/asr", handlers.transcribe_audio, methods=["POST"])
     router.add_api_websocket_route("/tts-ws", handlers.tts_endpoint)
+    return router
+
+
+def init_session_routes(
+    default_context_cache: ServiceContext,
+    auth: AuthManager | None = None,
+    *,
+    asset_access: CharacterAssetAccess | None = None,
+) -> APIRouter:
+    """Mount live and standalone routes with a shared client registry."""
+    router = APIRouter()
+    ws_handler = _new_ws_handler(default_context_cache, auth)
+    router.include_router(
+        init_client_ws_route(default_context_cache, auth, ws_handler=ws_handler)
+    )
+    router.include_router(
+        init_webtool_routes(
+            default_context_cache,
+            auth,
+            asset_access=asset_access,
+            ws_handler=ws_handler,
+        )
+    )
     return router

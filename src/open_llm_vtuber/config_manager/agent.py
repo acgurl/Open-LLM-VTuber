@@ -18,12 +18,15 @@ from .stateless_llm import StatelessLLMConfigs
 class BasicMemoryAgentConfig(I18nMixin, BaseModel):
     """Configuration for the basic memory agent."""
 
-    llm_provider: Literal[
-        "openai_compatible_llm",
-        "openai_responses_llm",
-        "claude_llm",
-        "vertex_llm",
-    ] = Field(..., alias="llm_provider")
+    llm_provider: (
+        Literal[
+            "openai_compatible_llm",
+            "openai_responses_llm",
+            "claude_llm",
+            "vertex_llm",
+        ]
+        | None
+    ) = Field(None, alias="llm_provider")
 
     faster_first_response: bool | None = Field(True, alias="faster_first_response")
     segment_method: Literal["regex", "pysbd"] = Field("pysbd", alias="segment_method")
@@ -139,7 +142,9 @@ class AgentConfig(I18nMixin, BaseModel):
         ..., alias="conversation_agent_choice"
     )
     agent_settings: AgentSettings = Field(..., alias="agent_settings")
-    llm_configs: StatelessLLMConfigs = Field(..., alias="llm_configs")
+    llm_configs: StatelessLLMConfigs = Field(
+        default_factory=StatelessLLMConfigs, alias="llm_configs"
+    )
 
     DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "conversation_agent_choice": Description(

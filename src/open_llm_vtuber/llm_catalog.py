@@ -40,18 +40,18 @@ gets ``display: summarized``, Vertex's ``thinkingConfig`` gets
 ``allowed_users`` follows the character presets' rule (``config_manager/
 access.py``): internal user ids or verified login emails, never display names.
 
-A missing file means the feature is off: every session uses its character's
-LLM. Edits are picked up without a restart. A file that cannot be parsed keeps
-the last good catalog, so a typo cannot widen or drop access.
+Characters resolve required references through separate LLM, TTS and ASR
+catalogs. Each file refreshes independently and keeps its last good entries
+if an edit cannot be parsed.
 """
 
 import os
 import re
 import threading
 import time
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 import yaml
 from loguru import logger
@@ -65,8 +65,14 @@ from .config_manager.access import (
     parse_allowed_users,
     warn_unmatched_allowlist_entries,
 )
+from .config_manager.character import CharacterModelRefs
 from .config_manager.llm_migration import migrate_model_entry
 from .config_manager.stateless_llm import StatelessLLMConfigs
+from .config_manager.system import (
+    DEFAULT_ASR_MODELS_FILE,
+    DEFAULT_LLM_MODELS_FILE,
+    DEFAULT_TTS_MODELS_FILE,
+)
 from .config_manager.utils import read_yaml
 from .speech_models import (
     SPEECH_KINDS,
@@ -75,7 +81,6 @@ from .speech_models import (
     parse_speech_models,
 )
 
-DEFAULT_MODELS_FILE = "llm_models.yaml"
 # Key of the per-user setting that stores the chosen model id.
 MODEL_SETTING_KEY = "llm_model"
 
@@ -338,80 +343,111 @@ def parse_models(data: Any, source: str) -> dict[str, LLMModelEntry]:
     return entries
 
 
-class LLMModelCatalog:
-    """The selectable models plus one shared LLM client per model."""
+def _parse_tts(data: Any, path: str) -> dict[str, SpeechModelEntry]:
+    return parse_speech_models(data, "tts", path)
+
+
+def _parse_asr(data: Any, path: str) -> dict[str, SpeechModelEntry]:
+    return parse_speech_models(data, "asr", path)
+
+
+_Entry = TypeVar("_Entry")
+_CATALOG_SECTIONS = frozenset({"models", "tts_models", "asr_models"})
+
+
+class _CatalogFile(Generic[_Entry]):
+    """Independent last-good snapshot for one on-disk catalog."""
 
     def __init__(
         self,
-        path: str = DEFAULT_MODELS_FILE,
-        refresh_interval: float = 5.0,
-    ) -> None:
+        path: str,
+        section: str,
+        parse: Callable[[Any, str], dict[str, _Entry]],
+        interval: float,
+    ):
         self.path = path
-        self.refresh_interval = refresh_interval
-        self._lock = threading.Lock()
-        self._checked_at: float | None = None
-        self._signature: tuple | None = ()
-        self._entries: dict[str, LLMModelEntry] = {}
-        self._speech_entries: dict[SpeechKind, dict[str, SpeechModelEntry]] = {}
-        # Clients are shared by every session using the model, like the
-        # character's own LLM client is.
-        self._clients: dict[str, tuple[LLMModelEntry, StatelessLLMInterface]] = {}
+        self.section = section
+        self.parse = parse
+        self.interval = interval
+        self.checked_at = float("-inf")
+        self.signature: tuple[int, int, int] | None = None
+        self.entries: dict[str, _Entry] = {}
 
-    # ---- loading
-
-    def _file_signature(self) -> tuple | None:
+    def refresh(self) -> None:
+        now = time.monotonic()
+        if now - self.checked_at < self.interval:
+            return
+        self.checked_at = now
         try:
             stat = os.stat(self.path)
-        except OSError:
-            return None
-        return (stat.st_mtime_ns, stat.st_size)
+        except FileNotFoundError:
+            if self.entries:
+                logger.warning(f"{self.path} is gone; clearing {self.section}")
+            self.entries = {}
+            self.signature = None
+            return
+        except OSError as error:
+            logger.error(
+                f"{self.path} cannot be read ({type(error).__name__}); keeping {self.section}"
+            )
+            return
+        signature = (stat.st_mtime_ns, stat.st_size, stat.st_ino)
+        if signature == self.signature:
+            return
+        self.signature = signature
+        try:
+            data = read_yaml(self.path, log_parse_error=False)
+            if not isinstance(data, dict) or not isinstance(
+                data.get(self.section), list
+            ):
+                raise ValueError(f"expected a '{self.section}' list")
+            if _CATALOG_SECTIONS.intersection(data).difference({self.section}):
+                raise ValueError(
+                    f"move other model sections into their own files; expected only '{self.section}'"
+                )
+            self.entries = self.parse(data, self.path)
+        except (OSError, yaml.YAMLError) as error:
+            logger.error(
+                f"{self.path} cannot be loaded ({type(error).__name__}); keeping {self.section}"
+            )
+        except ValueError as error:
+            logger.error(f"{self.path}: {error}; keeping {self.section}")
+        else:
+            logger.info(f"Loaded {len(self.entries)} model(s) from {self.path}")
+
+
+class LLMModelCatalog:
+    """Selectable model catalogs and shared LLM clients."""
+
+    def __init__(
+        self,
+        path: str = DEFAULT_LLM_MODELS_FILE,
+        refresh_interval: float = 5.0,
+        *,
+        tts_path: str = DEFAULT_TTS_MODELS_FILE,
+        asr_path: str = DEFAULT_ASR_MODELS_FILE,
+    ) -> None:
+        self._lock = threading.Lock()
+        self._llm = _CatalogFile(path, "models", parse_models, refresh_interval)
+        self._speech = {
+            "tts": _CatalogFile(tts_path, "tts_models", _parse_tts, refresh_interval),
+            "asr": _CatalogFile(asr_path, "asr_models", _parse_asr, refresh_interval),
+        }
+        self._clients: dict[str, tuple[LLMModelEntry, StatelessLLMInterface]] = {}
+
+    def _refresh_llm(self) -> dict[str, LLMModelEntry]:
+        previous = self._llm.entries
+        self._llm.refresh()
+        entries = self._llm.entries
+        if entries is not previous:
+            for model_id, (entry, _) in list(self._clients.items()):
+                if entries.get(model_id) != entry:
+                    del self._clients[model_id]
+        return entries
 
     def _current(self) -> dict[str, LLMModelEntry]:
         with self._lock:
-            now = time.monotonic()
-            if (
-                self._checked_at is not None
-                and now - self._checked_at < self.refresh_interval
-            ):
-                return self._entries
-            self._checked_at = now
-
-            signature = self._file_signature()
-            if signature == self._signature:
-                return self._entries
-            self._signature = signature
-
-            if signature is None:
-                if self._entries:
-                    logger.warning(
-                        f"{self.path} is gone; model selection is now disabled"
-                    )
-                self._entries = {}
-                self._speech_entries = {}
-                self._clients.clear()
-                return self._entries
-
-            try:
-                data = read_yaml(self.path)
-                entries = parse_models(data, self.path)
-                speech_entries = {
-                    kind: parse_speech_models(data, kind, self.path)
-                    for kind in SPEECH_KINDS
-                }
-            except (OSError, ValueError, yaml.YAMLError) as error:
-                logger.error(
-                    f"{self.path} cannot be loaded ({type(error).__name__}); "
-                    "keeping the previous model list"
-                )
-                return self._entries
-
-            self._entries = entries
-            self._speech_entries = speech_entries
-            for model_id in list(self._clients):
-                if entries.get(model_id) != self._clients[model_id][0]:
-                    del self._clients[model_id]
-            logger.info(f"Loaded {len(entries)} selectable LLM model(s)")
-            return self._entries
+            return self._refresh_llm()
 
     # ---- queries
 
@@ -450,12 +486,48 @@ class LLMModelCatalog:
     def available_speech(
         self, kind: SpeechKind, user_id: str | None, emails: tuple[str, ...]
     ) -> list[SpeechModelEntry]:
-        self._current()  # Refresh both sections from the same file snapshot.
-        return [
-            entry
-            for entry in self._speech_entries.get(kind, {}).values()
-            if is_user_allowed(entry.allowed_users, user_id, emails)
-        ]
+        with self._lock:
+            file = self._speech[kind]
+            file.refresh()
+            return [
+                entry
+                for entry in file.entries.values()
+                if is_user_allowed(entry.allowed_users, user_id, emails)
+            ]
+
+    def character_models(
+        self, refs: CharacterModelRefs, allowed_users: Iterable[str] = ()
+    ) -> tuple[LLMModelEntry, dict[SpeechKind, SpeechModelEntry]]:
+        """Resolve the three required defaults from their respective files."""
+        character_scope = parse_allowed_users(list(allowed_users))
+        if character_scope is INVALID:
+            raise ValueError("Invalid character allowlist")
+        with self._lock:
+            llm = self._refresh_llm().get(refs.llm)
+            self._check_reference(self._llm.path, "llm", refs.llm, llm, character_scope)
+            speech = {}
+            for kind in SPEECH_KINDS:
+                file = self._speech[kind]
+                file.refresh()
+                model_id = getattr(refs, kind)
+                entry = file.entries.get(model_id)
+                self._check_reference(file.path, kind, model_id, entry, character_scope)
+                speech[kind] = entry
+            return llm, speech
+
+    @staticmethod
+    def _check_reference(path, kind, model_id, entry, character_scope) -> None:
+        if entry is None:
+            raise ValueError(
+                f"{path}: character model_refs.{kind} '{model_id}' not found"
+            )
+        scope = parse_allowed_users(entry.allowed_users)
+        if scope is INVALID or (
+            scope and (not character_scope or not set(character_scope).issubset(scope))
+        ):
+            raise ValueError(
+                f"{path}: model_refs.{kind} '{model_id}' does not cover the character allowlist"
+            )
 
     def client(self, entry: LLMModelEntry) -> StatelessLLMInterface:
         """The shared LLM client of a model, created on first use."""

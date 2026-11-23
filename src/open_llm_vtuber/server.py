@@ -22,12 +22,17 @@ from .config_manager.asset_access import (
     LIVE2D_MOUNT,
     CharacterAssetAccess,
 )
-from .routes import init_client_ws_route, init_webtool_routes, init_proxy_route
+from .routes import init_proxy_route, init_session_routes
 from .mcp_routes import init_user_mcp_routes
 from .connector_routes import init_connector_routes
 from .connectors import ConnectorManager
 from .service_context import ServiceContext
-from .llm_catalog import DEFAULT_MODELS_FILE, LLMModelCatalog
+from .llm_catalog import LLMModelCatalog
+from .config_manager.system import (
+    DEFAULT_ASR_MODELS_FILE,
+    DEFAULT_LLM_MODELS_FILE,
+    DEFAULT_TTS_MODELS_FILE,
+)
 from .config_manager.auth import AuthConfig
 from .config_manager.connectors import ConnectorsConfig
 from .config_manager.storage import StorageConfig
@@ -241,7 +246,13 @@ class WebSocketServer:
         # Models users may pick instead of their character's LLM; sessions
         # share this catalog through the default context.
         self.default_context_cache.llm_catalog = LLMModelCatalog(
-            getattr(config.system_config, "llm_models_file", DEFAULT_MODELS_FILE)
+            getattr(config.system_config, "llm_models_file", DEFAULT_LLM_MODELS_FILE),
+            tts_path=getattr(
+                config.system_config, "tts_models_file", DEFAULT_TTS_MODELS_FILE
+            ),
+            asr_path=getattr(
+                config.system_config, "asr_models_file", DEFAULT_ASR_MODELS_FILE
+            ),
         )
 
         # Shared by the static asset mounts and /live2d-models/info.
@@ -255,13 +266,7 @@ class WebSocketServer:
     def _include_routes(self) -> None:
         self.app.include_router(init_auth_routes(self.auth))
         self.app.include_router(
-            init_client_ws_route(
-                default_context_cache=self.default_context_cache,
-                auth=self.auth,
-            ),
-        )
-        self.app.include_router(
-            init_webtool_routes(
+            init_session_routes(
                 default_context_cache=self.default_context_cache,
                 auth=self.auth,
                 asset_access=self.asset_access,
@@ -424,23 +429,12 @@ class WebSocketServer:
         default_context = self.default_context_cache
         await default_context.close()
         # Sessions are gone by now, so the LLM clients they shared can go too.
-        await self._close_llm(getattr(default_context.agent_engine, "llm", None))
         if default_context.llm_catalog is not None:
             await default_context.llm_catalog.close()
         await self.auth.close()
         if self.history_repository is not None:
             await self.history_repository.close()
             self.history_repository = None
-
-    @staticmethod
-    async def _close_llm(llm) -> None:
-        close = getattr(llm, "close", None)
-        if close is None:
-            return
-        try:
-            await close()
-        except Exception:
-            logger.exception("Failed to close the LLM client")
 
     @staticmethod
     def clean_cache():

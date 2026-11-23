@@ -370,21 +370,15 @@ class HeadlessSessionContextTests(unittest.IsolatedAsyncioTestCase):
     async def test_headless_sessions_get_remote_but_not_local_user_mcp(self):
         from open_llm_vtuber import session_factory
         from open_llm_vtuber.auth import Identity
+        from open_llm_vtuber.config_manager import read_yaml, validate_config
         from open_llm_vtuber.service_context import ServiceContext
 
-        default_context = SimpleNamespace(
-            history_repository=AsyncMock(),
-            config=Mock(),
-            system_config=Mock(),
-            character_config=Mock(),
-            live2d_model=None,
-            asr_engine=None,
-            tts_engine=None,
-            agent_engine=None,
-            translate_engine=None,
-            mcp_server_registry=None,
-            tool_adapter=None,
-        )
+        config = validate_config(read_yaml("config_templates/conf.default.yaml"))
+        default_context = ServiceContext()
+        default_context.set_history_storage(AsyncMock(), None)
+        default_context.config = config
+        default_context.system_config = config.system_config
+        default_context.character_config = config.character_config
         remote, local = [{"id": "r"}], [{"id": "l"}]
         with (
             patch.object(

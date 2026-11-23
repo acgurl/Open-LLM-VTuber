@@ -169,29 +169,27 @@ class ModelSelectionTestCase(unittest.IsolatedAsyncioTestCase):
 
 
 class ServiceContextModelTests(ModelSelectionTestCase):
-    async def test_default_display_matches_only_equivalent_catalog_entries(self):
+    async def test_referenced_default_exposes_only_public_fields_and_applies_thinking(
+        self,
+    ):
         context = self.make_context()
-        provider = "openai_compatible_llm"
-        basic = SimpleNamespace(llm_provider=provider)
-        config = SimpleNamespace()
-        context.character_config = SimpleNamespace(
-            agent_config=SimpleNamespace(
-                conversation_agent_choice="basic_memory_agent",
-                agent_settings=SimpleNamespace(basic_memory_agent=basic),
-                llm_configs=SimpleNamespace(openai_compatible_llm=config),
-            )
+        entry = self.catalog.resolve("thinker", "alice", ())
+        context._character_llm_entry = entry
+        context.agent_engine.use_llm(self.catalog.client(entry), entry.interrupt_method)
+        context._agent_replaced()
+        await context.sync_model_selection()
+        payload = context.model_list_payload()
+        self.assertEqual(payload["default_model"], entry.public_info())
+        self.assertIsNone(payload["current"])
+        self.assertEqual(payload["thinking"], "off")
+        self.assertEqual(
+            context.agent_engine.request_options, {"thinking": {"type": "disabled"}}
         )
-        for entry_id, expected in (
-            ("open", {"name": "Open Model", "matches": ["open"]}),
-            ("thinker", {"name": "thinker-1", "matches": []}),
-        ):
-            with self.subTest(entry=entry_id):
-                entry = self.catalog.resolve(entry_id, "alice", ())
-                config.model_dump = lambda settings=dict(entry.settings): settings
-                payload = context.model_list_payload()
-                self.assertEqual(payload["default_model"], expected)
-                self.assertIsNone(payload["current"])
-                self.assertNotIn("base_url", json.dumps(payload))
+        self.assertTrue(await context.select_thinking("high"))
+        self.assertEqual(
+            context.agent_engine.request_options["reasoning_effort"], "high"
+        )
+        self.assertNotIn("base_url", json.dumps(payload))
 
     async def test_default_is_the_character_llm(self):
         context = self.make_context()
@@ -266,7 +264,6 @@ class ServiceContextModelTests(ModelSelectionTestCase):
         context = self.make_context()
         await context.select_model("vip")
         self.catalog_path.write_text(CATALOG.replace("['alice']", "['bob']"), "utf-8")
-        self.catalog._signature = ()
 
         await context.sync_model_selection()
 

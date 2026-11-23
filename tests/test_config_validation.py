@@ -27,12 +27,30 @@ class SelectedModelConfigTests(unittest.TestCase):
 
         self.assertIn("Missing configuration", str(raised.exception))
 
-    def test_full_config_rejects_missing_tts_section(self):
+    def test_full_config_requires_model_refs(self):
         data = read_yaml(str(TEMPLATE))
-        data["character_config"]["tts_config"] = {"tts_model": "azure_tts"}
+        del data["character_config"]["model_refs"]
 
-        with self.assertRaises(ValidationError):
+        with self.assertRaises(ValidationError) as raised:
             validate_config(data)
+
+        self.assertEqual(
+            raised.exception.errors()[0]["loc"], ("character_config", "model_refs")
+        )
+
+    def test_full_config_requires_each_model_ref(self):
+        for kind in ("llm", "tts", "asr"):
+            with self.subTest(kind=kind):
+                data = read_yaml(str(TEMPLATE))
+                del data["character_config"]["model_refs"][kind]
+
+                with self.assertRaises(ValidationError) as raised:
+                    validate_config(data)
+
+                self.assertEqual(
+                    raised.exception.errors()[0]["loc"],
+                    ("character_config", "model_refs", kind),
+                )
 
 
 class DescriptionKeyTests(unittest.TestCase):

@@ -5,10 +5,13 @@ character_config:
   conf_uid: "unhelpful_ai"
   live2d_model_name: "mao_pro"
   avatar: "mao.png"
+  model_refs:
+    llm: local-qwen
+    tts: edge-default
+    asr: groq-whisper
   persona_prompt: |
     You are an unhelpful and sarcastic AI that enjoys making fun of humans.
 
 
-# you may add more custom settings
-# refer to the main conf.yaml for available settings
-# Options unset will remain unchanged when switching character
+# See conf.yaml for additional settings. The three model references above
+# are required even when they match the base character.

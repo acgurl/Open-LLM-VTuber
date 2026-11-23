@@ -145,11 +145,6 @@ export interface ModelEntry {
   thinking?: ThinkingInfo; // 可选思考档位；没有时不显示思考按钮
 }
 
-export interface DefaultModelDisplay {
-  name: string;
-  matches: string[]; // Directory entries with the same effective configuration.
-}
-
 export type ControlText =
   | 'conversation-chain-start'
   | 'conversation-chain-end';
@@ -173,13 +168,13 @@ export type ServerMessage =
       models: ModelEntry[];
       current: string | null;
       thinking?: string | null; // 当前 LLM 的思考档位
-      default_model?: DefaultModelDisplay;
+      default_model?: ModelEntry;
       tts_models?: ModelEntry[];
       tts_current?: string | null;
-      tts_default_model?: DefaultModelDisplay;
+      tts_default_model?: ModelEntry;
       asr_models?: ModelEntry[];
       asr_current?: string | null;
-      asr_default_model?: DefaultModelDisplay;
+      asr_default_model?: ModelEntry;
     }
   | { type: 'model-switched'; model: string | null; kind?: ModelKind; thinking?: string | null }
   | { type: 'control'; text: ControlText | string }

@@ -1,0 +1,10 @@
+# Minimal LLM catalog / 最小语言模型清单：copy to llm_models.yaml before starting.
+# See llm_models.example.yaml for additional providers and configuration examples.
+
+models:
+  - id: local-qwen
+    name: Local Qwen
+    provider: openai_compatible_llm
+    base_url: http://localhost:11434/v1
+    llm_api_key: not-needed
+    model: qwen2.5:latest

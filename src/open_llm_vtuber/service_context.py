@@ -1,5 +1,6 @@
 import json
 import sys
+from collections.abc import Callable
 from typing import Any, Literal
 from loguru import logger
 from pydantic import ValidationError
@@ -35,7 +36,8 @@ from .llm_catalog import (
     LLMModelCatalog,
     LLMModelEntry,
 )
-from .speech_models import SPEECH_KINDS, SpeechKind, SpeechModelEntry, speech_config_for
+from .speech_models import SPEECH_KINDS, SpeechKind, SpeechModelEntry
+from .config_manager.character import CharacterModelRefs
 from .utils.dicts import deep_merge
 from .utils.security import redact_secrets, resolve_existing_file_within
 
@@ -49,8 +51,6 @@ from .config_manager import (
     AgentConfig,
     CharacterConfig,
     SystemConfig,
-    ASRConfig,
-    TTSConfig,
     TranslatorConfig,
     read_yaml,
     validate_config,
@@ -108,7 +108,9 @@ class ServiceContext:
         self._character_tts_engine: TTSInterface | None = None
         self._selected_asr_engine: ASRInterface | None = None
         self._selected_tts_engine: TTSInterface | None = None
-        self.base_speech_config: CharacterConfig | None = None
+        self._character_speech: dict[SpeechKind, SpeechModelEntry] = {}
+        self._character_llm_entry: LLMModelEntry | None = None
+        self._applied_llm_override: LLMModelEntry | None = None
         self._speech_choices: dict[SpeechKind, str | None] = {}
         self._active_speech: dict[SpeechKind, SpeechModelEntry] = {}
         self.agent_engine: AgentInterface | None = None
@@ -408,6 +410,12 @@ class ServiceContext:
             f"Loaded service context for character {character_config.conf_uid}"
         )
 
+    def inherit_character_models(self, base: "ServiceContext") -> None:
+        """Copy the bindings for engines borrowed from the shared context."""
+        self.llm_catalog = getattr(base, "llm_catalog", None)
+        self._character_llm_entry = base._character_llm_entry
+        self._character_speech = base._character_speech.copy()
+
     async def init_session_agent(self, shared_agent: AgentInterface) -> None:
         """Give this session its own agent so concurrent clients keep separate memory."""
         if isinstance(shared_agent, BasicMemoryAgent):
@@ -450,7 +458,8 @@ class ServiceContext:
             if isinstance(agent, BasicMemoryAgent)
             else None
         )
-        self.active_model = None
+        self.active_model = self._character_llm_entry
+        self._applied_llm_override = None
         self._apply_model_selection()
 
     def _apply_model_selection(self) -> None:
@@ -468,7 +477,7 @@ class ServiceContext:
             entry = self.llm_catalog.resolve(
                 self.selected_model_id, self.user_id, self.user_emails
             )
-        if entry == self.active_model:
+        if entry == self._applied_llm_override:
             self._apply_thinking()
             return
 
@@ -483,7 +492,8 @@ class ServiceContext:
                 entry = None
         if entry is None:
             agent.use_llm(*self._character_llm)
-        self.active_model = entry
+        self._applied_llm_override = entry
+        self.active_model = entry or self._character_llm_entry
         self._apply_thinking()
         logger.info(
             f"Session {self.client_uid} now answers with "
@@ -595,16 +605,9 @@ class ServiceContext:
         return True
 
     def _available_speech(self, kind: SpeechKind) -> list[SpeechModelEntry]:
-        if self.llm_catalog is None or self.base_speech_config is None:
+        if self.llm_catalog is None or self._character_asr_engine is None:
             return []
-        base = getattr(self.base_speech_config, f"{kind}_config")
-        return [
-            entry
-            for entry in self.llm_catalog.available_speech(
-                kind, self.user_id, self.user_emails
-            )
-            if speech_config_for(entry, base) is not None
-        ]
+        return self.llm_catalog.available_speech(kind, self.user_id, self.user_emails)
 
     def _resolve_speech(
         self, kind: SpeechKind, model_id: str | None
@@ -632,9 +635,7 @@ class ServiceContext:
             self._active_speech[kind] = entry
 
     def _make_speech_engine(self, entry: SpeechModelEntry):
-        base = getattr(self.base_speech_config, f"{entry.kind}_config")
-        config = speech_config_for(entry, base)
-        kwargs = _engine_kwargs(config, entry.provider)
+        kwargs = _engine_kwargs(entry.config, entry.provider)
         factory = (
             TTSFactory.get_tts_engine
             if entry.kind == "tts"
@@ -649,20 +650,31 @@ class ServiceContext:
             return None
 
     async def _sync_speech_choices(self) -> None:
-        if self.base_speech_config is None:
-            return
-        repository = self.history_repository
         for kind in SPEECH_KINDS:
-            if repository is not None and self.user_id is not None:
-                try:
-                    self._speech_choices[kind] = await repository.get_user_setting(
-                        user_id=self.user_id, key=f"{kind}_model"
-                    )
-                except Exception:
-                    logger.exception("Failed to read the user's speech preset")
-            entry = self._resolve_speech(kind, self._speech_choices.get(kind))
-            if entry == self._active_speech.get(kind):
-                continue
+            await self._sync_speech_choice(kind)
+
+    async def sync_asr_choice(self, *, can_apply: Callable[[], bool]) -> None:
+        await self._sync_speech_choice("asr", can_apply=can_apply)
+
+    async def _sync_speech_choice(
+        self, kind: SpeechKind, *, can_apply: Callable[[], bool] | None = None
+    ) -> None:
+        if self._character_asr_engine is None:
+            return
+        choice = self._speech_choices.get(kind)
+        repository = self.history_repository
+        if repository is not None and self.user_id is not None:
+            try:
+                choice = await repository.get_user_setting(
+                    user_id=self.user_id, key=f"{kind}_model"
+                )
+            except Exception:
+                logger.exception("Failed to read user speech preset")
+        if can_apply is not None and not can_apply():
+            return
+        self._speech_choices[kind] = choice
+        entry = self._resolve_speech(kind, choice)
+        if entry != self._active_speech.get(kind):
             engine = self._make_speech_engine(entry) if entry is not None else None
             self._set_speech_engine(kind, entry if engine is not None else None, engine)
 
@@ -696,69 +708,6 @@ class ServiceContext:
             self._set_speech_engine(kind, entry, engine)
         return True
 
-    def _character_llm_display(self, options: list[LLMModelEntry]) -> dict | None:
-        agent = getattr(self.character_config, "agent_config", None)
-        if agent is None:
-            return None
-        if agent.conversation_agent_choice == "hume_ai_agent":
-            return {"name": "Hume EVI", "matches": []}
-        provider = agent.agent_settings.basic_memory_agent.llm_provider
-        config = getattr(agent.llm_configs, provider, None)
-        if config is None:
-            return None
-        settings = config.model_dump()
-        # A preset offering request overrides is still a distinct choice.
-        matches = [
-            entry
-            for entry in options
-            if entry.provider == provider
-            and not entry.thinking_levels
-            and dict(entry.settings) == settings
-        ]
-        return {
-            "name": matches[0].name if matches else settings["model"],
-            "matches": [entry.id for entry in matches],
-        }
-
-    def _character_speech_display(
-        self, kind: SpeechKind, options: list[SpeechModelEntry]
-    ) -> dict | None:
-        config = getattr(self.character_config, f"{kind}_config", None)
-        if config is None:
-            return None
-        provider = getattr(config, f"{kind}_model")
-        settings = _engine_kwargs(config, provider)
-        base = getattr(self.base_speech_config, f"{kind}_config", None)
-        matches = [
-            entry
-            for entry in options
-            if entry.provider == provider
-            and _engine_kwargs(speech_config_for(entry, base), provider) == settings
-        ]
-        # Explicit display fields only: no endpoint, credentials or paths.
-        keys = (
-            ("voice", "model", "model_id", "default_model")
-            if kind == "tts"
-            else ("model",)
-        )
-        name = next((settings[key] for key in keys if settings.get(key)), None)
-        provider_name = {
-            "azure_tts": "Azure Speech",
-            "azure_asr": "Azure Speech",
-            "edge_tts": "Edge TTS",
-            "groq_whisper_asr": "Groq Whisper",
-            "gpt_sovits_tts": "GPT-SoVITS",
-            "openai_tts": "OpenAI TTS",
-            "fish_api_tts": "Fish Audio",
-            "x_tts": "XTTS",
-        }.get(provider, provider.removesuffix(f"_{kind}").replace("_", " ").title())
-        if kind == "tts" and name:
-            name = f"{provider_name} · {name}"
-        return {
-            "name": matches[0].name if matches else (name or provider_name),
-            "matches": [entry.id for entry in matches],
-        }
-
     def model_list_payload(self) -> dict:
         """Build the model-list payload: what this user may pick, and the pick."""
         models = (
@@ -769,89 +718,109 @@ class ServiceContext:
         payload = {
             "type": "model-list",
             "models": [entry.public_info() for entry in models],
-            "current": self.active_model.id if self.active_model else None,
+            "current": self._applied_llm_override.id
+            if self._applied_llm_override
+            else None,
             "thinking": self.thinking_level(),
         }
-        if models and (display := self._character_llm_display(models)) is not None:
-            payload["default_model"] = display
+        if self._character_llm_entry is not None:
+            payload["default_model"] = self._character_llm_entry.public_info()
         for kind in SPEECH_KINDS:
             options = self._available_speech(kind)
             active = self._active_speech.get(kind)
-            if options or active is not None:
+            default = self._character_speech.get(kind)
+            if default is not None or options or active is not None:
                 payload[f"{kind}_models"] = [entry.public_info() for entry in options]
                 payload[f"{kind}_current"] = active.id if active else None
-                if (
-                    display := self._character_speech_display(kind, options)
-                ) is not None:
-                    payload[f"{kind}_default_model"] = display
+                if default is not None:
+                    payload[f"{kind}_default_model"] = default.public_info()
         return payload
 
-    async def load_from_config(self, config: Config) -> None:
-        """
-        Load the ServiceContext with the config.
-        Reinitialize the instances if the config is different.
-
-        Parameters:
-        - config (Dict): The configuration dictionary.
-        """
-        if not self.config:
-            self.config = config
-
-        if not self.system_config:
-            self.system_config = config.system_config
-
-        if not self.character_config:
-            self.character_config = config.character_config
-
-        # update all sub-configs
-
-        # init live2d from character config
-        self.init_live2d(config.character_config.live2d_model_name)
-
-        # init asr from character config
-        self.init_asr(config.character_config.asr_config)
-
-        # init tts from character config
-        self.init_tts(config.character_config.tts_config)
-
-        # Initialize MCP Components before initializing Agent
-        await self._init_mcp_components(
-            config.character_config.agent_config.agent_settings.basic_memory_agent.use_mcpp,
-            config.character_config.agent_config.agent_settings.basic_memory_agent.mcp_enabled_servers,
+    def resolve_character_models(
+        self, character: CharacterConfig, *, public: bool = False
+    ) -> tuple[LLMModelEntry, dict[SpeechKind, SpeechModelEntry]]:
+        if not isinstance(self.llm_catalog, LLMModelCatalog):
+            raise ValueError("A model catalog is required to load character model_refs")
+        return self.llm_catalog.character_models(
+            character.model_refs, () if public else character.allowed_users
         )
 
-        # init agent from character config
-        await self.init_agent(
-            config.character_config.agent_config,
-            config.character_config.persona_prompt,
-        )
-
-        self.init_translate(
-            config.character_config.tts_preprocessor_config.translator_config
-        )
-
-        # store typed config references
+    async def load_from_config(self, config: Config, *, public: bool = True) -> None:
+        """Load a browser character and its referenced engines."""
+        character = config.character_config
+        llm, speech = self.resolve_character_models(character, public=public)
+        bound_llm = (self.llm_catalog.client(llm), llm.interrupt_method)
+        asr_entry, tts_entry = speech["asr"], speech["tts"]
+        old_asr = self._character_speech.get("asr")
+        old_tts = self._character_speech.get("tts")
+        asr_engine = self._character_asr_engine
+        tts_engine = self._character_tts_engine
+        # Validate and build both speech engines before swapping either one.
+        if asr_engine is None or old_asr is None or old_asr.config != asr_entry.config:
+            asr_engine = ASRFactory.get_asr_system(
+                asr_entry.provider,
+                **_engine_kwargs(asr_entry.config, asr_entry.provider),
+            )
+        if tts_engine is None or old_tts is None or old_tts.config != tts_entry.config:
+            tts_engine = TTSFactory.get_tts_engine(
+                tts_entry.provider,
+                **_engine_kwargs(tts_entry.config, tts_entry.provider),
+            )
+        previous_character = self.character_config
+        previous_model = self.live2d_model
+        previous_system = self.system_config
+        previous_translate = self.translate_engine
+        self.character_config = character
+        self.system_config = config.system_config or previous_system
+        try:
+            self.init_live2d(character.live2d_model_name)
+            self.init_translate(
+                character.tts_preprocessor_config.translator_config,
+                previous=previous_character,
+            )
+            basic = character.agent_config.agent_settings.basic_memory_agent
+            await self._init_mcp_components(basic.use_mcpp, basic.mcp_enabled_servers)
+            await self.init_agent(
+                character.agent_config,
+                character.persona_prompt,
+                llm_entry=llm,
+                bound_llm=bound_llm,
+            )
+        except BaseException:
+            self.character_config = previous_character
+            self.live2d_model = previous_model
+            self.system_config = previous_system
+            self.translate_engine = previous_translate
+            if tts_engine is not self._character_tts_engine:
+                self._close_tts(tts_engine)
+            raise
+        previous_tts = self._character_tts_engine
+        self.asr_engine = asr_engine
+        self.tts_engine = tts_engine
+        if previous_tts is not tts_engine:
+            if self._owns_tts_engine:
+                self._close_tts(previous_tts)
+            self._owns_tts_engine = True
+        self._character_speech = speech
         self.config = config
-        self.system_config = config.system_config or self.system_config
-        self.character_config = config.character_config
+        await self.load_thinking_choice()
 
     async def load_headless(self, config: Config) -> None:
-        """Load a text-only context for message connectors.
-
-        Only MCP and the agent are created. There is no Live2D model, ASR,
-        TTS or translation, so the system prompt carries no expression
-        keywords and turns must run with ``tts_manager=None``.
-        """
+        """Load a connector's character without allocating speech or Live2D."""
+        character = config.character_config
+        llm, _ = self.resolve_character_models(character, public=True)
+        bound_llm = (self.llm_catalog.client(llm), llm.interrupt_method)
         self.config = config
         self.system_config = config.system_config
-        self.character_config = config.character_config
+        self.character_config = character
         self.live2d_model = None
-        settings = config.character_config.agent_config.agent_settings
-        basic = settings.basic_memory_agent
+        basic = character.agent_config.agent_settings.basic_memory_agent
         await self._init_mcp_components(basic.use_mcpp, basic.mcp_enabled_servers)
         await self.init_agent(
-            config.character_config.agent_config,
-            config.character_config.persona_prompt,
+            character.agent_config,
+            character.persona_prompt,
+            llm_entry=llm,
+            bound_llm=bound_llm,
         )
 
     def init_live2d(self, live2d_model_name: str) -> None:
@@ -871,46 +840,20 @@ class ServiceContext:
             except Exception as error:
                 logger.warning(f"Failed to close TTS engine ({type(error).__name__})")
 
-    def init_asr(self, asr_config: ASRConfig) -> None:
-        if not self._character_asr_engine or (
-            self.character_config.asr_config != asr_config
-        ):
-            logger.info(f"Initializing ASR: {asr_config.asr_model}")
-            self.asr_engine = ASRFactory.get_asr_system(
-                asr_config.asr_model,
-                **_engine_kwargs(asr_config, asr_config.asr_model),
-            )
-            # saving config should be done after successful initialization
-            self.character_config.asr_config = asr_config
-        else:
-            logger.info("ASR already initialized with the same config.")
-
-    def init_tts(self, tts_config: TTSConfig) -> None:
-        if not self._character_tts_engine or (
-            self.character_config.tts_config != tts_config
-        ):
-            logger.info(f"Initializing TTS: {tts_config.tts_model}")
-            previous_engine = self._character_tts_engine
-            self.tts_engine = TTSFactory.get_tts_engine(
-                tts_config.tts_model,
-                **_engine_kwargs(tts_config, tts_config.tts_model.lower()),
-            )
-            # Never close an engine borrowed from the default context; other
-            # sessions may still be using it.
-            if previous_engine is not None and self._owns_tts_engine:
-                previous_engine.close()
-            self._owns_tts_engine = True
-            # saving config should be done after successful initialization
-            self.character_config.tts_config = tts_config
-        else:
-            logger.info("TTS already initialized with the same config.")
-
-    async def init_agent(self, agent_config: AgentConfig, persona_prompt: str) -> None:
+    async def init_agent(
+        self,
+        agent_config: AgentConfig,
+        persona_prompt: str,
+        *,
+        llm_entry: LLMModelEntry | None = None,
+        bound_llm=None,
+    ) -> None:
         """Initialize or update the LLM engine based on agent configuration."""
         logger.info(f"Initializing Agent: {agent_config.conversation_agent_choice}")
 
         if (
-            self.agent_engine is not None
+            bound_llm is None
+            and self.agent_engine is not None
             and agent_config == self.character_config.agent_config
             and persona_prompt == self.character_config.persona_prompt
         ):
@@ -936,6 +879,7 @@ class ServiceContext:
                 conversation_agent_choice=agent_config.conversation_agent_choice,
                 agent_settings=agent_settings,
                 llm_configs=agent_config.llm_configs.model_dump(),
+                bound_llm=bound_llm,
                 system_prompt=system_prompt,
                 live2d_model=self.live2d_model,
                 tts_preprocessor_config=self.character_config.tts_preprocessor_config,
@@ -964,6 +908,7 @@ class ServiceContext:
         # agent from init_session_agent); release e.g. a Hume socket.
         if previous_agent is not self.agent_engine:
             await self._close_agent(previous_agent)
+        self._character_llm_entry = llm_entry
         self._agent_replaced()
 
     def _rewire_agent_tooling(self, agent_config: AgentConfig) -> None:
@@ -979,7 +924,12 @@ class ServiceContext:
             enabled=self.mcp_active or bool(getattr(basic_settings, "use_mcpp", False)),
         )
 
-    def init_translate(self, translator_config: TranslatorConfig) -> None:
+    def init_translate(
+        self,
+        translator_config: TranslatorConfig,
+        *,
+        previous: CharacterConfig | None = None,
+    ) -> None:
         """Initialize or update the translation engine based on the configuration."""
 
         if not translator_config.translate_audio:
@@ -990,8 +940,8 @@ class ServiceContext:
 
         if (
             not self.translate_engine
-            or self.character_config.tts_preprocessor_config.translator_config
-            != translator_config
+            or previous is None
+            or previous.tts_preprocessor_config.translator_config != translator_config
         ):
             logger.info(
                 f"Initializing Translator: {translator_config.translate_provider}"
@@ -1104,7 +1054,9 @@ class ServiceContext:
                     websocket, "Character not available"
                 )
                 return
-            await self._apply_character_config(character_config_data)
+            await self._apply_character_config(
+                character_config_data, public=config_file_name == "conf.yaml"
+            )
             await self._notify_config_switched(websocket, config_file_name)
         except Exception as e:
             self._log_config_switch_error(e)
@@ -1138,21 +1090,28 @@ class ServiceContext:
             if not isinstance(base_config_data, dict):
                 raise ValueError("Base character config must be a mapping")
 
+            # These fields are declared by the preset itself, not inherited.
+            CharacterModelRefs.model_validate(raw_character_config.get("model_refs"))
             character_config_data = deep_merge(base_config_data, alt_config_data)
+            character_config_data["allowed_users"] = raw_character_config.get(
+                "allowed_users", []
+            )
 
         if not character_config_data:
             raise ValueError(f"Failed to load configuration from {config_file_name}")
 
         return character_config_data, raw_character_config
 
-    async def _apply_character_config(self, character_config_data: Any) -> None:
+    async def _apply_character_config(
+        self, character_config_data: Any, *, public: bool
+    ) -> None:
         new_config = validate_config(
             {
                 "system_config": self.system_config.model_dump(),
                 "character_config": character_config_data,
             }
         )
-        await self.load_from_config(new_config)
+        await self.load_from_config(new_config, public=public)
         self.history_uid = None
         logger.debug(f"New config: {self}")
 

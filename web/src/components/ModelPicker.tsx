@@ -26,18 +26,18 @@ export function ModelPicker() {
   if (!kind) return null;
 
   const { options: catalog, current, characterDefault } = catalogs[kind];
-  const matches = new Set(characterDefault?.matches);
-  const matchesDefault = current !== null && matches.has(current);
+  const defaultId = characterDefault?.id;
+  const pinnedDefault = current !== null && current === defaultId;
   const options = [
     {
       id: null,
       name: characterDefault?.name ?? t('model.default'),
-      description: t(matchesDefault ? 'model.followAgain' : `model.defaultDesc.${kind}`),
-      reselect: matchesDefault,
+      description: t(pinnedDefault ? 'model.followAgain' : `model.defaultDesc.${kind}`),
+      reselect: pinnedDefault,
     },
-    ...catalog.filter((option) => !matches.has(option.id)),
+    ...catalog.filter((option) => option.id !== defaultId),
   ];
-  const active = options.find((option) => option.id === (matchesDefault ? null : current));
+  const active = options.find((option) => option.id === (pinnedDefault ? null : current));
   const name = active?.name ?? current ?? options[0].name;
   const category = (id: ModelKind) => t(`model.category.${id}`);
   const label = pending ? t('model.switching', { category: category(pending.kind) }) :

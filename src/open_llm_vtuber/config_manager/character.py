@@ -1,12 +1,30 @@
 # config_manager/character.py
-from pydantic import Field, ValidationInfo, field_validator
-from typing import ClassVar
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationInfo,
+    field_validator,
+)
+from typing import Annotated, ClassVar
 from .i18n import I18nMixin, Description
-from .asr import ASRConfig
-from .tts import TTSConfig
 from .tts_preprocessor import TTSPreprocessorConfig
 
 from .agent import AgentConfig
+
+
+ModelRef = Annotated[
+    str, StringConstraints(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$", strict=True)
+]
+
+
+class CharacterModelRefs(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    llm: ModelRef
+    tts: ModelRef
+    asr: ModelRef
 
 
 class CharacterConfig(I18nMixin):
@@ -25,8 +43,7 @@ class CharacterConfig(I18nMixin):
     allowed_users: list[str] = Field(default_factory=list, alias="allowed_users")
     persona_prompt: str = Field(..., alias="persona_prompt")
     agent_config: AgentConfig = Field(..., alias="agent_config")
-    asr_config: ASRConfig = Field(..., alias="asr_config")
-    tts_config: TTSConfig = Field(..., alias="tts_config")
+    model_refs: CharacterModelRefs
     tts_preprocessor_config: TTSPreprocessorConfig = Field(
         ..., alias="tts_preprocessor_config"
     )
@@ -51,11 +68,9 @@ class CharacterConfig(I18nMixin):
         "agent_config": Description(
             en="Configuration for the conversation agent", zh="对话代理配置"
         ),
-        "asr_config": Description(
-            en="Configuration for Automatic Speech Recognition", zh="语音识别配置"
-        ),
-        "tts_config": Description(
-            en="Configuration for Text-to-Speech", zh="语音合成配置"
+        "model_refs": Description(
+            en="Required catalog IDs for the character's LLM, TTS and ASR",
+            zh="角色必须引用的 LLM、TTS 和 ASR 目录 ID",
         ),
         "tts_preprocessor_config": Description(
             en="Configuration for Text-to-Speech Preprocessor",
@@ -90,6 +105,16 @@ class CharacterConfig(I18nMixin):
             ),
         ),
     }
+
+    @field_validator("agent_config")
+    @classmethod
+    def require_catalog_capable_agent(cls, value: AgentConfig) -> AgentConfig:
+        if (
+            value.conversation_agent_choice != "basic_memory_agent"
+            or value.agent_settings.basic_memory_agent is None
+        ):
+            raise ValueError("Character model_refs require basic_memory_agent")
+        return value
 
     @field_validator("persona_prompt")
     def check_default_persona_prompt(cls, v):

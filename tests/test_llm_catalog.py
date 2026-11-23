@@ -139,8 +139,8 @@ class ParseModelsTests(unittest.TestCase):
     def test_malformed_allowed_users_denies_everyone(self):
         entry = self.parse([self.entry(allowed_users={"u1": True})])["m1"]
         catalog = LLMModelCatalog("unused.yaml")
-        catalog._entries = {"m1": entry}
-        catalog._checked_at = float("inf")
+        catalog._llm.entries = {"m1": entry}
+        catalog._llm.checked_at = float("inf")
         self.assertEqual(catalog.available("u1", None), [])
         self.assertIsNone(catalog.resolve("m1", "u1", None))
 

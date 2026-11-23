@@ -1,0 +1,11 @@
+# Minimal ASR catalog / 最小语音识别清单：copy to asr_models.yaml before starting.
+# See asr_models.example.yaml for additional providers and configuration examples.
+
+asr_models:
+  - id: groq-whisper
+    name: Groq Whisper
+    provider: groq_whisper_asr
+    settings:
+      api_key: '${GROQ_API_KEY}'
+      model: whisper-large-v3-turbo
+      lang: null # Auto-detect / 自动识别语种；中文可设为 zh。

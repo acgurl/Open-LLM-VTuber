@@ -62,10 +62,12 @@ RUN printf '%s\n' \
   '  ln -sf /app/conf/model_dict.json /app/model_dict.json' \
   'fi' \
   '' \
-  '# 2b) llm_models.yaml (optional: user-selectable LLM models)' \
-  'if [ -f "/app/conf/llm_models.yaml" ]; then' \
-  '  ln -sf /app/conf/llm_models.yaml /app/llm_models.yaml' \
-  'fi' \
+  '# 2b) Model catalogs; run_server validates the paths selected in conf.yaml.' \
+  'for file in llm_models.yaml tts_models.yaml asr_models.yaml; do' \
+  '  if [ -f "/app/conf/$file" ]; then' \
+  '    ln -sf "/app/conf/$file" "/app/$file"' \
+  '  fi' \
+  'done' \
   '' \
   '# 3) live2d-models' \
   'if [ -d "/app/conf/live2d-models" ]; then' \

@@ -4,6 +4,7 @@ import { useSettings } from '../stores/settings';
 import { useModels } from '../stores/models';
 import { toast } from '../stores/toast';
 import { LIMITS, type ClientMessage } from '../protocol/types';
+import { audioChannel } from './audioChannel';
 import { handleServerMessage, onConnected } from './incoming';
 import i18n from '../i18n';
 
@@ -23,6 +24,9 @@ class WSClient {
   connect() {
     this.gaveUp = false;
     this.clearReconnect();
+    // The previous socket's UID is invalid until the new set-model-and-conf.
+    audioChannel.disconnect();
+    useConnection.getState().setClientUid(null);
     useConnection
       .getState()
       .setStatus(this.attempts > 0 ? 'reconnecting' : 'connecting');

@@ -3,7 +3,7 @@ import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, patch
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -19,6 +19,7 @@ from open_llm_vtuber.auth import (
 )
 from open_llm_vtuber.auth.cookies import SignedCookie
 from open_llm_vtuber.chat_group import ChatGroupManager, handle_group_operation
+from open_llm_vtuber.config_manager import read_yaml, validate_config
 from open_llm_vtuber.config_manager.auth import AuthConfig, OIDCConfig
 from open_llm_vtuber.service_context import ServiceContext
 from open_llm_vtuber.storage import SQLiteHistoryRepository
@@ -335,20 +336,16 @@ class ConnectionLimitTests(unittest.TestCase):
 
 class SessionUserPropagationTests(unittest.IsolatedAsyncioTestCase):
     async def test_session_context_receives_the_verified_user_id(self):
-        default_context = SimpleNamespace(
-            user_id=None,
-            history_repository=AsyncMock(),
-            config=Mock(),
-            system_config=Mock(),
-            character_config=Mock(),
-            live2d_model=None,
-            asr_engine=None,
-            tts_engine=None,
-            agent_engine=None,
-            translate_engine=None,
-            mcp_server_registry=None,
-            tool_adapter=None,
-        )
+        config = validate_config(read_yaml("config_templates/conf.default.yaml"))
+        default_context = ServiceContext()
+        default_context.set_history_storage(AsyncMock(), None)
+        default_context.history_repository.get_user_profile.return_value = {
+            "emails": ["alice@example.com"]
+        }
+        default_context.history_repository.list_user_mcp_servers.return_value = []
+        default_context.config = config
+        default_context.system_config = config.system_config
+        default_context.character_config = config.character_config
         handler = WebSocketHandler(default_context)
 
         with (
@@ -364,6 +361,7 @@ class SessionUserPropagationTests(unittest.IsolatedAsyncioTestCase):
         )
         kwargs = load_cache.await_args.kwargs
         self.assertEqual(kwargs["user_id"], "alice")
+        self.assertEqual(kwargs["user_emails"], ("alice@example.com",))
         self.assertIs(kwargs["history_repository"], default_context.history_repository)
 
 

@@ -4,12 +4,18 @@ This directory is where you store all your custom character configurations. By c
 
 ## 🚀 How It Works
 
-When you launch Open-LLM-VTuber, the application loads the `conf.yaml` file from the project root as the **base configuration**. Then, when you switch characters from the front-end UI,it **overrides** the base settings with the values from your selected character's `.yaml` file in this `characters` directory.
+When you launch Open-LLM-VTuber, it loads `conf.yaml` as the base configuration. Selecting a
+character in the web UI overrides the base with the settings in the selected `.yaml` file.
 
-This means:
-**You only need to specify the settings you want to change in your character's configuration file.**
+**Every character file must explicitly set `character_config.model_refs.llm`, `tts`, and `asr`.**
+Use IDs from `models` in `llm_models.yaml`, `tts_models` in `tts_models.yaml`, and `asr_models`
+in `asr_models.yaml`, respectively (see [model catalog paths](../README.md#model-catalog)). A missing
+or invalid required reference prevents the character from loading. Standalone character presets
+do not inherit these IDs, even if all three are identical to the base character's. Other settings
+can be omitted when you want to keep their base values.
 
-For example, if you only want to change the character's personality and voice, your character config file can be very concise.
+This differs from a message connector's `character` settings: a connector may omit `model_refs`
+entirely or override individual roles and inherit the rest.
 
 ## ✨ How to Create a New Character
 
@@ -18,9 +24,9 @@ For example, if you only want to change the character's personality and voice, y
 
 ---
 
-### Example 1: Minimal Character (Changing Persona Only)
+### Example 1: Minimal Character (Same Models, Different Persona)
 
-If you just want to quickly create a new character with a different personality, while keeping all other settings (like ASR, TTS, LLM model) from the main `conf.yaml`, your file can be this simple:
+Use the same IDs as the base character to keep its models while changing its personality:
 
 ```yaml
 # my_character.yaml
@@ -29,9 +35,13 @@ character_config:
   conf_uid: 'my_new_character_001' # MUST be a unique ID
   character_name: 'Hoshino'          # The AI's name in conversation
   avatar: 'hoshino.png'              # (Optional) Avatar file, place it in the /avatars folder
+  model_refs:
+    llm: local-qwen
+    tts: edge-default
+    asr: groq-whisper
   persona_prompt: |
     You are a gentle and caring girl next door named Hoshino. You are a great listener and always provide warmth and encouragement.
-````
+```
 
 ### Example 2: Advanced Character (Changing Persona, Voice, and LLM)
 
@@ -47,26 +57,11 @@ character_config:
   persona_prompt: |
     You are a mysterious hacker who goes by the codename "Zero". You speak in a concise, precise, and slightly robotic tone. You know everything about technology but are puzzled by human emotions.
 
-  # --- Override TTS Config ---
-  tts_config:
-    tts_model: 'edge_tts'
-    edge_tts:
-      voice: 'en-US-GuyNeural' # Use a different voice
-
-  # --- Override Agent and LLM Config ---
-  agent_config:
-    agent_settings:
-      basic_memory_agent:
-        llm_provider: 'openai_compatible_llm' # OpenAI-compatible endpoint for this character
-    llm_configs:
-      openai_compatible_llm:
-        base_url: 'https://api.openai.com/v1'
-        llm_api_key: 'Your Open AI API key'
-        model: 'gpt-4o-mini' # Use a faster model
-        temperature: 0.5
+  model_refs:
+    llm: deepseek-flash # Add this entry from llm_models.example.yaml and configure its key.
+    tts: edge-xiaoxiao # Add this voice from tts_models.example.yaml to tts_models.yaml.
+    asr: groq-whisper
 ```
-
-**Note:** Any configuration blocks not specified in this file (e.g., `asr_config`, `tts_config`, etc.) will be automatically inherited from the main `conf.yaml` file.
 
 -----
 
@@ -105,9 +100,11 @@ Here is a breakdown of the core fields under `character_config`:
 
       - **Purpose**: **The core of your character\!** This is the system prompt that defines the character's personality, background, speaking style, and code of conduct. This is the most critical part of shaping your character's soul.
 
-  - `asr_config`, `tts_config`, `agent_config`:
+  - `model_refs` (mapping, required):
 
-      - **Purpose**: These configuration blocks are used to override the corresponding settings in the main `conf.yaml`. You can assign a different ASR model, TTS engine, LLM, or VAD parameters for each character.
+      - **Purpose**: Selects the character's LLM, TTS voice, and ASR engine by catalog ID. All three roles must be present.
+      - **Example**: `{llm: local-qwen, tts: edge-default, asr: groq-whisper}`
+  - `agent_config` (mapping, optional): Controls conversation behavior, such as sentence splitting and MCP tool use, not provider selection.
 
 ## 🔒 Per-User Access Control
 
@@ -119,6 +116,10 @@ character_config:
   conf_name: 'Private Character'
   conf_uid: 'private_character_001'
   character_name: 'Zero'
+  model_refs:
+    llm: local-qwen
+    tts: edge-default
+    asr: groq-whisper
   persona_prompt: |
     ...
   allowed_users:
@@ -150,5 +151,5 @@ Rules:
 ## 💡 Best Practices
 
   - **Start by Copying**: The easiest way to get started is to duplicate an existing `.yaml` file and modify its contents with your `conf.yaml` content.
-  - **Keep it Simple**: Only add the configuration keys you want to override from the base `conf.yaml`. This keeps your character files clean and easy to manage.
+  - **Keep it Simple**: Include all three `model_refs`, then add the other keys you want to override.
   - **Unique `conf_uid`**: Once again, ensure every character file has a unique `conf_uid` to prevent chat history conflicts.

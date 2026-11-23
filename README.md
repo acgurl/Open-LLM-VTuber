@@ -132,12 +132,21 @@ The complete message set, payload shapes, limits and close codes are documented 
 - [uv](https://docs.astral.sh/uv/)
 - Node.js 20+ and npm
 - `ffmpeg` on `PATH`
-- A `model_dict.json` describing the Live2D model you want to use
-- A character preset in `characters/` (the default template refers to `mao_pro`)
+- A `model_dict.json` describing the Live2D model you want to use; the default character refers to
+  the `mao_pro` entry.
+- For the stock catalogs: a reachable Ollama server with `qwen2.5:latest` (`ollama pull qwen2.5:latest`),
+  network access for Edge TTS, and a Groq API key for speech recognition.
 
 ### Run
 
+On a fresh checkout, copy the three minimal catalogs before starting. Set `GROQ_API_KEY` in the
+server process environment or configure the key in `asr_models.yaml`. If you use different providers,
+configure them and update the character references as described under [Model catalog](#model-catalog).
+
 ```bash
+cp config_templates/llm_models.default.yaml llm_models.yaml
+cp config_templates/tts_models.default.yaml tts_models.yaml
+cp config_templates/asr_models.default.yaml asr_models.yaml
 uv sync
 
 cd web
@@ -154,6 +163,7 @@ On first start:
 
 - `conf.yaml` is created from `config_templates/conf.default.yaml` if it does not exist.
 - `mcp_servers.json` is created from `config_templates/mcp_servers.default.json` if it does not exist.
+- The LLM, TTS, and ASR catalogs are **required and not created automatically**. Copy all three minimal templates as shown above.
 - `model_dict.json` is **not** created automatically. It is deployment-specific and intentionally
   untracked, so place one in the project root before starting. A minimal entry looks like this:
 
@@ -181,11 +191,13 @@ through a reverse proxy.
 
 | Path | Purpose | Tracked |
 | --- | --- | --- |
-| `conf.yaml` | Main runtime configuration: host/port, storage, auth, agent, LLM, ASR, TTS, VAD, default character | No |
-| `characters/*.yaml` | Character presets (persona, model name, avatar, optional engine overrides and `allowed_users`) | Mostly no |
+| `conf.yaml` | Main runtime configuration: host/port, storage, auth, agent behavior, and default character with model references | No |
+| `characters/*.yaml` | Character presets (persona, Live2D model name, avatar, required model references, optional `allowed_users`) | Mostly no |
 | `model_dict.json` | Live2D model metadata: URL, scale, lip-sync gain, emotion/motion maps | No |
 | `mcp_servers.json` | Deployment-managed MCP servers; may contain tokens | No |
-| `llm_models.yaml` | Optional list of LLM models users may pick in the web UI, with per-model `allowed_users`; holds API keys | No |
+| `llm_models.yaml` | Required LLM catalog for characters and the model picker; may contain API keys | No |
+| `tts_models.yaml` | Required text-to-speech catalog; may contain API keys | No |
+| `asr_models.yaml` | Required speech-to-text catalog; may contain API keys | No |
 | `web/` | Frontend source; `npm run build` emits `web/dist` | Yes |
 | `data/storage/` | SQLite history and legacy import/archive data | No |
 | `avatars/`, `backgrounds/`, `live2d-models/`, `models/` | Runtime assets; only a subset is tracked | Partly |
@@ -279,9 +291,21 @@ are excluded from the image by `.dockerignore`.
 docker build -f dockerfile -t open-llm-vtuber:local .
 ```
 
-Prepare a `conf/` directory containing at least `conf.yaml`. Optionally place `model_dict.json`,
-`characters/`, `live2d-models/`, `avatars/` and `backgrounds/` under `conf/`; the startup script
-links them into `/app`. Then run:
+Prepare a `conf/` directory with `conf.yaml` and all three model catalogs. For a fresh deployment:
+
+```bash
+mkdir -p conf
+cp config_templates/conf.default.yaml conf/conf.yaml
+cp config_templates/llm_models.default.yaml conf/llm_models.yaml
+cp config_templates/tts_models.default.yaml conf/tts_models.yaml
+cp config_templates/asr_models.default.yaml conf/asr_models.yaml
+```
+
+Then configure your providers. If Ollama runs outside the container, the LLM catalog's `base_url`
+must be reachable from the container. Set `GROQ_API_KEY` in the container environment (e.g. add
+`-e GROQ_API_KEY` to `docker run` after exporting it on the host), or set the key in the mounted
+`conf/asr_models.yaml`. You can also put `model_dict.json`, `characters/`, `live2d-models/`,
+`avatars/` and `backgrounds/` under `conf/`; the startup script links them into `/app`. Then run:
 
 ```bash
 docker run -d --name open-llm-vtuber --restart unless-stopped --network host \
@@ -335,8 +359,8 @@ Git.
 | `en_unhelpful_ai.yaml` | unhelpful_ai | `mao_pro` |
 
 To add a character, copy a preset, change `character_name`, `conf_uid`, `live2d_model_name` and
-`persona_prompt`, then drop the file into `characters/`. The frontend discovers it on the next
-`fetch-configs`.
+`persona_prompt`, and explicitly set all three `model_refs` before saving it in `characters/`.
+See the [character examples](./characters/README.md).
 
 To keep a preset for selected people, add `allowed_users` with internal user ids (shown under
 Settings → Account) or verified login emails (display names are not matched); users that are
@@ -344,47 +368,80 @@ not listed neither see nor can switch to it.
 Each preset is checked on its own, and the default character in `conf.yaml` stays available to
 everyone.
 
-### Letting users pick the LLM
+### Model catalog
 
-By default a session answers with the LLM its character preset names
-(`agent_config.agent_settings.basic_memory_agent.llm_provider`). To let users choose, copy
-`config_templates/llm_models.example.yaml` to `llm_models.yaml` in the project root (in Docker:
-`conf/llm_models.yaml`) and list the models there:
+Configure each required catalog independently in `conf.yaml`. Relative paths are resolved from the
+server's working directory.
+
+| `system_config` setting | Default file | Top-level key | Templates |
+| --- | --- | --- | --- |
+| `llm_models_file` | `llm_models.yaml` | `models` | [Default](./config_templates/llm_models.default.yaml) · [Examples](./config_templates/llm_models.example.yaml) |
+| `tts_models_file` | `tts_models.yaml` | `tts_models` | [Default](./config_templates/tts_models.default.yaml) · [Examples](./config_templates/tts_models.example.yaml) |
+| `asr_models_file` | `asr_models.yaml` | `asr_models` | [Default](./config_templates/asr_models.default.yaml) · [Examples](./config_templates/asr_models.example.yaml) |
+
+Both the default character in `conf.yaml` and **every** preset in `characters/*.yaml` must
+explicitly give all three IDs, even if they match the default character. A missing or invalid
+required reference prevents the character from loading; there is no fallback to inline settings
+or to a combined catalog.
 
 ```yaml
-models:
-  - id: deepseek-chat
-    name: DeepSeek Chat
-    provider: openai_compatible_llm # any provider of agent_config.llm_configs
-    base_url: https://api.deepseek.com/v1
-    llm_api_key: ${DEEPSEEK_API_KEY}
-    model: deepseek-chat
-  - id: claude
-    name: Claude
-    provider: claude_llm
-    llm_api_key: ${ANTHROPIC_API_KEY}
-    model: claude-sonnet-5-5
-    allowed_users: [alice@example.com]   # only these accounts see and can use it
+character_config:
+  model_refs:
+    llm: local-qwen
+    tts: edge-default
+    asr: groq-whisper
 ```
 
-- Providers are one per wire protocol: `openai_compatible_llm` (Chat Completions: OpenAI,
-  DeepSeek, Ollama, LM Studio, Gemini, Zhipu, Groq, Mistral, ...), `openai_responses_llm`
-  (OpenAI Responses API), `claude_llm` (Anthropic) and `vertex_llm` (Google Vertex AI). The
-  former per-vendor names (`deepseek_llm`, `ollama_llm`, `openai_llm`, ...) still load: they
-  are mapped to `openai_compatible_llm` with their old default `base_url`, and a warning asks
-  you to rename them.
-- The top bar then shows a model picker. The choice is stored per account, survives character
-  switches and reconnects, and also applies to that user's message-connector chats.
-  "Character default" returns to the preset's own LLM.
-- `allowed_users` follows the same rule as for character presets (internal user ids or verified
-  login emails). It is enforced on the server when the list is sent, when a model is selected and
-  again before every turn, so removing someone takes effect on their next message.
-- Endpoints and API keys never leave the server; the browser only receives `id`, `name` and
-  `description`.
-- Edits to the file are picked up within a few seconds. A file that fails to parse keeps the
-  previous list.
-- Only `basic_memory_agent` characters are affected; a `hume_ai_agent` character keeps its own
-  model.
+Connector `system_config.connectors.instances[].character` settings are partial overrides of the
+base character: omit `model_refs` to inherit all three, or specify just the roles to override.
+
+- LLM provider settings are fields directly on each `models` entry. Speech entries have their own
+  `settings` with all required provider fields; for `pyttsx3_tts`, use `settings: {}`.
+- At runtime, the service checks the catalogs for changes independently when needed. If a file
+  becomes malformed, the service keeps that file's last successfully loaded version without
+  blocking updates to the other catalogs.
+- The web model picker can override the character defaults per account. Selecting “Character
+  default” uses the character's referenced model for that role again.
+- Use `allowed_users` to restrict a model to internal user IDs or verified login emails. Public
+  characters (including the default character) can reference only public entries. A restricted
+  character may reference a restricted entry only if every allowlist token on the character also
+  appears on the model's allowlist, ignoring case and surrounding whitespace.
+- The catalogs hold provider endpoints and credentials; keep the runtime files out of Git.
+  `${ENV_VAR}` values come from the server process environment.
+- Catalog-backed characters use `basic_memory_agent`; `hume_ai_agent` cannot use a catalog LLM
+  and is not supported as a character agent in this configuration.
+
+#### Upgrading from a combined model catalog
+
+Before starting the new version, back up `conf.yaml`, `characters/`, and the existing combined
+catalog. Do not overwrite your entries with the stock templates.
+
+1. Keep `models:` and its entries in `llm_models.yaml` (or at your existing `llm_models_file` path).
+2. Copy the entire `tts_models:` section into `tts_models.yaml` and the entire `asr_models:` section
+   into `asr_models.yaml`, keeping each section at the top level. Remove both sections from the LLM
+   file after copying them. For Docker, place the default-named files under `conf/`.
+3. Keep every entry's `id` unchanged so character references and saved account choices still work.
+   Set `system_config.tts_models_file` and `system_config.asr_models_file` only if you use paths
+   other than the defaults.
+
+The server does not split an old catalog automatically or look for speech presets in the LLM file.
+
+#### Upgrading from inline model settings
+
+Back up `conf.yaml`, `characters/`, and any existing catalogs. Migrate them manually **before
+starting** the new version. Do not overwrite existing entries with the stock templates.
+
+1. For each character, copy its effective provider settings into entries in the matching catalog
+   files. Move the old `agent_config.llm_configs` settings for its selected `llm_provider`
+   directly onto an LLM entry; move its selected `tts_config` / `asr_config` provider settings
+   into `settings` on the speech entries. Fill in any old speech entries that inherited `settings`.
+2. Write `model_refs.llm`, `model_refs.tts`, and `model_refs.asr` in the base and every standalone
+   character, and remove the old inline role fields. Keep agent behavior settings and
+   `tts_preprocessor_config`. If a connector used inline overrides, reference its catalog entries
+   in the connector's partial `character.model_refs` instead.
+
+The server does not convert inline provider settings into catalog entries. Copying the stock
+catalog alone does not migrate an existing deployment.
 
 ## Development
 
@@ -423,7 +480,7 @@ src/open_llm_vtuber/
   config_manager/             typed YAML configuration
 web/                          React + Vite frontend source
 characters/                   character presets
-config_templates/             default conf.yaml and mcp_servers.json
+config_templates/             main config, model catalog and MCP server templates
 tests/                        unittest suite
 ```
 
@@ -443,8 +500,9 @@ tests/                        unittest suite
   with `1008`.
 - Generated TTS files live under `/cache/<user_id>/`; a logged-in user cannot fetch another user's
   file.
-- `conf.yaml`, `mcp_servers.json`, `model_dict.json`, `data/` and most model/character assets are
-  ignored by Git and `.dockerignore`. Never put API keys or MCP tokens in tracked files.
+- `conf.yaml`, `llm_models.yaml`, `tts_models.yaml`, `asr_models.yaml`, `mcp_servers.json`,
+  `model_dict.json`, `data/` and most model/character assets are excluded from Git and Docker builds.
+  Never put API keys or MCP tokens in tracked files.
 - Cloud ASR/TTS providers receive audio or text. ASR is cloud-only; for TTS, point at a self-hosted
   server (GPT-SoVITS, CosyVoice, XTTS, Spark) when that is not acceptable.
 - The default single-user mode has no authentication. Do not expose it publicly without a reverse
@@ -456,8 +514,8 @@ tests/                        unittest suite
 - Agent working memory is per WebSocket connection. History can be reloaded from SQLite, but memory
   is not shared between concurrent tabs.
 - OIDC has no refresh-token flow; after the session expires, users log in again.
-- Most configuration changes require a restart; only character/background switching and per-user MCP
-  apply at runtime.
+- Most configuration changes require a restart. Model catalog contents are reloaded independently
+  at runtime; changing their configured paths requires a restart.
 - Browser-local MCP depends on browser permissions and cannot reach arbitrary private services.
 - Bilibili live (`scripts/run_bilibili_live.py`) needs `blivedm`, which is not vendored or published
   as a dependency: clone <https://github.com/xfgryujk/blivedm> into `blivedm/` at the repo root and

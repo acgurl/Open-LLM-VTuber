@@ -15,7 +15,7 @@ from ..utils.security import redact_secrets
 T = TypeVar("T", bound=BaseModel)
 
 
-def read_yaml(config_path: str) -> dict[str, Any]:
+def read_yaml(config_path: str, *, log_parse_error: bool = True) -> dict[str, Any]:
     """
     Read the specified YAML configuration file with environment variable substitution
     and guess encoding. Return the configuration data as a dictionary.
@@ -50,7 +50,8 @@ def read_yaml(config_path: str) -> dict[str, Any]:
     try:
         return yaml.safe_load(content)
     except yaml.YAMLError as e:
-        logger.critical(f"Error parsing YAML file: {e}")
+        if log_parse_error:
+            logger.critical(f"Error parsing YAML file: {e}")
         raise
 
 
