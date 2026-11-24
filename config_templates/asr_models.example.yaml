@@ -23,3 +23,11 @@ asr_models:
   #     api_key: '${AZURE_SPEECH_KEY}'
   #     region: eastus
   #     languages: [en-US, zh-CN]
+  # - id: google-chirp3
+  #   name: Google · Chirp 3
+  #   provider: google_cloud_asr
+  #   settings:
+  #     credentials_file: conf/vertex_credentials.json
+  #     location: us
+  #     model: chirp_3
+  #     language_codes: [cmn-Hans-CN, en-US]

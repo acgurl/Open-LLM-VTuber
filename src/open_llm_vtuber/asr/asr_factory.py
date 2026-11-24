@@ -23,9 +23,23 @@ def _build_groq_whisper(kwargs: dict) -> ASRInterface:
     )
 
 
+def _build_google_cloud_asr(kwargs: dict) -> ASRInterface:
+    from .google_cloud_asr import VoiceRecognition as GoogleCloudASR
+
+    return GoogleCloudASR(
+        credentials_file=kwargs.get("credentials_file"),
+        project_id=kwargs.get("project_id"),
+        location=kwargs.get("location", "us"),
+        model=kwargs.get("model", "chirp_3"),
+        language_codes=kwargs.get("language_codes"),
+        auto_punctuation=kwargs.get("auto_punctuation", True),
+    )
+
+
 _ASR_BUILDERS: dict[str, Callable[[dict], ASRInterface]] = {
     "azure_asr": _build_azure_asr,
     "groq_whisper_asr": _build_groq_whisper,
+    "google_cloud_asr": _build_google_cloud_asr,
 }
 
 

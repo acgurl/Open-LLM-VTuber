@@ -514,6 +514,54 @@ class CartesiaTTSConfig(I18nMixin):
     }
 
 
+class GoogleCloudTTSConfig(I18nMixin):
+    """Configuration for Google Cloud Text-to-Speech service."""
+
+    credentials_file: str = Field(..., alias="credentials_file")
+    voice: str = Field(..., alias="voice")
+    language_code: str | None = Field(None, alias="language_code")
+    project_id: str | None = Field(None, alias="project_id")
+    speaking_rate: float = Field(1.0, alias="speaking_rate", ge=0.25, le=2.0)
+    pitch: float = Field(0.0, alias="pitch", ge=-20.0, le=20.0)
+    model_name: str | None = Field(None, alias="model_name")
+    prompt: str | None = Field(None, alias="prompt")
+
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
+        "credentials_file": Description(
+            en="Path of the Google Cloud service-account key file (JSON)",
+            zh="Google Cloud 服务账号密钥文件（JSON）的路径",
+        ),
+        "voice": Description(
+            en="Google Cloud voice name (e.g., cmn-CN-Chirp3-HD-Leda)",
+            zh="Google Cloud 语音名称（如 cmn-CN-Chirp3-HD-Leda）",
+        ),
+        "language_code": Description(
+            en="Optional BCP-47 language code (inferred from voice name when omitted)",
+            zh="可选 BCP-47 语言代码（留空时从音色名自动推导）",
+        ),
+        "project_id": Description(
+            en="Optional Google Cloud project ID (defaults to the key file's project_id)",
+            zh="可选 Google Cloud 项目 ID（默认取密钥文件里的 project_id）",
+        ),
+        "speaking_rate": Description(
+            en="Speaking rate multiplier from 0.25 to 2.0",
+            zh="语速倍率（0.25 到 2.0）",
+        ),
+        "pitch": Description(
+            en="Speaking pitch adjustment in semitones from -20.0 to 20.0 (omit/0 for Chirp 3 HD)",
+            zh="音高调整（半音，-20.0 到 20.0；Chirp 3 HD 请保持 0）",
+        ),
+        "model_name": Description(
+            en="Optional model name for Gemini TTS voices (e.g., gemini-2.5-flash-tts)",
+            zh="可选模型名称（用于 Gemini TTS 音色，如 gemini-2.5-flash-tts）",
+        ),
+        "prompt": Description(
+            en="Optional style prompt for Gemini TTS",
+            zh="可选风格提示词（用于 Gemini TTS）",
+        ),
+    }
+
+
 _TTS_CONFIG_FIELDS = {
     "azure_tts": "azure_tts",
     "edge_tts": "edge_tts",
@@ -528,6 +576,7 @@ _TTS_CONFIG_FIELDS = {
     "minimax_tts": "minimax_tts",
     "elevenlabs_tts": "elevenlabs_tts",
     "cartesia_tts": "cartesia_tts",
+    "google_cloud_tts": "google_cloud_tts",
 }
 
 
@@ -549,6 +598,7 @@ class TTSConfig(I18nMixin):
         "minimax_tts",
         "elevenlabs_tts",
         "cartesia_tts",
+        "google_cloud_tts",
     ] = Field(..., alias="tts_model")
 
     azure_tts: AzureTTSConfig | None = Field(None, alias="azure_tts")
@@ -564,6 +614,9 @@ class TTSConfig(I18nMixin):
     minimax_tts: MinimaxTTSConfig | None = Field(None, alias="minimax_tts")
     elevenlabs_tts: ElevenLabsTTSConfig | None = Field(None, alias="elevenlabs_tts")
     cartesia_tts: CartesiaTTSConfig | None = Field(None, alias="cartesia_tts")
+    google_cloud_tts: GoogleCloudTTSConfig | None = Field(
+        None, alias="google_cloud_tts"
+    )
 
     DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "tts_model": Description(
@@ -599,6 +652,9 @@ class TTSConfig(I18nMixin):
         ),
         "cartesia_tts": Description(
             en="Configuration for Cartesia TTS", zh="Cartesia TTS 配置"
+        ),
+        "google_cloud_tts": Description(
+            en="Configuration for Google Cloud TTS", zh="Google Cloud TTS 配置"
         ),
     }
 

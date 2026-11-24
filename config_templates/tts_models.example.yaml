@@ -31,3 +31,10 @@ tts_models:
   #   name: System Voice
   #   provider: pyttsx3_tts
   #   settings: {} # This provider has no settings. 此服务无需参数。
+  # - id: google-chirp3-leda
+  #   name: Google · 乐达（Chirp 3 HD）
+  #   provider: google_cloud_tts
+  #   settings:
+  #     credentials_file: conf/vertex_credentials.json
+  #     voice: cmn-CN-Chirp3-HD-Leda
+  #     speaking_rate: 1.0

@@ -183,6 +183,21 @@ def _build_cartesia(kwargs: dict) -> TTSInterface:
     )
 
 
+def _build_google_cloud(kwargs: dict) -> TTSInterface:
+    from .google_cloud_tts import TTSEngine as GoogleCloudTTSEngine
+
+    return GoogleCloudTTSEngine(
+        credentials_file=kwargs.get("credentials_file"),
+        voice=kwargs.get("voice"),
+        language_code=kwargs.get("language_code"),
+        project_id=kwargs.get("project_id"),
+        speaking_rate=kwargs.get("speaking_rate", 1.0),
+        pitch=kwargs.get("pitch", 0.0),
+        model_name=kwargs.get("model_name"),
+        prompt=kwargs.get("prompt"),
+    )
+
+
 _TTS_ENGINE_BUILDERS: dict[str, Callable[[dict], TTSInterface]] = {
     "azure_tts": _build_azure,
     "edge_tts": _build_edge,
@@ -198,6 +213,7 @@ _TTS_ENGINE_BUILDERS: dict[str, Callable[[dict], TTSInterface]] = {
     "spark_tts": _build_spark,
     "elevenlabs_tts": _build_elevenlabs,
     "cartesia_tts": _build_cartesia,
+    "google_cloud_tts": _build_google_cloud,
 }
 
 
