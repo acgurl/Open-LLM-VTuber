@@ -1,0 +1,64 @@
+import { describe, expect, it } from 'vitest';
+import { DECK_SOURCE } from '../data/deck.ts';
+import { createDeckController, mapKeyToCommand } from './deckController.ts';
+
+describe('DECK_SOURCE invariants', () => {
+  it('defines 6 slides summing to 290s within the 300s safety limit', () => {
+    expect(DECK_SOURCE.slides).toHaveLength(6);
+    const total = DECK_SOURCE.slides.reduce((acc, s) => acc + s.durationSec, 0);
+    expect(total).toBe(290);
+    expect(total).toBeLessThanOrEqual(DECK_SOURCE.meta.safetyLimitSec);
+  });
+
+  it('orders the three hard time anchors (1:10, 2:25, 4:10) against valid slides', () => {
+    expect(DECK_SOURCE.anchors.map((a) => [a.timeLabel, a.atSeconds, a.slideId])).toEqual([
+      ['1:10', 70, 3],
+      ['2:25', 145, 4],
+      ['4:10', 250, 6],
+    ]);
+  });
+});
+
+describe('DeckController core navigation, remote mapping, and theme', () => {
+  it('starts on slide 1 in light theme and clamps navigation within 1..6', () => {
+    const controller = createDeckController(DECK_SOURCE);
+    expect(controller.getState().slide).toBe(1);
+    expect(controller.getState().theme).toBe('light');
+
+    controller.dispatch({ type: 'PREV_SLIDE' });
+    expect(controller.getState().slide).toBe(1);
+
+    controller.dispatch({ type: 'GO_TO_SLIDE', slide: 99 });
+    expect(controller.getState().slide).toBe(6);
+
+    controller.dispatch({ type: 'NEXT_SLIDE' });
+    expect(controller.getState().slide).toBe(6);
+
+    controller.dispatch({ type: 'GO_TO_SLIDE', slide: -3 });
+    expect(controller.getState().slide).toBe(1);
+  });
+
+  it('toggles between light and dark theme', () => {
+    const controller = createDeckController(DECK_SOURCE, { initialTheme: 'dark' });
+    expect(controller.getState().theme).toBe('dark');
+    controller.dispatch({ type: 'TOGGLE_THEME' });
+    expect(controller.getState().theme).toBe('light');
+    controller.dispatch({ type: 'SET_THEME', theme: 'dark' });
+    expect(controller.getState().theme).toBe('dark');
+  });
+
+  it('maps presenter remote keys and keyboard shortcuts while ignoring inputs and space on buttons', () => {
+    expect(mapKeyToCommand({ key: 'ArrowRight', targetTag: 'DIV' })).toEqual({ type: 'NEXT_SLIDE' });
+    expect(mapKeyToCommand({ key: 'PageDown', targetTag: 'BODY' })).toEqual({ type: 'NEXT_SLIDE' });
+    expect(mapKeyToCommand({ key: 'ArrowLeft', targetTag: 'BODY' })).toEqual({ type: 'PREV_SLIDE' });
+    expect(mapKeyToCommand({ key: 'PageUp', targetTag: 'BODY' })).toEqual({ type: 'PREV_SLIDE' });
+    expect(mapKeyToCommand({ key: ' ', targetTag: 'BODY' })).toEqual({ type: 'NEXT_SLIDE' });
+    expect(mapKeyToCommand({ key: '4', targetTag: 'BODY' })).toEqual({ type: 'GO_TO_SLIDE', slide: 4 });
+    expect(mapKeyToCommand({ key: 't', targetTag: 'BODY' })).toEqual({ type: 'TOGGLE_THEME' });
+
+    expect(mapKeyToCommand({ key: ' ', targetTag: 'BUTTON' })).toBeNull();
+    expect(mapKeyToCommand({ key: ' ', insideButton: true, targetTag: 'SPAN' })).toBeNull();
+    expect(mapKeyToCommand({ key: 'ArrowRight', targetTag: 'INPUT' })).toBeNull();
+    expect(mapKeyToCommand({ key: 't', targetTag: 'TEXTAREA' })).toBeNull();
+  });
+});
