@@ -158,3 +158,17 @@ Uses **uv** (modern Python package manager):
 - Lock file: `uv.lock`
 - Generated requirements: `requirements.txt` (auto-generated)
 - Optional dependencies for specific features (e.g., `bilibili` extra)
+
+## Agent skills
+
+### Issue tracker
+
+Local Markdown files under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five canonical triage roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout (`GLOSSARY.md` + `docs/adr/` at repo root). See `docs/agents/domain.md`.
