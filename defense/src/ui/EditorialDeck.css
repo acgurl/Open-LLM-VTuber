@@ -12,6 +12,7 @@
   --ed-warn: #be123c;
   --ed-warn-soft: rgba(190, 18, 60, 0.09);
   --ed-secondary: #b45309;
+  --ed-tertiary: #6d28d9;
   --ed-rule: rgba(17, 24, 39, 0.14);
   --ed-rule-strong: #111827;
   --ed-term-bg: #111827;
@@ -35,6 +36,7 @@ html[data-theme='dark'] {
   --ed-warn: #fb7185;
   --ed-warn-soft: rgba(251, 113, 133, 0.14);
   --ed-secondary: #fbbf24;
+  --ed-tertiary: #c4b5fd;
   --ed-rule: rgba(241, 245, 249, 0.16);
   --ed-rule-strong: #f1f5f9;
   --ed-term-bg: #090d14;
@@ -322,6 +324,10 @@ body {
 
 .ed-kpi-val.secondary {
   color: var(--ed-secondary);
+}
+
+.ed-kpi-val.tertiary {
+  color: var(--ed-tertiary);
 }
 
 .ed-kpi-lbl {
