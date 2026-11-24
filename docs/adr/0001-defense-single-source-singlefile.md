@@ -15,4 +15,4 @@ Rebuild `defense/` as a standalone TypeScript + React 18 + Vite + Vitest package
 ## Consequences
 
 - `defense/` remains completely decoupled from `web/` dependencies and build lifecycle.
-- Every production build outputs a portable single HTML file (`defense/dist/index.html`) that works over both HTTPS and `file://`, alongside `./assets/` images (`xiaozhi.png`, `airi.png`).
+- Every production build outputs a portable single HTML file (`defense/dist/index.html`) and mirrors it alongside `./assets/` (`xiaozhi.png`, `airi.png`) at `defense/index.html` so root-relative `file://` opening and the existing `ppt.acgurl.cn` deploy tarball command work unchanged.

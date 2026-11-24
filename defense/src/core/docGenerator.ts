@@ -10,12 +10,21 @@ function finalizeMarkdown(lines: readonly string[]): string {
   return `${cleaned.join('\n').trimEnd()}\n`;
 }
 
+function formatCnDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  if (m === 0) return `${s} 秒`;
+  return s === 0 ? `${m} 分钟` : `${m} 分 ${s} 秒`;
+}
+
 function formatSpeechScript(deck: DeckSource): string {
+  const durationLabel = formatCnDuration(deck.meta.totalDurationSec);
+  const bufferSec = Math.max(0, deck.meta.safetyLimitSec - deck.meta.totalDurationSec);
   const lines: string[] = [
     `# ${deck.meta.title} · 5 分钟单人答辩逐字口播稿（单源同步版）`,
     '',
     `> **核心主线**：${deck.meta.subtitle}`,
-    `> **总控时目标**：**4 分 50 秒（${deck.meta.totalDurationSec} 秒）**，预留 10 秒安全余量不超时。`,
+    `> **总控时目标**：**${durationLabel}（${deck.meta.totalDurationSec} 秒）**，预留 ${bufferSec} 秒安全余量不超时。`,
     '> **配套演示**：打开 [`index.html`](./index.html) 按 `P` 键开启独立演讲台（实时同步倒计时、时间锚点与逐字稿），或单屏按 `N` 键开启底部单屏提词。',
     '',
     '---',
@@ -25,7 +34,8 @@ function formatSpeechScript(deck: DeckSource): string {
     '| 锚点时刻 | 必须进入的页面 | 超时救场策略 |',
     '|---|---|---|',
     ...deck.anchors.map(
-      (a) => `| **\`${a.timeLabel}\`** | 必须进入 **Slide ${a.slideId}（${a.label.replace(`${a.timeLabel} `, '')}）** | ${a.rescueStrategy} |`,
+      (a) =>
+        `| **\`${a.timeLabel}\`** | 必须进入 **Slide ${a.slideId}（${a.label.replace(`${a.timeLabel} `, '')}）** | ${a.rescueStrategy} |`,
     ),
     '',
   ];
@@ -59,14 +69,21 @@ function formatSpeechScript(deck: DeckSource): string {
 
 function formatDemoGuide(deck: DeckSource): string {
   const endpointList = deck.slide3.endpoints.map((ep) => `\`${ep.url}\``).join(' / ');
+  const demoAnchor = deck.anchors.find((a) => a.id === 'demo') ?? deck.anchors[0];
+  const localEndpoint =
+    deck.slide3.endpoints.find((ep) => ep.url.includes('localhost')) ??
+    deck.slide3.endpoints[deck.slide3.endpoints.length - 1];
+  const promptCount = deck.slide3.prompts.length;
+  const qaCount = deck.qaItems.length;
+
   const lines: string[] = [
     `# ${deck.meta.title} · 线上真机演示、单人 SOP 与 Q&A 手册`,
     '',
     '---',
     '',
-    '## 一、Slide 3（`1:10`）真机演示切源 + 5 题一键复制',
+    `## 一、Slide ${demoAnchor.slideId}（\`${demoAnchor.timeLabel}\`）真机演示切源 + ${promptCount} 题一键复制`,
     '',
-    `Slide 3 仅保留**真机演示切源**：左侧 64% 直接内嵌 ${endpointList}（支持顶栏一键切源、手动刷新与新窗口打开），右侧 36% 放置 5 张按顺序排好的演示提问卡——**点击任意卡片即复制，到左侧对话框 \`Ctrl+V\` 直接发送**。`,
+    `Slide ${demoAnchor.slideId} 仅保留**真机演示切源**：左侧 64% 直接内嵌 ${endpointList}（支持顶栏一键切源、手动刷新与新窗口打开），右侧 36% 放置 ${promptCount} 张按顺序排好的演示提问卡——**点击任意卡片即复制，到左侧对话框 \`Ctrl+V\` 直接发送**。`,
     '',
     '### 1. 内嵌登录态（`SameSite=Lax`）与备选接入',
     '',
@@ -75,10 +92,10 @@ function formatDemoGuide(deck: DeckSource): string {
     '   ```powershell',
     `   ${deck.meta.deployPowerShellCmd}`,
     '   ```',
-    '2. **本机免登录后端（`http://localhost:12393/`）**：若现场网络屏蔽外网域名，在本地启动单用户模式后端并在 Slide 3 顶栏 1 秒切换至 `localhost:12393`（需提前同步线上配置并开启 `use_mcpp`）。',
+    `2. **本机免登录后端（\`${localEndpoint.url}\`）**：若现场网络屏蔽外网域名，在本地启动单用户模式后端并在 Slide ${demoAnchor.slideId} 顶栏 1 秒切换至 \`${localEndpoint.label}\`（需提前同步线上配置并开启 \`use_mcpp\`）。`,
     `3. **测试体验账号**：普通功能体验可使用 \`${deck.meta.testAccount.username}\` / \`${deck.meta.testAccount.password}\`；演示个人数据需使用本人账号在本机运行 \`cuc-cli\`。`,
     '',
-    `### 2. 5 张预设一键复制提问卡（建议演示顺序：\`${deck.slide3.recommendedOrder}\`）`,
+    `### 2. ${promptCount} 张预设一键复制提问卡（建议演示顺序：\`${deck.slide3.recommendedOrder}\`）`,
     '',
     '| 序号 | 卡片主题 | 复制内容 | 现场展示看点 |',
     '|---|---|---|---|',
@@ -101,9 +118,9 @@ function formatDemoGuide(deck: DeckSource): string {
     '',
     '---',
     '',
-    '## 三、评委高频追问 6 问 6 答 & 现场应急预案',
+    `## 三、评委高频追问 ${qaCount} 问 ${qaCount} 答 & 现场应急预案`,
     '',
-    '### 1. 评委最可能追问的 6 个核心问题（答辩现场按 `Q` 可一键调出）',
+    `### 1. 评委最可能追问的 ${qaCount} 个核心问题（答辩现场按 \`Q\` 可一键调出）`,
     '',
     ...deck.qaItems.flatMap((qa) => [`- **${qa.q}**`, `  > ${qa.a}`, '']),
     '### 2. 现场突发应急预案（纯真机版）',

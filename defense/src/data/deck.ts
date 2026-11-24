@@ -58,11 +58,9 @@ export interface DemoEndpoint {
 
 export interface DemoPromptItem {
   readonly id: string;
-  readonly badge: string;
   readonly tag: string;
   readonly prompt: string;
   readonly expectedVisual: string;
-  readonly tone?: 'accent' | 'ok' | 'secondary' | 'tertiary';
 }
 
 export interface HardDesignItem {
@@ -460,43 +458,33 @@ export const DECK_SOURCE: DeckSource = {
     prompts: [
       {
         id: '1',
-        badge: '① 版本让位 + 页码直跳',
         tag: '① 版本让位 + 页码直跳',
         prompt: '研究生导师岗位聘任最新有什么要求？请附学校文件出处。',
         expectedVisual: '新版压过 2023 旧版 · 15 分钟签名 PDF 页码直跳 · 停顿 4 秒放原声',
-        tone: 'accent',
       },
       {
         id: '2',
-        badge: '② 跨条款精准检索',
         tag: '② 跨条款精准检索（备选）',
         prompt: '本科生申请缓考需要满足什么条件、走什么流程？',
         expectedVisual: 'N=1 相邻条款展开补全截断前提与例外',
-        tone: 'accent',
       },
       {
         id: '3',
-        badge: '③ 217 处地点地图卡',
         tag: '③ 217 处地点坐标卡',
         prompt: '校医院和教务处办事窗口分别在哪栋楼？',
         expectedVisual: 'place_answer=true · 前端零 WS 改动渲染高德交互卡',
-        tone: 'ok',
       },
       {
         id: '4',
-        badge: '④ 标定拒答防幻觉',
         tag: '④ 标定拒答防幻觉',
         prompt: '学校游泳馆这周五晚开放到几点、单次票价多少？',
         expectedVisual: '库外实时属性触发 no_answer · 如实说不知道',
-        tone: 'secondary',
       },
       {
         id: '5',
-        badge: '⑤ 本机 cuc-cli 补位',
         tag: '⑤ 本机 cuc-cli 补位',
         prompt: '帮我看看今天还有什么课、畅课有哪些待办，博学楼下午哪几间教室空着？',
         expectedVisual: '本机 127.0.0.1 并发只读 · 凭据不出本机',
-        tone: 'tertiary',
       },
     ],
     recommendedOrder: '① → ③ → ④ → ⑤',
@@ -630,7 +618,7 @@ export const DECK_SOURCE: DeckSource = {
     ],
     fiveMinBefore: [
       '双屏扩展（强烈推荐）：投影仪设为“扩展显示”，全屏（F）拖动 index.html 到投影屏；按 P 打开演讲台留在笔记本看逐字稿、计时与 Q&A 弹药库。',
-      '单屏镜像：按 N 在当前屏底部开启单屏提词条；默认亮色杂志版面适配强光教室，如需关灯暗色按 T 切换。',
+      '单屏镜像：按 N 在当前屏底部开启单屏提词；默认亮色杂志版面适配强光教室，如需关灯暗色按 T 切换。',
       '音频与本地热备：若接入外放音响先在 Slide 3 测一次语音音量；演示第 ⑤ 题请提前本机登录并启动 cuc-server (127.0.0.1:8787) 与 cuc-mcp --http (127.0.0.1:8788)；普通体验测试账号为 test / TestCuc@2026。',
     ],
     emergencies: [

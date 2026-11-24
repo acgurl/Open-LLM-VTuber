@@ -1,6 +1,6 @@
 import React from 'react';
 import type { DeckSource, SlideDefinition } from '../data/deck.ts';
-import { formatMMSS, type DeckKeyAction, type DeckState } from '../core/deckController.ts';
+import { formatTimerLabel, type DeckKeyAction, type DeckState } from '../core/deckController.ts';
 
 interface DeckChromeProps {
   readonly deck: DeckSource;
@@ -17,7 +17,7 @@ export const DeckChrome: React.FC<DeckChromeProps> = ({
   dockVisible,
   onAction,
 }) => {
-  const timerText = `${formatMMSS(state.timerSeconds)} / ${formatMMSS(deck.meta.safetyLimitSec)}`;
+  const timerText = formatTimerLabel(state.timerSeconds, deck.meta.safetyLimitSec);
   const timerClass =
     state.timerTone === 'idle' ? 'ed-dock-timer' : `ed-dock-timer ${state.timerTone}`;
 
@@ -58,7 +58,7 @@ export const DeckChrome: React.FC<DeckChromeProps> = ({
             type="button"
             className={`ed-dock-btn ${state.teleprompterOpen ? 'is-active' : ''}`}
             onClick={() => onAction({ type: 'TOGGLE_TELEPROMPTER' })}
-            title="单屏提词条 (N)"
+            title="单屏提词 (N)"
           >
             提词(N)
           </button>

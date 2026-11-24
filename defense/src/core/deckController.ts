@@ -50,6 +50,7 @@ export interface KeyInputEvent {
   readonly targetTag?: string;
   readonly isContentEditable?: boolean;
   readonly insideButton?: boolean;
+  readonly hasModifier?: boolean;
 }
 
 export interface SpeakerSyncPayload {
@@ -80,6 +81,10 @@ export function formatMMSS(sec: number): string {
   const m = Math.floor(safe / 60);
   const s = safe % 60;
   return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+export function formatTimerLabel(sec: number, limitSec: number): string {
+  return `${formatMMSS(sec)} / ${formatMMSS(limitSec)}`;
 }
 
 function computeTimerTone(deck: DeckSource, sec: number, running: boolean): TimerTone {
@@ -224,6 +229,9 @@ const SIMPLE_KEY_MAP: Record<string, DeckKeyAction> = {
 };
 
 export function mapKeyToCommand(input: KeyInputEvent): DeckKeyAction | null {
+  if (input.hasModifier) {
+    return null;
+  }
   const tag = (input.targetTag || '').toUpperCase();
   if (tag === 'INPUT' || tag === 'TEXTAREA' || input.isContentEditable) {
     return null;
@@ -249,7 +257,7 @@ export function buildSpeakerSyncPayload(deck: DeckSource, state: DeckState): Spe
     slide: state.slide,
     totalSlides: deck.slides.length,
     sec: state.timerSeconds,
-    formattedTimer: `${formatMMSS(state.timerSeconds)} / ${formatMMSS(deck.meta.safetyLimitSec)}`,
+    formattedTimer: formatTimerLabel(state.timerSeconds, deck.meta.safetyLimitSec),
     running: state.timerRunning,
     timerTone: state.timerTone,
     theme: state.theme,

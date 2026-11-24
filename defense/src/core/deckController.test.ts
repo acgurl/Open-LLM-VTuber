@@ -192,6 +192,10 @@ describe('DeckController timer, anchors, overlays, and speaker console payload',
     expect(mapKeyToCommand({ key: 'q', targetTag: 'BODY' })).toEqual({ type: 'TOGGLE_QA_MODAL' });
     expect(mapKeyToCommand({ key: 'r', targetTag: 'BODY' })).toEqual({ type: 'RESET_TIMER' });
     expect(mapKeyToCommand({ key: 'Escape', targetTag: 'BODY' })).toEqual({ type: 'CLOSE_OVERLAYS' });
+
+    expect(mapKeyToCommand({ key: 'r', targetTag: 'BODY', hasModifier: true })).toBeNull();
+    expect(mapKeyToCommand({ key: 'p', targetTag: 'BODY', hasModifier: true })).toBeNull();
+    expect(mapKeyToCommand({ key: 't', targetTag: 'BODY', hasModifier: true })).toBeNull();
   });
 
   it('builds speaker sync payload with formatted timer, slide meta, next slide meta, and anchors', () => {

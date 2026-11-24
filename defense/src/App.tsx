@@ -171,6 +171,7 @@ export const App: React.FC = () => {
         targetTag: target?.tagName,
         isContentEditable: Boolean(target?.isContentEditable),
         insideButton: Boolean(target?.closest('button')),
+        hasModifier: e.ctrlKey || e.metaKey || e.altKey,
       });
       if (!action) return;
       e.preventDefault();
