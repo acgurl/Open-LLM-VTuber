@@ -62,3 +62,50 @@ describe('DeckController core navigation, remote mapping, and theme', () => {
     expect(mapKeyToCommand({ key: 't', targetTag: 'TEXTAREA' })).toBeNull();
   });
 });
+
+describe('DeckController live demo switcher & prompt copy tracking', () => {
+  it('switches liveUrl among configured endpoints and rejects unknown URLs', () => {
+    const controller = createDeckController(DECK_SOURCE);
+    expect(controller.getState().liveUrl).toBe('https://ai.acgurl.cn/');
+
+    controller.dispatch({ type: 'SET_LIVE_URL', url: 'https://vtuber.acgurl.cn/' });
+    expect(controller.getState().liveUrl).toBe('https://vtuber.acgurl.cn/');
+
+    controller.dispatch({ type: 'SET_LIVE_URL', url: 'http://localhost:12393/' });
+    expect(controller.getState().liveUrl).toBe('http://localhost:12393/');
+
+    controller.dispatch({ type: 'SET_LIVE_URL', url: 'https://evil.example.com/' });
+    expect(controller.getState().liveUrl).toBe('http://localhost:12393/');
+  });
+
+  it('increments iframeReloadNonce on RELOAD_LIVE_FRAME', () => {
+    const controller = createDeckController(DECK_SOURCE);
+    expect(controller.getState().iframeReloadNonce).toBe(0);
+
+    controller.dispatch({ type: 'RELOAD_LIVE_FRAME' });
+    controller.dispatch({ type: 'RELOAD_LIVE_FRAME' });
+    expect(controller.getState().iframeReloadNonce).toBe(2);
+  });
+
+  it('tracks copied prompt flash and deduplicates usedPromptIds', () => {
+    const controller = createDeckController(DECK_SOURCE);
+
+    controller.dispatch({ type: 'MARK_PROMPT_COPIED', promptId: '1' });
+    expect(controller.getState().copiedPromptId).toBe('1');
+    expect(controller.getState().usedPromptIds).toEqual(['1']);
+
+    controller.dispatch({ type: 'MARK_PROMPT_COPIED', promptId: '1' });
+    expect(controller.getState().usedPromptIds).toEqual(['1']);
+
+    controller.dispatch({ type: 'CLEAR_COPIED_FLASH', promptId: '3' });
+    expect(controller.getState().copiedPromptId).toBe('1');
+
+    controller.dispatch({ type: 'CLEAR_COPIED_FLASH', promptId: '1' });
+    expect(controller.getState().copiedPromptId).toBeNull();
+    expect(controller.getState().usedPromptIds).toEqual(['1']);
+
+    controller.dispatch({ type: 'MARK_PROMPT_COPIED', promptId: 'nonexistent' });
+    expect(controller.getState().copiedPromptId).toBeNull();
+    expect(controller.getState().usedPromptIds).toEqual(['1']);
+  });
+});

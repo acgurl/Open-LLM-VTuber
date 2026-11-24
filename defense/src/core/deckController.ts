@@ -5,11 +5,19 @@ export type DeckCommand =
   | { readonly type: 'PREV_SLIDE' }
   | { readonly type: 'GO_TO_SLIDE'; readonly slide: number }
   | { readonly type: 'TOGGLE_THEME' }
-  | { readonly type: 'SET_THEME'; readonly theme: ThemeMode };
+  | { readonly type: 'SET_THEME'; readonly theme: ThemeMode }
+  | { readonly type: 'SET_LIVE_URL'; readonly url: string }
+  | { readonly type: 'RELOAD_LIVE_FRAME' }
+  | { readonly type: 'MARK_PROMPT_COPIED'; readonly promptId: string }
+  | { readonly type: 'CLEAR_COPIED_FLASH'; readonly promptId: string };
 
 export interface DeckState {
   readonly slide: number;
   readonly theme: ThemeMode;
+  readonly liveUrl: string;
+  readonly iframeReloadNonce: number;
+  readonly copiedPromptId: string | null;
+  readonly usedPromptIds: readonly string[];
 }
 
 export interface KeyInputEvent {
@@ -34,9 +42,17 @@ export function createDeckController(
   options?: { readonly initialTheme?: ThemeMode },
 ): DeckController {
   const totalSlides = deck.slides.length;
+  const allowedUrls = new Set(deck.slide3.endpoints.map((ep) => ep.url));
+  const allowedPromptIds = new Set(deck.slide3.prompts.map((p) => p.id));
+  const defaultLiveUrl = deck.slide3.endpoints[0]?.url ?? deck.meta.liveSiteUrl;
+
   let state: DeckState = {
     slide: 1,
     theme: options?.initialTheme === 'dark' ? 'dark' : 'light',
+    liveUrl: defaultLiveUrl,
+    iframeReloadNonce: 0,
+    copiedPromptId: null,
+    usedPromptIds: [],
   };
 
   return {
@@ -57,6 +73,27 @@ export function createDeckController(
           return state;
         case 'SET_THEME':
           state = { ...state, theme: command.theme };
+          return state;
+        case 'SET_LIVE_URL':
+          if (allowedUrls.has(command.url)) {
+            state = { ...state, liveUrl: command.url };
+          }
+          return state;
+        case 'RELOAD_LIVE_FRAME':
+          state = { ...state, iframeReloadNonce: state.iframeReloadNonce + 1 };
+          return state;
+        case 'MARK_PROMPT_COPIED': {
+          if (!allowedPromptIds.has(command.promptId)) return state;
+          const used = state.usedPromptIds.includes(command.promptId)
+            ? state.usedPromptIds
+            : [...state.usedPromptIds, command.promptId];
+          state = { ...state, copiedPromptId: command.promptId, usedPromptIds: used };
+          return state;
+        }
+        case 'CLEAR_COPIED_FLASH':
+          if (state.copiedPromptId === command.promptId) {
+            state = { ...state, copiedPromptId: null };
+          }
           return state;
       }
     },

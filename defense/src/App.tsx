@@ -6,6 +6,7 @@ import {
   type DeckCommand,
   type DeckState,
 } from './core/deckController.ts';
+import { LiveDemoSlide } from './ui/LiveDemoSlide.tsx';
 import { SlideSpread } from './ui/SlideSpread.tsx';
 import './ui/EditorialDeck.css';
 
@@ -119,7 +120,11 @@ export const App: React.FC = () => {
             </div>
           </header>
 
-          <SlideSpread deck={DECK_SOURCE} slide={currentSlide} />
+          {currentSlide.id === 3 ? (
+            <LiveDemoSlide deck={DECK_SOURCE} state={state} onDispatch={dispatch} />
+          ) : (
+            <SlideSpread deck={DECK_SOURCE} slide={currentSlide} />
+          )}
         </div>
       </main>
 
