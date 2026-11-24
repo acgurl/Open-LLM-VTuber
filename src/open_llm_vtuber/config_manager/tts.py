@@ -562,6 +562,44 @@ class GoogleCloudTTSConfig(I18nMixin):
     }
 
 
+class VertexTTSConfig(I18nMixin):
+    """Configuration for Vertex AI Gemini TTS service."""
+
+    credentials_file: str = Field(..., alias="credentials_file")
+    model: str = Field("gemini-3.8-flash-lite-tts", alias="model")
+    voice: str = Field("Leda", alias="voice")
+    location: str = Field("global", alias="location")
+    language_code: str | None = Field(None, alias="language_code")
+    project_id: str | None = Field(None, alias="project_id")
+
+    DESCRIPTIONS: ClassVar[dict[str, Description]] = {
+        "credentials_file": Description(
+            en="Path of the Google Cloud service-account key file (JSON)",
+            zh="Google Cloud 服务账号密钥文件（JSON）的路径",
+        ),
+        "model": Description(
+            en="Vertex AI TTS model name (e.g., gemini-3.8-flash-lite-tts)",
+            zh="Vertex AI TTS 模型名称（如 gemini-3.8-flash-lite-tts）",
+        ),
+        "voice": Description(
+            en="Prebuilt voice name (e.g., Leda, Zephyr, Aoede, Puck)",
+            zh="预置音色名称（如 Leda、Zephyr、Aoede、Puck）",
+        ),
+        "location": Description(
+            en="Vertex AI location (e.g., global, us-central1)",
+            zh="Vertex AI 区域（如 global、us-central1）",
+        ),
+        "language_code": Description(
+            en="Optional BCP-47 language code hint (e.g., cmn-CN)",
+            zh="可选 BCP-47 语言代码提示（如 cmn-CN）",
+        ),
+        "project_id": Description(
+            en="Optional Google Cloud project ID (defaults to the key file's project_id)",
+            zh="可选 Google Cloud 项目 ID（默认取密钥文件里的 project_id）",
+        ),
+    }
+
+
 _TTS_CONFIG_FIELDS = {
     "azure_tts": "azure_tts",
     "edge_tts": "edge_tts",
@@ -577,6 +615,7 @@ _TTS_CONFIG_FIELDS = {
     "elevenlabs_tts": "elevenlabs_tts",
     "cartesia_tts": "cartesia_tts",
     "google_cloud_tts": "google_cloud_tts",
+    "vertex_tts": "vertex_tts",
 }
 
 
@@ -599,6 +638,7 @@ class TTSConfig(I18nMixin):
         "elevenlabs_tts",
         "cartesia_tts",
         "google_cloud_tts",
+        "vertex_tts",
     ] = Field(..., alias="tts_model")
 
     azure_tts: AzureTTSConfig | None = Field(None, alias="azure_tts")
@@ -617,6 +657,7 @@ class TTSConfig(I18nMixin):
     google_cloud_tts: GoogleCloudTTSConfig | None = Field(
         None, alias="google_cloud_tts"
     )
+    vertex_tts: VertexTTSConfig | None = Field(None, alias="vertex_tts")
 
     DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "tts_model": Description(
@@ -655,6 +696,9 @@ class TTSConfig(I18nMixin):
         ),
         "google_cloud_tts": Description(
             en="Configuration for Google Cloud TTS", zh="Google Cloud TTS 配置"
+        ),
+        "vertex_tts": Description(
+            en="Configuration for Vertex AI Gemini TTS", zh="Vertex AI Gemini TTS 配置"
         ),
     }
 

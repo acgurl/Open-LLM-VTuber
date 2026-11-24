@@ -38,3 +38,12 @@ tts_models:
   #     credentials_file: conf/vertex_credentials.json
   #     voice: cmn-CN-Chirp3-HD-Leda
   #     speaking_rate: 1.0
+  # - id: vertex-gemini-38-lite-leda
+  #   name: Gemini 3.8 Flash-Lite · Leda
+  #   provider: vertex_tts
+  #   settings:
+  #     credentials_file: conf/vertex_credentials.json
+  #     model: gemini-3.8-flash-lite-tts
+  #     voice: Leda
+  #     location: global
+  #     language_code: cmn-CN

@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+import wave
 
 import httpx
 import numpy as np
@@ -18,10 +19,15 @@ from open_llm_vtuber.asr.google_cloud_asr import (
     _clean_cjk_spacing,
 )
 from open_llm_vtuber.config_manager.asr import ASRConfig, GoogleCloudASRConfig
-from open_llm_vtuber.config_manager.tts import GoogleCloudTTSConfig, TTSConfig
+from open_llm_vtuber.config_manager.tts import (
+    GoogleCloudTTSConfig,
+    TTSConfig,
+    VertexTTSConfig,
+)
 from open_llm_vtuber.speech_models import parse_speech_models
 from open_llm_vtuber.tts.google_cloud_tts import TTSEngine as GoogleCloudTTS
 from open_llm_vtuber.tts.tts_factory import TTSFactory
+from open_llm_vtuber.tts.vertex_tts import TTSEngine as VertexTTS
 from open_llm_vtuber.utils.google_auth import (
     GoogleCredentialsError,
     ServiceAccountAuth,
@@ -431,6 +437,174 @@ class GoogleCloudSpeechTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "HTTP 403.*Permission denied"):
             asr.transcribe_np(audio)
+
+    # ---- Vertex AI Gemini TTS
+
+    def test_vertex_tts_config_factory_and_catalog(self) -> None:
+        cfg = TTSConfig.model_validate(
+            {
+                "tts_model": "vertex_tts",
+                "vertex_tts": {
+                    "credentials_file": str(self.key_path),
+                    "language_code": "cmn-CN",
+                },
+            }
+        )
+        self.assertIsInstance(cfg.vertex_tts, VertexTTSConfig)
+        self.assertEqual(cfg.vertex_tts.model, "gemini-3.8-flash-lite-tts")
+        self.assertEqual(cfg.vertex_tts.voice, "Leda")
+        self.assertEqual(cfg.vertex_tts.location, "global")
+
+        entries = parse_speech_models(
+            {
+                "tts_models": [
+                    {
+                        "id": "vertex-leda",
+                        "name": "Gemini Leda",
+                        "provider": "vertex_tts",
+                        "settings": {
+                            "credentials_file": str(self.key_path),
+                            "model": "gemini-3.8-flash-lite-tts",
+                            "voice": "Leda",
+                            "location": "global",
+                            "language_code": "cmn-CN",
+                        },
+                    }
+                ]
+            },
+            "tts",
+            "tts_models.yaml",
+        )
+        self.assertIn("vertex-leda", entries)
+
+        with patch("open_llm_vtuber.tts.vertex_tts.TTSEngine") as vtts_cls:
+            TTSFactory.get_tts_engine(
+                "vertex_tts",
+                credentials_file=str(self.key_path),
+                model="gemini-3.8-flash-lite-tts",
+                voice="Leda",
+                location="global",
+                language_code="cmn-CN",
+            )
+        vtts_cls.assert_called_once_with(
+            credentials_file=str(self.key_path),
+            model="gemini-3.8-flash-lite-tts",
+            voice="Leda",
+            location="global",
+            language_code="cmn-CN",
+            project_id=None,
+        )
+
+    def test_vertex_tts_riff_l16_payloads_and_error_cleanup(self) -> None:
+        riff_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt "
+        pcm_bytes = b"\x01\x00\x02\x00\x03\x00\x04\x00"
+        google = _FakeGoogleTransport(
+            [
+                httpx.Response(
+                    200,
+                    json={
+                        "candidates": [
+                            {
+                                "content": {
+                                    "parts": [
+                                        {
+                                            "inlineData": {
+                                                "mimeType": "audio/wav",
+                                                "data": base64.b64encode(
+                                                    riff_bytes
+                                                ).decode("ascii"),
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    },
+                ),
+                httpx.Response(
+                    200,
+                    json={
+                        "candidates": [
+                            {
+                                "content": {
+                                    "parts": [
+                                        {
+                                            "inlineData": {
+                                                "mimeType": "audio/l16; rate=24000; channels=1",
+                                                "data": base64.b64encode(
+                                                    pcm_bytes
+                                                ).decode("ascii"),
+                                            }
+                                        }
+                                    ]
+                                }
+                            }
+                        ]
+                    },
+                ),
+                httpx.Response(400, json={"error": {"message": "bad argument"}}),
+            ]
+        )
+
+        tts_with_lang = VertexTTS(
+            credentials_file=str(self.key_path),
+            language_code="cmn-CN",
+            transport=httpx.MockTransport(google),
+        )
+        self.addCleanup(tts_with_lang.close)
+        self.assertEqual(
+            tts_with_lang.url,
+            "https://aiplatform.googleapis.com/v1/projects/gcp-demo-proj/"
+            "locations/global/publishers/google/models/"
+            "gemini-3.8-flash-lite-tts:generateContent",
+        )
+
+        # Blank text short-circuits.
+        self.assertIsNone(tts_with_lang.generate_audio("  ", "v_blank"))
+        self.assertEqual(len(google.api_requests), 0)
+
+        out_riff = tts_with_lang.generate_audio("你好呀！", "v_riff")
+        self.assertIsNotNone(out_riff)
+        self.assertEqual(Path(out_riff).read_bytes(), riff_bytes)
+        self.assertEqual(
+            google.body(0),
+            {
+                "contents": [{"role": "user", "parts": [{"text": "你好呀！"}]}],
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "speechConfig": {
+                        "voiceConfig": {"prebuiltVoiceConfig": {"voiceName": "Leda"}},
+                        "languageCode": "cmn-CN",
+                    },
+                },
+            },
+        )
+
+        # Raw L16 PCM wrapped into a valid 24 kHz mono WAV without languageCode.
+        tts_plain = VertexTTS(
+            credentials_file=str(self.key_path),
+            location="us-central1",
+            model="gemini-2.5-flash-tts",
+            voice="Zephyr",
+            transport=httpx.MockTransport(google),
+        )
+        self.addCleanup(tts_plain.close)
+        self.assertIn("us-central1-aiplatform.googleapis.com", tts_plain.url)
+
+        out_pcm = tts_plain.generate_audio("早安！", "v_l16")
+        self.assertIsNotNone(out_pcm)
+        with wave.open(out_pcm, "rb") as wf:
+            self.assertEqual(wf.getnchannels(), 1)
+            self.assertEqual(wf.getsampwidth(), 2)
+            self.assertEqual(wf.getframerate(), 24000)
+            self.assertEqual(wf.readframes(wf.getnframes()), pcm_bytes)
+        self.assertNotIn(
+            "languageCode", google.body(1)["generationConfig"]["speechConfig"]
+        )
+
+        # HTTP error leaves no partial file.
+        self.assertIsNone(tts_with_lang.generate_audio("失败", "v_err"))
+        self.assertFalse(Path("cache/v_err.wav").exists())
 
 
 if __name__ == "__main__":

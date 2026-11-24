@@ -198,6 +198,19 @@ def _build_google_cloud(kwargs: dict) -> TTSInterface:
     )
 
 
+def _build_vertex(kwargs: dict) -> TTSInterface:
+    from .vertex_tts import TTSEngine as VertexTTSEngine
+
+    return VertexTTSEngine(
+        credentials_file=kwargs.get("credentials_file"),
+        model=kwargs.get("model", "gemini-3.8-flash-lite-tts"),
+        voice=kwargs.get("voice", "Leda"),
+        location=kwargs.get("location", "global"),
+        language_code=kwargs.get("language_code"),
+        project_id=kwargs.get("project_id"),
+    )
+
+
 _TTS_ENGINE_BUILDERS: dict[str, Callable[[dict], TTSInterface]] = {
     "azure_tts": _build_azure,
     "edge_tts": _build_edge,
@@ -214,6 +227,7 @@ _TTS_ENGINE_BUILDERS: dict[str, Callable[[dict], TTSInterface]] = {
     "elevenlabs_tts": _build_elevenlabs,
     "cartesia_tts": _build_cartesia,
     "google_cloud_tts": _build_google_cloud,
+    "vertex_tts": _build_vertex,
 }
 
 
