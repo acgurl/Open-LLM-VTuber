@@ -1,4 +1,12 @@
-import type { DeckSource, ThemeMode } from '../data/deck.ts';
+import type { DeckSource, SlideDefinition, ThemeMode } from '../data/deck.ts';
+
+export type TimerTone = 'idle' | 'running' | 'warn' | 'over';
+
+export interface AnchorReachedState {
+  readonly demo: boolean;
+  readonly design: boolean;
+  readonly closing: boolean;
+}
 
 export type DeckCommand =
   | { readonly type: 'NEXT_SLIDE' }
@@ -9,7 +17,18 @@ export type DeckCommand =
   | { readonly type: 'SET_LIVE_URL'; readonly url: string }
   | { readonly type: 'RELOAD_LIVE_FRAME' }
   | { readonly type: 'MARK_PROMPT_COPIED'; readonly promptId: string }
-  | { readonly type: 'CLEAR_COPIED_FLASH'; readonly promptId: string };
+  | { readonly type: 'CLEAR_COPIED_FLASH'; readonly promptId: string }
+  | { readonly type: 'TOGGLE_TIMER' }
+  | { readonly type: 'TICK_TIMER' }
+  | { readonly type: 'RESET_TIMER' }
+  | { readonly type: 'TOGGLE_TELEPROMPTER'; readonly force?: boolean }
+  | { readonly type: 'TOGGLE_QA_MODAL'; readonly force?: boolean }
+  | { readonly type: 'CLOSE_OVERLAYS' };
+
+export type DeckKeyAction =
+  | DeckCommand
+  | { readonly type: 'OPEN_SPEAKER' }
+  | { readonly type: 'TOGGLE_FULLSCREEN' };
 
 export interface DeckState {
   readonly slide: number;
@@ -18,6 +37,12 @@ export interface DeckState {
   readonly iframeReloadNonce: number;
   readonly copiedPromptId: string | null;
   readonly usedPromptIds: readonly string[];
+  readonly timerSeconds: number;
+  readonly timerRunning: boolean;
+  readonly timerTone: TimerTone;
+  readonly anchorsReached: AnchorReachedState;
+  readonly teleprompterOpen: boolean;
+  readonly qaModalOpen: boolean;
 }
 
 export interface KeyInputEvent {
@@ -25,6 +50,19 @@ export interface KeyInputEvent {
   readonly targetTag?: string;
   readonly isContentEditable?: boolean;
   readonly insideButton?: boolean;
+}
+
+export interface SpeakerSyncPayload {
+  readonly slide: number;
+  readonly totalSlides: number;
+  readonly sec: number;
+  readonly formattedTimer: string;
+  readonly running: boolean;
+  readonly timerTone: TimerTone;
+  readonly theme: ThemeMode;
+  readonly slideMeta: SlideDefinition;
+  readonly nextSlideMeta: SlideDefinition | null;
+  readonly anchorsReached: AnchorReachedState;
 }
 
 export interface DeckController {
@@ -35,6 +73,29 @@ export interface DeckController {
 function clampSlide(slide: number, total: number): number {
   if (!Number.isFinite(slide)) return 1;
   return Math.max(1, Math.min(total, Math.trunc(slide)));
+}
+
+export function formatMMSS(sec: number): string {
+  const safe = Math.max(0, Math.floor(sec));
+  const m = Math.floor(safe / 60);
+  const s = safe % 60;
+  return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
+function computeTimerTone(deck: DeckSource, sec: number, running: boolean): TimerTone {
+  if (sec >= deck.meta.overAtSec) return 'over';
+  if (sec >= deck.meta.warnAtSec) return 'warn';
+  return running ? 'running' : 'idle';
+}
+
+function computeAnchorsReached(deck: DeckSource, sec: number): AnchorReachedState {
+  const threshold = (id: 'demo' | 'design' | 'closing'): number =>
+    deck.anchors.find((a) => a.id === id)?.atSeconds ?? Number.POSITIVE_INFINITY;
+  return {
+    demo: sec >= threshold('demo'),
+    design: sec >= threshold('design'),
+    closing: sec >= threshold('closing'),
+  };
 }
 
 export function createDeckController(
@@ -53,7 +114,21 @@ export function createDeckController(
     iframeReloadNonce: 0,
     copiedPromptId: null,
     usedPromptIds: [],
+    timerSeconds: 0,
+    timerRunning: false,
+    timerTone: 'idle',
+    anchorsReached: computeAnchorsReached(deck, 0),
+    teleprompterOpen: false,
+    qaModalOpen: false,
   };
+
+  const withTimerState = (sec: number, running: boolean): DeckState => ({
+    ...state,
+    timerSeconds: sec,
+    timerRunning: running,
+    timerTone: computeTimerTone(deck, sec, running),
+    anchorsReached: computeAnchorsReached(deck, sec),
+  });
 
   return {
     getState: () => state,
@@ -95,24 +170,66 @@ export function createDeckController(
             state = { ...state, copiedPromptId: null };
           }
           return state;
+        case 'TOGGLE_TIMER':
+          state = withTimerState(state.timerSeconds, !state.timerRunning);
+          return state;
+        case 'TICK_TIMER':
+          if (!state.timerRunning) return state;
+          state = withTimerState(state.timerSeconds + 1, true);
+          return state;
+        case 'RESET_TIMER':
+          state = withTimerState(0, false);
+          return state;
+        case 'TOGGLE_TELEPROMPTER':
+          state = {
+            ...state,
+            teleprompterOpen:
+              typeof command.force === 'boolean' ? command.force : !state.teleprompterOpen,
+          };
+          return state;
+        case 'TOGGLE_QA_MODAL':
+          state = {
+            ...state,
+            qaModalOpen: typeof command.force === 'boolean' ? command.force : !state.qaModalOpen,
+          };
+          return state;
+        case 'CLOSE_OVERLAYS':
+          state = { ...state, qaModalOpen: false };
+          return state;
       }
     },
   };
 }
 
-export function mapKeyToCommand(input: KeyInputEvent): DeckCommand | null {
+const SIMPLE_KEY_MAP: Record<string, DeckKeyAction> = {
+  ArrowRight: { type: 'NEXT_SLIDE' },
+  ArrowDown: { type: 'NEXT_SLIDE' },
+  PageDown: { type: 'NEXT_SLIDE' },
+  ArrowLeft: { type: 'PREV_SLIDE' },
+  ArrowUp: { type: 'PREV_SLIDE' },
+  PageUp: { type: 'PREV_SLIDE' },
+  Escape: { type: 'CLOSE_OVERLAYS' },
+  t: { type: 'TOGGLE_THEME' },
+  T: { type: 'TOGGLE_THEME' },
+  n: { type: 'TOGGLE_TELEPROMPTER' },
+  N: { type: 'TOGGLE_TELEPROMPTER' },
+  q: { type: 'TOGGLE_QA_MODAL' },
+  Q: { type: 'TOGGLE_QA_MODAL' },
+  r: { type: 'RESET_TIMER' },
+  R: { type: 'RESET_TIMER' },
+  p: { type: 'OPEN_SPEAKER' },
+  P: { type: 'OPEN_SPEAKER' },
+  f: { type: 'TOGGLE_FULLSCREEN' },
+  F: { type: 'TOGGLE_FULLSCREEN' },
+};
+
+export function mapKeyToCommand(input: KeyInputEvent): DeckKeyAction | null {
   const tag = (input.targetTag || '').toUpperCase();
   if (tag === 'INPUT' || tag === 'TEXTAREA' || input.isContentEditable) {
     return null;
   }
 
   const key = input.key;
-  if (key === 'ArrowRight' || key === 'ArrowDown' || key === 'PageDown') {
-    return { type: 'NEXT_SLIDE' };
-  }
-  if (key === 'ArrowLeft' || key === 'ArrowUp' || key === 'PageUp') {
-    return { type: 'PREV_SLIDE' };
-  }
   if (key === ' ') {
     if (tag === 'BUTTON' || tag === 'LABEL' || input.insideButton) {
       return null;
@@ -122,8 +239,22 @@ export function mapKeyToCommand(input: KeyInputEvent): DeckCommand | null {
   if (key >= '1' && key <= '6') {
     return { type: 'GO_TO_SLIDE', slide: parseInt(key, 10) };
   }
-  if (key === 't' || key === 'T') {
-    return { type: 'TOGGLE_THEME' };
-  }
-  return null;
+  return SIMPLE_KEY_MAP[key] ?? null;
+}
+
+export function buildSpeakerSyncPayload(deck: DeckSource, state: DeckState): SpeakerSyncPayload {
+  const slideMeta = deck.slides[state.slide - 1] ?? deck.slides[0];
+  const nextSlideMeta = deck.slides[state.slide] ?? null;
+  return {
+    slide: state.slide,
+    totalSlides: deck.slides.length,
+    sec: state.timerSeconds,
+    formattedTimer: `${formatMMSS(state.timerSeconds)} / ${formatMMSS(deck.meta.safetyLimitSec)}`,
+    running: state.timerRunning,
+    timerTone: state.timerTone,
+    theme: state.theme,
+    slideMeta,
+    nextSlideMeta,
+    anchorsReached: state.anchorsReached,
+  };
 }

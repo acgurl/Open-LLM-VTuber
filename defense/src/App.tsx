@@ -1,16 +1,44 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DECK_SOURCE, type ThemeMode } from './data/deck.ts';
 import {
+  buildSpeakerSyncPayload,
   createDeckController,
   mapKeyToCommand,
-  type DeckCommand,
+  type DeckKeyAction,
   type DeckState,
+  type SpeakerSyncPayload,
 } from './core/deckController.ts';
+import { DeckChrome } from './ui/DeckChrome.tsx';
 import { LiveDemoSlide } from './ui/LiveDemoSlide.tsx';
 import { SlideSpread } from './ui/SlideSpread.tsx';
+import {
+  openOrFocusSpeakerConsole,
+  syncSpeakerWindow,
+  type SpeakerWindowHandle,
+} from './ui/speakerConsole.ts';
 import './ui/EditorialDeck.css';
 
 const THEME_STORAGE_KEY = 'defense.editorial.theme';
+
+declare global {
+  interface Window {
+    __defenseDeck?: {
+      goTo: (n: number) => void;
+      next: () => void;
+      prev: () => void;
+      toggleTimer: () => void;
+      resetTimer: () => void;
+      toggleTheme: () => void;
+      getState: () => {
+        slide: number;
+        sec: number;
+        running: boolean;
+        theme: ThemeMode;
+      };
+      getPayload: () => SpeakerSyncPayload;
+    };
+  }
+}
 
 function loadSavedTheme(): ThemeMode {
   try {
@@ -18,6 +46,14 @@ function loadSavedTheme(): ThemeMode {
     return saved === 'dark' ? 'dark' : 'light';
   } catch {
     return 'light';
+  }
+}
+
+function toggleFullscreen(): void {
+  if (!document.fullscreenElement) {
+    void document.documentElement.requestFullscreen?.();
+  } else {
+    void document.exitFullscreen?.();
   }
 }
 
@@ -30,6 +66,7 @@ export const App: React.FC = () => {
   const [scale, setScale] = useState(1);
   const [dockVisible, setDockVisible] = useState(true);
   const dockTimerRef = useRef<number | null>(null);
+  const speakerWinRef = useRef<SpeakerWindowHandle | null>(null);
 
   const flashDock = useCallback(() => {
     setDockVisible(true);
@@ -41,12 +78,26 @@ export const App: React.FC = () => {
     }, 2200);
   }, []);
 
-  const dispatch = useCallback(
-    (command: DeckCommand) => {
-      const next = controller.dispatch(command);
+  const dispatchAction = useCallback(
+    (action: DeckKeyAction) => {
+      if (action.type === 'OPEN_SPEAKER') {
+        const payload = buildSpeakerSyncPayload(DECK_SOURCE, controller.getState());
+        speakerWinRef.current = openOrFocusSpeakerConsole(
+          speakerWinRef.current,
+          DECK_SOURCE,
+          payload,
+        );
+        return;
+      }
+      if (action.type === 'TOGGLE_FULLSCREEN') {
+        toggleFullscreen();
+        return;
+      }
+      const next = controller.dispatch(action);
       setState(next);
-      flashDock();
-      return next;
+      if (action.type !== 'TICK_TIMER') {
+        flashDock();
+      }
     },
     [controller, flashDock],
   );
@@ -59,6 +110,42 @@ export const App: React.FC = () => {
       // ignore storage errors in restricted contexts
     }
   }, [state.theme]);
+
+  useEffect(() => {
+    syncSpeakerWindow(speakerWinRef.current, buildSpeakerSyncPayload(DECK_SOURCE, state));
+  }, [state]);
+
+  useEffect(() => {
+    if (!state.timerRunning) return undefined;
+    const id = window.setInterval(() => {
+      dispatchAction({ type: 'TICK_TIMER' });
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [state.timerRunning, dispatchAction]);
+
+  useEffect(() => {
+    window.__defenseDeck = {
+      goTo: (n) => dispatchAction({ type: 'GO_TO_SLIDE', slide: n }),
+      next: () => dispatchAction({ type: 'NEXT_SLIDE' }),
+      prev: () => dispatchAction({ type: 'PREV_SLIDE' }),
+      toggleTimer: () => dispatchAction({ type: 'TOGGLE_TIMER' }),
+      resetTimer: () => dispatchAction({ type: 'RESET_TIMER' }),
+      toggleTheme: () => dispatchAction({ type: 'TOGGLE_THEME' }),
+      getState: () => {
+        const cur = controller.getState();
+        return {
+          slide: cur.slide,
+          sec: cur.timerSeconds,
+          running: cur.timerRunning,
+          theme: cur.theme,
+        };
+      },
+      getPayload: () => buildSpeakerSyncPayload(DECK_SOURCE, controller.getState()),
+    };
+    return () => {
+      delete window.__defenseDeck;
+    };
+  }, [controller, dispatchAction]);
 
   useEffect(() => {
     const updateScale = () => {
@@ -79,19 +166,19 @@ export const App: React.FC = () => {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target instanceof HTMLElement ? e.target : null;
-      const command = mapKeyToCommand({
+      const action = mapKeyToCommand({
         key: e.key,
         targetTag: target?.tagName,
         isContentEditable: Boolean(target?.isContentEditable),
         insideButton: Boolean(target?.closest('button')),
       });
-      if (!command) return;
+      if (!action) return;
       e.preventDefault();
-      dispatch(command);
+      dispatchAction(action);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [dispatch]);
+  }, [dispatchAction]);
 
   const currentSlide = DECK_SOURCE.slides[state.slide - 1] ?? DECK_SOURCE.slides[0];
   const progressPct = ((state.slide / DECK_SOURCE.slides.length) * 100).toFixed(2);
@@ -109,7 +196,9 @@ export const App: React.FC = () => {
         >
           <header className="ed-folio">
             <div className="ed-folio-left">
-              <span className="ed-folio-num">0{currentSlide.id} / 0{DECK_SOURCE.slides.length}</span>
+              <span className="ed-folio-num">
+                0{currentSlide.id} / 0{DECK_SOURCE.slides.length}
+              </span>
               <span className="ed-folio-kicker">
                 {currentSlide.kicker} · {DECK_SOURCE.meta.competitionTag}
               </span>
@@ -121,45 +210,24 @@ export const App: React.FC = () => {
           </header>
 
           {currentSlide.id === 3 ? (
-            <LiveDemoSlide deck={DECK_SOURCE} state={state} onDispatch={dispatch} />
+            <LiveDemoSlide deck={DECK_SOURCE} state={state} onDispatch={dispatchAction} />
           ) : (
-            <SlideSpread deck={DECK_SOURCE} slide={currentSlide} />
+            <SlideSpread
+              deck={DECK_SOURCE}
+              slide={currentSlide}
+              onOpenQa={() => dispatchAction({ type: 'TOGGLE_QA_MODAL', force: true })}
+            />
           )}
         </div>
       </main>
 
-      <div className="ed-hover-zone">
-        <nav className={`ed-dock ${dockVisible ? 'is-visible' : ''}`} aria-label="演示控制台">
-          <button
-            type="button"
-            className="ed-dock-btn"
-            onClick={() => dispatch({ type: 'PREV_SLIDE' })}
-            title="上一页 (←)"
-          >
-            ←
-          </button>
-          <span className="ed-dock-num">
-            0{state.slide} / 0{DECK_SOURCE.slides.length}
-          </span>
-          <button
-            type="button"
-            className="ed-dock-btn"
-            onClick={() => dispatch({ type: 'NEXT_SLIDE' })}
-            title="下一页 (→)"
-          >
-            →
-          </button>
-          <span className="ed-dock-sep" />
-          <button
-            type="button"
-            className="ed-dock-btn"
-            onClick={() => dispatch({ type: 'TOGGLE_THEME' })}
-            title="切换亮/暗投影模式 (T)"
-          >
-            亮/暗(T)
-          </button>
-        </nav>
-      </div>
+      <DeckChrome
+        deck={DECK_SOURCE}
+        state={state}
+        currentSlide={currentSlide}
+        dockVisible={dockVisible}
+        onAction={dispatchAction}
+      />
     </>
   );
 };
