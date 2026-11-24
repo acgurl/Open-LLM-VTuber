@@ -636,7 +636,7 @@ export const DECK_SOURCE: DeckSource = {
     emergencies: [
       {
         situation: '内嵌 iframe 未带登录态',
-        action: '同站 https://ppt.acgurl.cn/ 会自动带入 SameSite=Lax Cookie；若首次未登录，点左上「新窗口 ↗」登录一次再点「↻ 刷新」，或直接切右上 localhost:12393 免登录后端。',
+        action: '同站 https://ppt.acgurl.cn/ 会自动带入 SameSite=Lax Cookie；若首次未登录，点右上「新窗口 ↗」登录一次再点「↻ 刷新」，或直接切右上 localhost:12393 免登录后端。',
       },
       {
         situation: '教室屏蔽外网域名或延迟抖动',
