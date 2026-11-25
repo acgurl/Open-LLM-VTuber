@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { DeckSource } from '../data/deck.ts';
 import type { DeckCommand, DeckState } from '../core/deckController.ts';
 
@@ -27,6 +27,7 @@ function fallbackCopyText(text: string): void {
 
 export const LiveDemoSlide: React.FC<LiveDemoSlideProps> = ({ deck, state, onDispatch }) => {
   const copyTimerRef = useRef<number | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     return () => {
@@ -68,12 +69,12 @@ export const LiveDemoSlide: React.FC<LiveDemoSlideProps> = ({ deck, state, onDis
   };
 
   return (
-    <div className="ed-spread is-demo">
-      <div className="ed-left" style={{ paddingRight: '26px' }}>
+    <section className={`ed-spread is-demo ${expanded ? 'is-expanded' : ''}`}>
+      <div className="ed-demo-left">
         <div className="ed-demo-bar">
-          <div className="ed-demo-status">
+          <div className="ed-demo-status" title={state.liveUrl}>
             <span className="ed-live-dot" />
-            <span>{state.liveUrl}</span>
+            <span>{expanded ? state.liveUrl : '在线真机'}</span>
           </div>
           <div className="ed-tab-strip">
             {deck.slide3.endpoints.map((ep) => (
@@ -93,6 +94,14 @@ export const LiveDemoSlide: React.FC<LiveDemoSlideProps> = ({ deck, state, onDis
               title="重新加载内嵌真机页面"
             >
               ↻ 刷新
+            </button>
+            <button
+              type="button"
+              className={`ed-btn-line ${expanded ? 'is-active' : ''}`}
+              onClick={() => setExpanded((prev) => !prev)}
+              title="切换全宽真机展示"
+            >
+              {expanded ? '◫ 还原' : '⛶ 放大'}
             </button>
             <a
               className="ed-btn-line"
@@ -116,44 +125,47 @@ export const LiveDemoSlide: React.FC<LiveDemoSlideProps> = ({ deck, state, onDis
         </div>
       </div>
 
-      <div className="ed-right" style={{ paddingLeft: '26px' }}>
-        <div>
-          <h2 style={{ margin: '0 0 6px', fontSize: '26px', fontWeight: 800 }}>一键复制演示提问</h2>
-          <div style={{ fontSize: '14px', color: 'var(--ed-muted)', marginBottom: '10px' }}>
-            点击即复制 → 左侧输入框 Ctrl+V 发送（建议顺序 {deck.slide3.recommendedOrder}）
+      {!expanded && (
+        <aside className="ed-demo-right">
+          <div>
+            <h2 className="ed-demo-prompt-head">一键复制演示提问</h2>
+            <div className="ed-demo-prompt-sub">
+              点击卡片即复制 → 左侧 Ctrl+V 发送（建议 {deck.slide3.recommendedOrder}）
+            </div>
+
+            <div className="ed-prompt-list">
+              {deck.slide3.prompts.map((item) => {
+                const isCopied = state.copiedPromptId === item.id;
+                const isUsed = state.usedPromptIds.includes(item.id);
+                const statusLabel = isCopied ? '✓ 已复制' : isUsed ? '✓ 已用 (再复制)' : '点击复制';
+                const isOptional = item.id === '2';
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`ed-prompt-row ${isCopied ? 'is-copied' : ''} ${
+                      isOptional ? 'is-optional' : ''
+                    }`}
+                    onClick={() => handleCopyPrompt(item.id, item.prompt)}
+                  >
+                    <div className="ed-prompt-meta">
+                      <span>{item.tag}</span>
+                      <span>{statusLabel}</span>
+                    </div>
+                    <div className="ed-prompt-text">{item.prompt}</div>
+                    <div className="ed-prompt-hint">{item.expectedVisual}</div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="ed-prompt-list">
-            {deck.slide3.prompts.map((item) => {
-              const isCopied = state.copiedPromptId === item.id;
-              const isUsed = state.usedPromptIds.includes(item.id);
-              const statusLabel = isCopied ? '✓ 已复制' : isUsed ? '✓ 已用 (再复制)' : '点击复制';
-
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`ed-prompt-row ${isCopied ? 'is-copied' : ''}`}
-                  onClick={() => handleCopyPrompt(item.id, item.prompt)}
-                >
-                  <div className="ed-prompt-meta">
-                    <span>{item.tag}</span>
-                    <span>{statusLabel}</span>
-                  </div>
-                  <div className="ed-prompt-text">{item.prompt}</div>
-                  <div className="ed-prompt-hint">{item.expectedVisual}</div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="ed-footnote">
-          <span>
+          <div className="ed-demo-note">
             {isSameSiteHttps ? deck.slide3.sameSiteMatchedNote : deck.slide3.sameSiteDefaultNote}
-          </span>
-        </div>
-      </div>
-    </div>
+          </div>
+        </aside>
+      )}
+    </section>
   );
 };

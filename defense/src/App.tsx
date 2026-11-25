@@ -9,6 +9,7 @@ import {
   type SpeakerSyncPayload,
 } from './core/deckController.ts';
 import { DeckChrome } from './ui/DeckChrome.tsx';
+import { ArchitectureSlide } from './ui/ArchitectureSlide.tsx';
 import { LiveDemoSlide } from './ui/LiveDemoSlide.tsx';
 import { SlideSpread } from './ui/SlideSpread.tsx';
 import {
@@ -68,14 +69,14 @@ export const App: React.FC = () => {
   const dockTimerRef = useRef<number | null>(null);
   const speakerWinRef = useRef<SpeakerWindowHandle | null>(null);
 
-  const flashDock = useCallback(() => {
+  const flashDock = useCallback((durationMs = 1500) => {
     setDockVisible(true);
     if (dockTimerRef.current !== null) {
       window.clearTimeout(dockTimerRef.current);
     }
     dockTimerRef.current = window.setTimeout(() => {
       setDockVisible(false);
-    }, 2200);
+    }, durationMs);
   }, []);
 
   const dispatchAction = useCallback(
@@ -95,7 +96,13 @@ export const App: React.FC = () => {
       }
       const next = controller.dispatch(action);
       setState(next);
-      if (action.type !== 'TICK_TIMER') {
+      if (
+        action.type === 'TOGGLE_TIMER' ||
+        action.type === 'RESET_TIMER' ||
+        action.type === 'TOGGLE_THEME' ||
+        action.type === 'TOGGLE_TELEPROMPTER' ||
+        action.type === 'TOGGLE_QA_MODAL'
+      ) {
         flashDock();
       }
     },
@@ -155,8 +162,10 @@ export const App: React.FC = () => {
     updateScale();
     flashDock();
     window.addEventListener('resize', updateScale);
+    document.addEventListener('fullscreenchange', updateScale);
     return () => {
       window.removeEventListener('resize', updateScale);
+      document.removeEventListener('fullscreenchange', updateScale);
       if (dockTimerRef.current !== null) {
         window.clearTimeout(dockTimerRef.current);
       }
@@ -210,7 +219,9 @@ export const App: React.FC = () => {
             </div>
           </header>
 
-          {currentSlide.id === 3 ? (
+          {currentSlide.id === 2 ? (
+            <ArchitectureSlide deck={DECK_SOURCE} slide={currentSlide} />
+          ) : currentSlide.id === 3 ? (
             <LiveDemoSlide deck={DECK_SOURCE} state={state} onDispatch={dispatchAction} />
           ) : (
             <SlideSpread

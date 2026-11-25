@@ -63,11 +63,16 @@ export interface DemoPromptItem {
   readonly expectedVisual: string;
 }
 
+export interface StructuredBullet {
+  readonly lead: string;
+  readonly text: string;
+}
+
 export interface HardDesignItem {
   readonly num: string;
   readonly title: string;
   readonly metric: string;
-  readonly plainSummary: string;
+  readonly bullets: readonly StructuredBullet[];
   readonly keyProof: string;
 }
 
@@ -171,9 +176,9 @@ export interface DeckSource {
     readonly quote: string;
     readonly stats: readonly KpiMetric[];
     readonly gapsBadge: string;
-    readonly gaps: readonly string[];
+    readonly gaps: readonly StructuredBullet[];
     readonly roadmapBadge: string;
-    readonly roadmap: readonly string[];
+    readonly roadmap: readonly StructuredBullet[];
   };
   readonly qaItems: readonly QaItem[];
   readonly sop: {
@@ -378,32 +383,32 @@ export const DECK_SOURCE: DeckSource = {
   ],
   slide1: {
     giantNumber: '97.7%',
-    thesis: '通用大模型并不知道本校现行制度与实时属性；把 2,290 份校内文件治理成可引用证据，回答质量才真正可靠。',
-    quote: '核心判断：不靠通用模型背校规，让持续治理的 cuc-kb 决定问答上限——查得到、带出处、查不到就明说。',
+    thesis: '通用大模型不懂本校现行制度与实时属性；把 2,290 份校内文件治理成可引用证据，问答质量才真正可靠。',
+    quote: '核心判断：不靠通用模型背校规，让 cuc-kb 决定问答上限——查得到、带出处、查不到就明说。',
     comparisons: [
       {
         question: '研究生导师岗位聘任最新有什么要求？',
-        genericAiFailure: '易用 2023 已废止旧文或泛化常识拼凑，无页码依据。',
-        xiaozhiResult: '触发版本让位压低旧版，返回现行文件 + 15 分钟签名 PDF 页码直跳。',
+        genericAiFailure: '误用 2023 已废止旧文或常识拼凑，无页码依据',
+        xiaozhiResult: '触发版本让位压低旧版，返回现行文件 + 签名 PDF 页码直跳',
         proofBadge: '版本让位 · 页码溯源',
       },
       {
         question: '校医院和教务处办事窗口分别在哪栋楼？',
-        genericAiFailure: '易混淆旧址 41 号楼与现址 20 号楼，无法精准导航。',
-        xiaozhiResult: '命中 217 处校园地点坐标层，前端零改动渲染高德 / 百度 / 苹果卡。',
+        genericAiFailure: '易混淆旧址 41 号楼与现址 20 号楼，无法精准导航',
+        xiaozhiResult: '命中 217 处地点坐标层，零改动渲染高德 / 百度 / 苹果卡',
         proofBadge: '217 地点 · 误差 14.6m',
       },
       {
         question: '学校游泳馆这周五晚开放到几点、票价多少？',
-        genericAiFailure: '顺着常识编造“开放至 21 点、票价 20 元”等虚假属性。',
-        xiaozhiResult: '触发标定拒答：如实告知未收录当期时段与票价，拒绝猜测。',
+        genericAiFailure: '顺着常识编造“开放至 21 点、票价 20 元”等虚假属性',
+        xiaozhiResult: '触发标定拒答：如实告知未收录当期时段与票价，拒绝猜测',
         proofBadge: '标定拒答 · 90.7% 拒答',
       },
     ],
     kpis: [
-      { value: '2,290 份', label: '收录校内正式文件', sub: '18,107 页 · 54 个校内站与 AIHub', tone: 'accent' },
+      { value: '2,290 份', label: '收录校内正式文件', sub: '18,107 页 · 54 校内站 + AIHub', tone: 'accent' },
       { value: '52,322 个', label: '治理后检索片段', sub: '44,415 现行 · 278 旧版/重复归档', tone: 'ok' },
-      { value: '99.0%', label: '可追回官网原链', sub: '2,268 份带出处 · 96.1% 带发布日期', tone: 'secondary' },
+      { value: '99.0%', label: '可追回官网原链', sub: '2,268 份带出处 · 96.1% 带日期', tone: 'secondary' },
       { value: '97.7%', label: '268 题端到端答对', sub: '不可答 90.7% 拒答 · 编造仅 2.3%', tone: 'tertiary' },
     ],
   },
@@ -503,35 +508,44 @@ export const DECK_SOURCE: DeckSource = {
         num: '01',
         title: '四层版本让位：新旧校规不打架',
         metric: '278 归档 · 12 / 21 / 30 对核验',
-        plainSummary:
-          '278 份旧版与 97% 真重复归档不召回；人工逐对核验 12 对正式废止、21 对逐年重发与 30 对活跃补链，新版命中时自适应降权并阻断旧版上下文展开；汇编让位单行本，点名查历史年份仍可追溯。',
-        keyProof: '关闭“汇编让位单行本”消融实测：首位命中掉落 5–6 题；支持条款级热更新（如国奖 8000→10000）。',
+        bullets: [
+          { lead: '源头归档：', text: '278 份旧版与 97% 真重复归档不召回' },
+          { lead: '人工逐对核验：', text: '12 废止 + 21 重发 + 30 补链自适应降权、阻断展开' },
+          { lead: '汇编让单行本：', text: '同族新版优先；点名查旧年份仍可追溯' },
+        ],
+        keyProof: '关闭「汇编让位单行本」消融测试：首位命中掉 5–6 题；支持条款热更新（国奖 8k→1w）',
       },
       {
         num: '02',
-        title: '条款级精准取证：消除前提截断与数字表丢失',
+        title: '条款级取证：补全前提与数字表',
         metric: '证据 hit@5 58% → 70%',
-        plainSummary:
-          'PyMuPDF 按条款切片保留文号与页码，把表题注入向量文本消除纯数字表块召回丢失（2→0）；命中时按 N=1 展开相邻条款捞回前提与例外，P1/P2/P3 收紧策略节省 Token 31.2%（地点问句字符 -86.8%）。',
-        keyProof: 'N=1 相邻展开将 268 题证据 hit@5 从 58% 提到 70%，端到端答对从 61% 提到 70%。',
+        bullets: [
+          { lead: 'PyMuPDF 切片：', text: '按条款切分并保留文号、页码与标题' },
+          { lead: '表题注入向量：', text: '消除纯数字表格块召回丢失（丢失 2→0）' },
+          { lead: 'N=1 相邻展开：', text: '补全截断前提与例外，P1/P2/P3 省 Token 31.2%' },
+        ],
+        keyProof: 'N=1 相邻展开将 268 题证据 hit@5 提至 70%（+12pt），端到端答对 61%→70%',
       },
       {
         num: '03',
-        title: '217 处校园地点标定 + 4 个标准只读 MCP',
+        title: '217 校园地点标定 + 4 只读 MCP',
         metric: '中位误差 14.6m · 4 只读工具',
-        plainSummary:
-          '覆盖 55 栋楼宇、82 办公点、校门餐饮医疗与 5 处海南校区，经校方 3D 热点与 OSM 17 控制点单应标定并内置三套坐标；通过 kb_search / kb_meta / kb_documents / kb_document_chunks（Streamable HTTP）向全校复用。',
-        keyProof: '204 题配对显著性验证 rerank（p=0.02），冷查 P50 1.2–1.35s 瓶颈已定位至海外→北京 RTT。',
+        bullets: [
+          { lead: '217 处全覆盖：', text: '55 楼宇 + 82 办公 + 门餐饮医疗 + 5 海南校区' },
+          { lead: '17 控制点标定：', text: '3D 热点 + OSM 单应标定，内置 WGS/GCJ/BD 三坐标' },
+          { lead: '4 只读 MCP 复用：', text: 'kb_search / meta / documents / chunks 全校共享' },
+        ],
+        keyProof: '204 题配对显著性验证 rerank（p=0.02），冷查 1.2–1.35s 瓶颈已定位至海外→北京 RTT',
       },
     ],
-    footnoteLeft: '混合检索底座：qwen3.7-text-embedding (1024d Qdrant) + 手写稀疏 BM25 (1–3ms, 768 查逐位一致) + RRF 40→20 + qwen3-rerank',
-    footnoteRight: 'P1 缓存命中：Rerank 40ms / Search 0ms · 标定集 65 无答案全拒',
+    footnoteLeft: '混合底座：qwen3.7-embedding (1024d Qdrant) + 手写 BM25 (1–3ms, 768 查逐位同) + RRF 40→20 + qwen3-rerank',
+    footnoteRight: 'P1 缓存：Rerank 40ms / Search 0ms · 65 无答案全拒',
   },
   slide5: {
     giantNumber: '2.3% vs 4.7%',
-    thesis: '每次改动先跑评测再上线；268 题对比实验证明：有扎实证据支撑时，关闭深度思考准确率持平、编造直接减半。',
-    quote: '反直觉结论：在扎实证据面前，关闭思考不仅耗时少约 30%、省约 40% Token，而且编造率减半。',
-    blindTitle: '268 题证据级端到端盲测（qwen-plus 判分 · 214 可答 + 54 不可答）',
+    thesis: '每次改动先过评测再上线；268 题对照实验证明：扎实证据支撑下，关思考准确率持平、编造减半。',
+    quote: '扎实证据面前，固定关闭思考：编造减半、耗时省约 30%、Token 省约 40%。',
+    blindTitle: '268 题证据级端到端盲测（qwen-plus 判分）',
     blindBadge: '214 可答 + 54 不可答',
     blindBars: [
       { label: '可答题答对 (209 / 214)', value: 97.7, tone: 'ok' },
@@ -539,50 +553,68 @@ export const DECK_SOURCE: DeckSource = {
       { label: '可答题回答完整 (197 / 214)', value: 92.1, tone: 'accent' },
       { label: '不可答题如实拒答 (49 / 54)', value: 90.7, tone: 'ok' },
     ],
-    thinkTitle: 'DeepSeek Flash 思考模式对照实验（线上固定关闭思考）',
-    thinkBadge: '关思考胜出',
+    thinkTitle: 'DeepSeek Flash 思考模式对照实验',
+    thinkBadge: '线上固定关闭思考',
     thinkRows: [
       { item: '可答题答对数', noThink: '209 / 214 (97.7%)', withThink: '209 / 214 (97.7%) 持平' },
       {
         item: '可答 / 不可答编造',
         noThink: '5 (2.3%) / 4 题',
-        withThink: '10 (4.7%) / 7 题（编造翻倍）',
+        withThink: '10 (4.7%) / 7 题（翻倍）',
         isThinkWorse: true,
       },
-      { item: '单题耗时 P50 / Token', noThink: '11.3s / 1.0×（更省更快）', withThink: '15.8s (1.4×) / 1.7×', isThinkWorse: true },
+      { item: '耗时 P50 / Token', noThink: '11.3s / 1.0×', withThink: '15.8s (1.4×) / 1.7×', isThinkWorse: true },
     ],
-    demandTitle: '165 题真实需求侧探测（不看库内文档 · 6 类师生真实提问）',
-    demandBadge: '暴露 25 题语料缺口',
+    demandTitle: '165 题真实需求探测（6 类师生真实问法）',
+    demandBadge: '锁定 25 题语料缺口',
     demandSegments: [
       { label: '有原文支撑', percent: 82, countLabel: '135 题', color: '#1d4ed8' },
       { label: '部分支撑', percent: 6, countLabel: '10 题', color: '#60a5fa' },
       { label: '如实说没有', percent: 10, countLabel: '16 题', color: '#64748b' },
       { label: '无原文支撑', percent: 2.4, countLabel: '4 题', color: '#be123c' },
     ],
-    footnoteLeft: '留出检索集复测（11-13 多答案口径）：跨部门 hit@1 94.0% (79/84 · 单文档 79.8%) · hit@5 100% (84/84) · MRR 0.963',
-    footnoteRight: '无答案判定 97.9% (47/48) · 助手隔离越权泄露 = 0',
+    footnoteLeft: '留出检索集复测（11-13 多答案）：跨部门 hit@1 94.0% (79/84 · 单文档 79.8%) · hit@5 100% (84/84) · MRR 0.963',
+    footnoteRight: '无答案判定 97.9% (47/48) · 助手越权泄露 = 0',
   },
   slide6: {
     giantNumber: '834 轮',
-    thesis: '已通过 1,090+ 项自动化测试并在公网试运行 834 轮；我们同样明确距离全校好用还差哪 25 个缺口与周级更新机制。',
-    quote: '谢谢各位评委老师！线上 ai.acgurl.cn 与本地 cuc-cli 均已就绪，欢迎现场出题实测。',
+    thesis: '已通过 1,090+ 项自动化测试并在公网试运行 834 轮；同时明确距离全校好用还差哪 25 个缺口与周更计划。',
+    quote: '线上 ai.acgurl.cn 与本地 cuc-cli 均已就绪，欢迎评委老师出题实测！',
     stats: [
-      { value: '1,090+', label: '三端自动化测试', sub: '对话端 657 + 知识库 193+ + cuc-cli 240', tone: 'accent' },
-      { value: '834 轮', label: '线上公网真实试运行', sub: '截至 2026-11-23 · 29 账号 · 707 次检索', tone: 'ok' },
-      { value: '¥2.56', label: '全库 1,014 万 token 成本', sub: '批量推理嵌入 · 新文档支持增量入库', tone: 'secondary' },
-      { value: '4 个', label: '标准只读 MCP 工具', sub: '知识与模型解耦 · 可一键复用全校智能体', tone: 'tertiary' },
+      { value: '1,090+', label: '三端自动化测试', sub: '对话 657 + 知识库 193+ + CLI 240', tone: 'accent' },
+      { value: '834 轮', label: '公网真实试运行', sub: '截至 11-23 · 29 账号 · 707 次检索', tone: 'ok' },
+      { value: '¥2.56', label: '全库嵌入总成本', sub: '1,014 万 token · 新文档增量入库', tone: 'secondary' },
+      { value: '4 个', label: '标准只读 MCP 工具', sub: '知识与模型解耦 · 全校智能体可复用', tone: 'tertiary' },
     ],
     gapsBadge: '由 165 题需求探测暴露',
     gaps: [
-      '内容缺口（25 题待补，另 1 题缺日期上下文）：集中在当期活动安排（运动会/考试时间）、具体收费金额（新生医保/游泳馆）及生活服务（宿舍断电/班车/失物招领）。',
-      '时效更新滞后：最近一次全量入库停在 11 月 8 日，校历与临时通知会随学期更迭而过时。',
-      '评测口径局限：当前 268 题主要来自库内文档与单次机器判分，尚缺大规模真实师生自然问法复评。',
+      {
+        lead: '内容缺口（25 题 + 1 上下文）：',
+        text: '集中在当期活动安排（运动会/考务）、收费金额（医保/游泳馆）及生活服务（断电/班车/失物）。',
+      },
+      {
+        lead: '时效更新滞后：',
+        text: '最近一次全量入库停在 11 月 8 日，校历与临时通知会随学期更迭而过时。',
+      },
+      {
+        lead: '评测口径局限：',
+        text: '当前 268 题主要来自库内文档与单次机器判分，尚缺大规模真实师生自然问法复评。',
+      },
     ],
     roadmapBadge: '不做无效调参，直击缺口',
     roadmap: [
-      '按缺口清单精准补采：在现有评测上限已近饱和的背景下，优先补充高频生活服务与收费标准语料。',
-      '官网通知按周增量：对学校官网通知栏目建立周级自动采集入库、版本关联校验与零回归评测门禁。',
-      '真实对话复评 & 合规对接：用试运行积累的真实问答复评；争取对接学校信息化部门，以正规统一认证服务更多师生。',
+      {
+        lead: '按缺口清单精准补采：',
+        text: '现有评测上限已近饱和，优先补充高频生活服务与当期收费标准语料。',
+      },
+      {
+        lead: '官网通知按周增量：',
+        text: '建立官网通知周级自动采集、版本关联校验与零回归评测门禁。',
+      },
+      {
+        lead: '真实复评 & 合规对接：',
+        text: '用试运行真实问答复评；争取对接信息化部门，以正规统一认证服务全校师生。',
+      },
     ],
   },
   qaItems: [

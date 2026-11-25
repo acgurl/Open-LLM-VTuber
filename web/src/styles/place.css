@@ -248,61 +248,6 @@
   line-height: 1.6;
 }
 
-.place-map-expand {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 900;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--glass-solid);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  color: var(--ink);
-  font: inherit;
-  font-size: 0.76rem;
-  box-shadow: var(--shadow-btn);
-  cursor: pointer;
-  opacity: 0;
-  transform: translateY(-4px);
-  transition:
-    opacity 200ms var(--ease-snap),
-    transform 220ms var(--ease-spring),
-    border-color 180ms var(--ease-snap),
-    color 180ms var(--ease-snap);
-}
-
-.place-map-expand svg {
-  transition: transform 220ms var(--ease-spring);
-}
-
-@media (hover: hover) {
-  .place-map:hover .place-map-expand,
-  .place-map:focus-within .place-map-expand {
-    opacity: 1;
-    transform: none;
-  }
-
-  .place-map-expand:hover {
-    border-color: var(--accent-line);
-    color: var(--accent);
-    transform: translateY(-1px);
-  }
-
-  .place-map-expand:hover svg {
-    transform: scale(1.1);
-  }
-}
-
-.place-map-expand:active {
-  transform: scale(0.95);
-  transition-duration: 90ms;
-}
-
 /* 标记：主色圆点 + 扩散环，和舞台上的光尘同一套色 */
 .place-pin-dot {
   position: absolute;

@@ -7,54 +7,11 @@ interface SlideSpreadProps {
   readonly onOpenQa?: () => void;
 }
 
-interface EditorialHeroLeftProps {
-  readonly giantNumber: string;
-  readonly mediumNumber?: boolean;
-  readonly title: string;
-  readonly thesis: string;
-  readonly quote: string;
-  readonly showMascots?: boolean;
-  readonly actions?: React.ReactNode;
-}
-
-const EditorialHeroLeft: React.FC<EditorialHeroLeftProps> = ({
-  giantNumber,
-  mediumNumber = false,
-  title,
-  thesis,
-  quote,
-  showMascots = false,
-  actions,
-}) => (
-  <div className="ed-left">
-    <div>
-      <div className={`ed-giant-num ${mediumNumber ? 'is-medium' : ''}`}>{giantNumber}</div>
-      <h1 className="ed-headline">{title}</h1>
-      <p className="ed-thesis">{thesis}</p>
-    </div>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-      <div className="ed-quote-band">
-        {showMascots && (
-          <div className="ed-avatar-pair">
-            <img src="./assets/xiaozhi.png" alt="小智校园吉祥物" />
-            <img src="./assets/airi.png" alt="AIRI 角色" />
-          </div>
-        )}
-        <div className="ed-quote-text">{quote}</div>
-      </div>
-      {actions}
-    </div>
-  </div>
-);
-
-const KpiStrip: React.FC<{
-  readonly items: readonly KpiMetric[];
-  readonly style?: React.CSSProperties;
-}> = ({ items, style }) => (
-  <div className="ed-kpi-strip" style={style}>
+const KpiTileStrip: React.FC<{ readonly items: readonly KpiMetric[] }> = ({ items }) => (
+  <div className="ed-kpi-tiles">
     {items.map((item) => (
-      <div key={item.label}>
-        <div className={`ed-kpi-val ${item.tone || 'accent'}`}>{item.value}</div>
+      <div className="ed-kpi-tile" key={item.label}>
+        <div className={`ed-kpi-val ${item.tone ?? 'accent'}`}>{item.value}</div>
         <div className="ed-kpi-lbl">{item.label}</div>
         <div className="ed-kpi-sub">{item.sub}</div>
       </div>
@@ -62,14 +19,51 @@ const KpiStrip: React.FC<{
   </div>
 );
 
-const SpreadFootnote: React.FC<{ readonly left: string; readonly right: string }> = ({
+const SlideHeader: React.FC<{
+  readonly title: string;
+  readonly subtitle: string;
+  readonly compactTitle?: boolean;
+  readonly statValue: string;
+  readonly statLabel: string;
+  readonly contrastStat?: boolean;
+  readonly showMascots?: boolean;
+}> = ({
+  title,
+  subtitle,
+  compactTitle = false,
+  statValue,
+  statLabel,
+  contrastStat = false,
+  showMascots = false,
+}) => (
+  <header className="ed-hero-header">
+    <div className="ed-hero-main">
+      <h1 className={`ed-h1 ${compactTitle ? 'is-compact' : ''}`}>{title}</h1>
+      <p className="ed-sub">{subtitle}</p>
+    </div>
+    <div className="ed-hero-right">
+      {showMascots && (
+        <div className="ed-avatar-pair">
+          <img src="./assets/xiaozhi.png" alt="小智校园吉祥物" />
+          <img src="./assets/airi.png" alt="AIRI 角色" />
+        </div>
+      )}
+      <div className="ed-hero-stat">
+        <div className={`ed-hero-stat-num ${contrastStat ? 'is-contrast' : ''}`}>{statValue}</div>
+        <div className="ed-hero-stat-lbl">{statLabel}</div>
+      </div>
+    </div>
+  </header>
+);
+
+const FootnoteBar: React.FC<{ readonly left: string; readonly right: string }> = ({
   left,
   right,
 }) => (
-  <div className="ed-footnote">
+  <footer className="ed-footnote-bar">
     <span>{left}</span>
-    <span>{right}</span>
-  </div>
+    <strong>{right}</strong>
+  </footer>
 );
 
 export const SlideSpread: React.FC<SlideSpreadProps> = ({ deck, slide, onOpenQa }) => {
@@ -77,125 +71,178 @@ export const SlideSpread: React.FC<SlideSpreadProps> = ({ deck, slide, onOpenQa 
     case 1: {
       const s1 = deck.slide1;
       return (
-        <div className="ed-spread">
-          <EditorialHeroLeft
-            giantNumber={s1.giantNumber}
+        <section className="ed-slide">
+          <SlideHeader
             title={slide.title}
-            thesis={s1.thesis}
-            quote={s1.quote}
+            subtitle={s1.thesis}
+            statValue={s1.giantNumber}
+            statLabel="268 题端到端盲测答对率"
             showMascots
           />
-          <div className="ed-right">
-            <div className="ed-list">
-              {s1.comparisons.map((fc) => (
-                <div className="ed-row" key={fc.question}>
-                  <div className="ed-row-head">
-                    <span className="ed-row-title">{fc.question}</span>
-                    <span className="ed-row-tag">{fc.proofBadge}</span>
-                  </div>
-                  <div className="ed-compare-grid">
-                    <span className="ed-bad">通用 AI：{fc.genericAiFailure}</span>
-                    <span className="ed-good">Live 小智：{fc.xiaozhiResult}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <KpiStrip items={s1.kpis} />
-          </div>
-        </div>
-      );
-    }
 
-    case 2: {
-      const s2 = deck.slide2;
-      return (
-        <div className="ed-spread">
-          <EditorialHeroLeft
-            giantNumber={s2.giantNumber}
-            mediumNumber
-            title={slide.title}
-            thesis={s2.thesis}
-            quote={s2.privacyQuote}
-          />
-          <div className="ed-right">
-            <div className="ed-list">
-              {s2.pillars.map((p) => (
-                <div className="ed-row" key={p.id}>
-                  <div className="ed-row-head">
-                    <span className="ed-row-title">{p.name}</span>
-                    <span className="ed-row-tag">{p.badge}</span>
-                  </div>
-                  <div className="ed-pillar-role">{p.role}</div>
-                  <div className="ed-pillar-items">{p.items.join(' · ')}</div>
+          <div className="ed-takeaway-strip">{s1.quote}</div>
+
+          <div className="ed-cards-3">
+            {s1.comparisons.map((fc, idx) => (
+              <article className="ed-card top-accent" key={fc.question}>
+                <div className="ed-card-head">
+                  <span className="ed-pill">{fc.proofBadge}</span>
+                  <span className="ed-pill ed-pill-mono">0{idx + 1}</span>
                 </div>
-              ))}
-            </div>
-            <SpreadFootnote left={s2.footnoteLeft} right={s2.footnoteRight} />
+
+                <h2 className="ed-card-q">{fc.question}</h2>
+
+                <div className="ed-callout-stack">
+                  <div className="ed-callout is-bad">
+                    <span className="ed-callout-lbl">通用大模型</span>
+                    {fc.genericAiFailure}
+                  </div>
+                  <div className="ed-callout is-good">
+                    <span className="ed-callout-lbl">Live 小智</span>
+                    {fc.xiaozhiResult}
+                  </div>
+                </div>
+              </article>
+            ))}
           </div>
-        </div>
+
+          <KpiTileStrip items={s1.kpis} />
+        </section>
       );
     }
 
     case 4: {
       const s4 = deck.slide4;
+      const toneClasses = ['top-accent', 'top-ok', 'top-secondary'] as const;
+      const metricTones = ['', 'ok', 'secondary'] as const;
       return (
-        <div className="ed-spread">
-          <EditorialHeroLeft
-            giantNumber={s4.giantNumber}
-            mediumNumber
+        <section className="ed-slide">
+          <SlideHeader
             title={slide.title}
-            thesis={s4.thesis}
-            quote={s4.quote}
+            subtitle={s4.thesis}
+            compactTitle
+            statValue={s4.giantNumber}
+            statLabel="证据级 hit@5 跃升 (+12pt)"
           />
-          <div className="ed-right">
-            <div className="ed-list">
-              {s4.designs.map((d) => (
-                <div className="ed-row" key={d.num}>
-                  <div className="ed-row-head">
-                    <span className="ed-row-title">
-                      {d.num}. {d.title}
-                    </span>
-                    <span className="ed-row-tag">{d.metric}</span>
-                  </div>
-                  <div className="ed-pillar-items" style={{ marginBottom: '6px' }}>
-                    {d.plainSummary}
-                  </div>
-                  <div className="ed-good" style={{ fontSize: '14px' }}>
-                    实测依据：{d.keyProof}
+
+          <div className="ed-takeaway-strip">{s4.quote}</div>
+
+          <div className="ed-cards-3">
+            {s4.designs.map((d, idx) => (
+              <article className={`ed-card ${toneClasses[idx] ?? 'top-accent'}`} key={d.num}>
+                <div className="ed-card-head">
+                  <span className="ed-pill ed-pill-mono">{d.num}</span>
+                  <span className={`ed-pill ${idx === 1 ? 'is-ok' : idx === 2 ? 'is-secondary' : ''}`}>
+                    核心设计
+                  </span>
+                </div>
+
+                <div>
+                  <h2 className="ed-card-title">{d.title}</h2>
+                  <div className={`ed-card-metric ${metricTones[idx] ?? ''}`} style={{ marginTop: '8px' }}>
+                    {d.metric}
                   </div>
                 </div>
-              ))}
-            </div>
-            <SpreadFootnote left={s4.footnoteLeft} right={s4.footnoteRight} />
+
+                <ul className="ed-bullet-list">
+                  {d.bullets.map((b) => (
+                    <li className="ed-bullet-item" key={b.lead}>
+                      <span className="ed-bullet-dot" aria-hidden="true" />
+                      <span>
+                        <strong>{b.lead}</strong>
+                        {b.text}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="ed-callout is-good" style={{ fontSize: '16.5px', padding: '11px 14px' }}>
+                  <span className="ed-callout-lbl">实测依据</span>
+                  {d.keyProof}
+                </div>
+              </article>
+            ))}
           </div>
-        </div>
+
+          <FootnoteBar left={s4.footnoteLeft} right={s4.footnoteRight} />
+        </section>
       );
     }
 
     case 5: {
       const s5 = deck.slide5;
       return (
-        <div className="ed-spread">
-          <EditorialHeroLeft
-            giantNumber={s5.giantNumber}
-            mediumNumber
+        <section className="ed-slide">
+          <SlideHeader
             title={slide.title}
-            thesis={s5.thesis}
-            quote={s5.quote}
+            subtitle={s5.thesis}
+            compactTitle
+            statValue={s5.giantNumber}
+            statLabel="关思考 vs 开思考编造率"
+            contrastStat
           />
-          <div className="ed-right">
-            <div className="ed-list">
-              <div className="ed-row">
-                <div className="ed-row-head">
-                  <span className="ed-row-title">{s5.blindTitle}</span>
-                  <span className="ed-row-tag">{s5.blindBadge}</span>
+
+          <div className="ed-dash-grid">
+            <article className="ed-card top-ok">
+              <div className="ed-card-head">
+                <h2 className="ed-card-title">{s5.thinkTitle}</h2>
+                <span className="ed-pill is-ok">{s5.thinkBadge}</span>
+              </div>
+
+              <div className="ed-contrast-pair">
+                <div className="ed-contrast-box is-good">
+                  <div className="ed-contrast-num">2.3%</div>
+                  <div className="ed-contrast-title">关闭深度思考（线上采用）</div>
+                  <div className="ed-contrast-sub">5 题编造 · 11.3s · 1.0× Token</div>
                 </div>
-                <div className="ed-bars-grid">
+                <div className="ed-contrast-box is-bad">
+                  <div className="ed-contrast-num">4.7%</div>
+                  <div className="ed-contrast-title">开启深度思考（对照实验）</div>
+                  <div className="ed-contrast-sub">10 题编造（翻倍）· 15.8s · 1.7×</div>
+                </div>
+              </div>
+
+              <table className="ed-table">
+                <thead>
+                  <tr>
+                    <th>对比项</th>
+                    <th>关闭思考（线上）</th>
+                    <th>开启思考（对照）</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {s5.thinkRows.map((r) => (
+                    <tr key={r.item}>
+                      <td>
+                        <strong>{r.item}</strong>
+                      </td>
+                      <td className="ed-good">{r.noThink}</td>
+                      <td className={r.isThinkWorse ? 'ed-bad' : ''}>{r.withThink}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="ed-callout is-accent" style={{ fontSize: '17.5px', padding: '11px 15px' }}>
+                {s5.quote}
+              </div>
+            </article>
+
+            <div className="ed-dash-right">
+              <article className="ed-card top-accent" style={{ flex: '1.35 1 0%' }}>
+                <div className="ed-card-head">
+                  <h2 className="ed-card-title">{s5.blindTitle}</h2>
+                  <span className="ed-pill">{s5.blindBadge}</span>
+                </div>
+
+                <div className="ed-bar-stack">
                   {s5.blindBars.map((bar) => (
                     <div key={bar.label}>
                       <div className="ed-bar-label">
                         <span>{bar.label}</span>
-                        <strong>{bar.value}%</strong>
+                        <strong style={{ color: bar.tone === 'ok' ? 'var(--ed-ok)' : 'var(--ed-accent)' }}>
+                          {bar.value}%
+                        </strong>
                       </div>
                       <div className="ed-bar-track">
                         <div
@@ -206,38 +253,14 @@ export const SlideSpread: React.FC<SlideSpreadProps> = ({ deck, slide, onOpenQa 
                     </div>
                   ))}
                 </div>
-              </div>
+              </article>
 
-              <div className="ed-row">
-                <div className="ed-row-head">
-                  <span className="ed-row-title">{s5.thinkTitle}</span>
-                  <span className="ed-row-tag">{s5.thinkBadge}</span>
+              <article className="ed-card top-warn" style={{ flex: '0.9 1 0%' }}>
+                <div className="ed-card-head">
+                  <h2 className="ed-card-title">{s5.demandTitle}</h2>
+                  <span className="ed-pill is-warn">{s5.demandBadge}</span>
                 </div>
-                <table className="ed-table">
-                  <thead>
-                    <tr>
-                      <th>对比项</th>
-                      <th>关闭思考（线上采用）</th>
-                      <th>开启思考（对照实验）</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {s5.thinkRows.map((r) => (
-                      <tr key={r.item}>
-                        <td>{r.item}</td>
-                        <td className="ed-good">{r.noThink}</td>
-                        <td className={r.isThinkWorse ? 'ed-bad' : ''}>{r.withThink}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
 
-              <div className="ed-row">
-                <div className="ed-row-head">
-                  <span className="ed-row-title">{s5.demandTitle}</span>
-                  <span className="ed-row-tag">{s5.demandBadge}</span>
-                </div>
                 <div className="ed-stacked-bar">
                   {s5.demandSegments.map((seg) => (
                     <div
@@ -250,7 +273,8 @@ export const SlideSpread: React.FC<SlideSpreadProps> = ({ deck, slide, onOpenQa 
                     </div>
                   ))}
                 </div>
-                <div className="ed-legend-row">
+
+                <div className="ed-legend-grid">
                   {s5.demandSegments.map((seg) => (
                     <span key={seg.label}>
                       <strong style={{ color: seg.color }}>■</strong> {seg.label} {seg.percent}%（
@@ -258,87 +282,93 @@ export const SlideSpread: React.FC<SlideSpreadProps> = ({ deck, slide, onOpenQa 
                     </span>
                   ))}
                 </div>
-              </div>
+              </article>
             </div>
-            <SpreadFootnote left={s5.footnoteLeft} right={s5.footnoteRight} />
           </div>
-        </div>
+
+          <FootnoteBar left={s5.footnoteLeft} right={s5.footnoteRight} />
+        </section>
       );
     }
 
     case 6: {
       const s6 = deck.slide6;
       return (
-        <div className="ed-spread">
-          <EditorialHeroLeft
-            giantNumber={s6.giantNumber}
-            mediumNumber
+        <section className="ed-slide">
+          <SlideHeader
             title={slide.title}
-            thesis={s6.thesis}
-            quote={s6.quote}
-            actions={
-              <div className="ed-cta-actions">
-                <button type="button" className="ed-btn-line is-active" onClick={onOpenQa}>
-                  打开 Q&amp;A 速查 (Q)
-                </button>
-                <a
-                  className="ed-btn-line"
-                  href={deck.meta.liveSiteUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  打开线上真机 ai.acgurl.cn ↗
-                </a>
-              </div>
-            }
+            subtitle={s6.thesis}
+            compactTitle
+            statValue={s6.giantNumber}
+            statLabel="公网真实试运行"
           />
 
-          <div className="ed-right">
-            <KpiStrip
-              items={s6.stats}
-              style={{
-                borderTop: 'none',
-                paddingTop: 0,
-                borderBottom: '1px solid var(--ed-rule)',
-                paddingBottom: '14px',
-              }}
-            />
+          <KpiTileStrip items={s6.stats} />
 
-            <div className="ed-list">
-              <div className="ed-row">
-                <div className="ed-row-head">
-                  <span className="ed-row-title">当前真实缺口</span>
-                  <span className="ed-row-tag" style={{ color: 'var(--ed-warn)' }}>
-                    {s6.gapsBadge}
-                  </span>
-                </div>
-                <div className="ed-pillar-items" style={{ lineHeight: 1.62 }}>
-                  {s6.gaps.map((g, i) => (
-                    <div key={g}>
-                      {i + 1}. {g}
-                    </div>
-                  ))}
-                </div>
+          <div className="ed-cards-2">
+            <article className="ed-card top-warn">
+              <div className="ed-card-head">
+                <h2 className="ed-card-title">当前 3 个真实缺口</h2>
+                <span className="ed-pill is-warn">{s6.gapsBadge}</span>
               </div>
 
-              <div className="ed-row">
-                <div className="ed-row-head">
-                  <span className="ed-row-title">务实演进计划</span>
-                  <span className="ed-row-tag" style={{ color: 'var(--ed-ok)' }}>
-                    {s6.roadmapBadge}
-                  </span>
-                </div>
-                <div className="ed-good" style={{ fontSize: '15px', lineHeight: 1.62 }}>
-                  {s6.roadmap.map((r, i) => (
-                    <div key={r}>
-                      {i + 1}. {r}
-                    </div>
-                  ))}
-                </div>
+              <div className="ed-numbered-list">
+                {s6.gaps.map((item, idx) => (
+                  <div className="ed-numbered-item" key={item.lead}>
+                    <span className="ed-num-badge is-warn">{idx + 1}</span>
+                    <span>
+                      <strong>{item.lead}</strong>
+                      {item.text}
+                    </span>
+                  </div>
+                ))}
               </div>
-            </div>
+            </article>
+
+            <article className="ed-card top-ok">
+              <div className="ed-card-head">
+                <h2 className="ed-card-title">务实演进计划</h2>
+                <span className="ed-pill is-ok">{s6.roadmapBadge}</span>
+              </div>
+
+              <div className="ed-numbered-list">
+                {s6.roadmap.map((item, idx) => (
+                  <div className="ed-numbered-item" key={item.lead}>
+                    <span className="ed-num-badge is-ok">{idx + 1}</span>
+                    <span>
+                      <strong>{item.lead}</strong>
+                      {item.text}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </article>
           </div>
-        </div>
+
+          <footer className="ed-closing-bar">
+            <div className="ed-closing-left">
+              <div className="ed-avatar-pair is-compact">
+                <img src="./assets/xiaozhi.png" alt="小智校园吉祥物" />
+                <img src="./assets/airi.png" alt="AIRI 角色" />
+              </div>
+              <div className="ed-closing-quote">{s6.quote}</div>
+            </div>
+
+            <div className="ed-cta-actions">
+              <button type="button" className="ed-btn-line is-active is-lg" onClick={onOpenQa}>
+                打开 Q&amp;A 速查 (Q)
+              </button>
+              <a
+                className="ed-btn-line is-lg"
+                href={deck.meta.liveSiteUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                打开线上真机 ai.acgurl.cn ↗
+              </a>
+            </div>
+          </footer>
+        </section>
       );
     }
 
