@@ -248,11 +248,6 @@
 }
 
 @media (pointer: coarse) {
-  .place-map-expand {
-    opacity: 1;
-    transform: none;
-  }
-
   .place-chip {
     padding: 7px 12px;
   }

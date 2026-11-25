@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import type { Map as LeafletMap, Marker, TileLayer } from 'leaflet';
 import { usePresence } from '../hooks/usePresence';
 import { gaodePoint, type Place } from '../utils/places';
-import { ExpandIcon } from './icons';
 
 // 高德免 key raster 瓦片：底图与坐标同为 GCJ-02，标记才能落在楼上是而不是偏几百米。
 // style=8 路网注记 / style=6 卫星影像 + style=8 透明注记叠层。
@@ -151,19 +150,6 @@ export function PlaceMap({ place, interactive = false, satellite = false, onExpa
           <strong>{t('location.mapFailed')}</strong>
           <span>{t('location.mapFailedHint')}</span>
         </div>
-      )}
-      {!interactive && onExpand && state !== 'failed' && (
-        <button
-          type="button"
-          className="place-map-expand"
-          onClick={(e) => {
-            e.stopPropagation();
-            onExpand();
-          }}
-        >
-          <ExpandIcon />
-          <span>{t('location.fullscreen')}</span>
-        </button>
       )}
     </div>
   );

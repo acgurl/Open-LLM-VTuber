@@ -84,3 +84,9 @@ asr_models.yaml
 vertex_credentials.json
 
 .vscode/
+
+# Local matt-pocock/skills scratch tracker & defense build/backup artifacts
+.scratch/
+defense/_legacy_v1/
+defense/node_modules/
+defense/dist/
