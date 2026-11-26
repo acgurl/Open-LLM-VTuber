@@ -161,6 +161,7 @@ Cookie（`auth/manager.py`）：
 | GET | `/api/connectors` | oidc 下需会话 | 连接器状态、当前用户能否绑定、已有绑定；见 23.3 | `connector_routes.py` |
 | POST | `/api/connectors/bind-code` | oidc 下需会话 | 生成一次性绑定码；邮箱域不符返回 403 | `connector_routes.py` |
 | DELETE | `/api/connectors/bindings/{connector_id}/{external_id}` | oidc 下需会话 | 解除自己的绑定 | `connector_routes.py` |
+| GET | `/api/announcements` | oidc 下需会话 | 当前有效公告列表：`{"announcements":[{id,title,content,level,pinned,popup,starts_at,ends_at,updated_at}]}`（按 `announcements.yaml` 热加载，`Cache-Control: no-store`） | `announcement_routes.py` |
 | GET | `/web-tool`、`/web_tool` | 公开 | 302 → `/web-tool/index.html` | `routes.py:289-297` |
 | WS | `/client-ws` | 见 3.4 | — | `routes.py:182` |
 | WS | `/audio-ws?client_uid=` | 见 3.4 | — | `routes.py:225` |

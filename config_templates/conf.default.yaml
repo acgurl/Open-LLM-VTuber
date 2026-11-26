@@ -10,6 +10,8 @@ system_config:
   llm_models_file: 'llm_models.yaml' # Top-level key: models
   tts_models_file: 'tts_models.yaml' # Top-level key: tts_models
   asr_models_file: 'asr_models.yaml' # Top-level key: asr_models
+  # Optional announcements file (copy config_templates/announcements.default.yaml if needed; missing file means no announcements).
+  announcements_file: 'announcements.yaml' # Top-level key: announcements
   # Tool prompts that will be appended to the persona prompt
   tool_prompts:
     # This will be appended to the end of system prompt to let LLM include keywords to control facial expressions.

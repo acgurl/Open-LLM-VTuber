@@ -62,8 +62,8 @@ RUN printf '%s\n' \
   '  ln -sf /app/conf/model_dict.json /app/model_dict.json' \
   'fi' \
   '' \
-  '# 2b) Model catalogs; run_server validates the paths selected in conf.yaml.' \
-  'for file in llm_models.yaml tts_models.yaml asr_models.yaml; do' \
+  '# 2b) Model catalogs and optional announcements; run_server validates the paths selected in conf.yaml.' \
+  'for file in llm_models.yaml tts_models.yaml asr_models.yaml announcements.yaml; do' \
   '  if [ -f "/app/conf/$file" ]; then' \
   '    ln -sf "/app/conf/$file" "/app/$file"' \
   '  fi' \

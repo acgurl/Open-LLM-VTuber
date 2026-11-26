@@ -1,0 +1,30 @@
+# System announcements configuration (hot-reloaded automatically when edited).
+# 系统公告配置（修改后自动热加载，无需重启服务）。
+#
+# Copy this file to `announcements.yaml` (or the path in `system_config.announcements_file`)
+# and enable/edit entries as needed.
+# 请将本文件复制为 `announcements.yaml`（或 `system_config.announcements_file` 指定的路径）并按需编辑。
+
+announcements:
+  - id: "2026-11-26-welcome"
+    title: "示例公告：系统功能说明 / Sample Announcement"
+    # Supported levels: info | warning | important
+    # 可选级别：info（通知） | warning（维护/提醒） | important（重要）
+    level: "info"
+    # Pin to the top of the announcement list. / 是否置顶。
+    pinned: false
+    # Auto-open modal once when unread. / 未读时是否在进入页面后自动弹窗一次。
+    popup: false
+    # Set to true to publish. / 设为 true 后生效。
+    enabled: false
+    # Optional ISO-8601 active window. / 可选生效时间窗口（ISO-8601 格式）。
+    # starts_at: "2026-11-26T00:00:00+08:00"
+    # ends_at: "2026-12-31T23:59:59+08:00"
+    # Optional revision timestamp; changing it marks the announcement unread again.
+    # 可选更新时间戳；修改该字段可让已读用户再次收到未读提醒。
+    updated_at: "2026-11-26T12:00:00+08:00"
+    content: |
+      支持 **Markdown** 格式正文，例如列表与链接：
+
+      - 可以在顶部栏右侧查看历史公告
+      - 重要公告可设置 `popup: true` 自动弹出提醒

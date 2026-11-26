@@ -359,5 +359,21 @@
     "history": "历史",
     "settings": "设置",
     "close": "关闭"
+  },
+  "announcements": {
+    "title": "系统公告",
+    "open": "系统公告",
+    "openUnread": "系统公告（{{count}} 条未读）",
+    "empty": "暂无公告",
+    "loading": "正在加载公告…",
+    "loadFailed": "公告加载失败，请稍后重试",
+    "retry": "重新加载",
+    "close": "关闭公告",
+    "acknowledge": "我知道了",
+    "pinned": "置顶",
+    "unread": "未读",
+    "levelInfo": "通知",
+    "levelWarning": "提醒",
+    "levelImportant": "重要"
   }
 }

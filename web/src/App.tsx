@@ -2,6 +2,7 @@ import { useEffect, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useConnection } from './stores/connection';
 import { useSettings } from './stores/settings';
+import { useAnnouncements } from './stores/announcements';
 import { fetchSession, redirectToLogin } from './services/session';
 import { wsClient } from './services/websocket';
 import { Live2DStage } from './components/Live2DStage';
@@ -11,9 +12,10 @@ import { TopBar } from './components/TopBar';
 import { CameraWindow } from './components/CameraWindow';
 import { HistoryDrawer } from './components/HistoryDrawer';
 import { SettingsDrawer } from './components/SettingsDrawer';
+import { AnnouncementModal } from './components/AnnouncementModal';
 import { PlaceFullscreen } from './components/PlaceFullscreen';
 import { Toasts } from './components/Toasts';
-import { BootScreen } from './components/BootScreen';
+import { BOOT_FINISHED_EVENT, BootScreen, isBootFinished } from './components/BootScreen';
 
 // 舞台里缓慢上浮的光尘：位置、大小、周期错开，避免看出循环节拍
 const MOTES = [
@@ -43,6 +45,11 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
+    const onBootFinished = () => {
+      if (!cancelled) useAnnouncements.getState().maybeAutoPopup();
+    };
+    window.addEventListener(BOOT_FINISHED_EVENT, onBootFinished);
+
     // WS 与 session 并行：握手走 cookie 鉴权，不必先等 session 往返。
     wsClient.connect();
     void (async () => {
@@ -61,9 +68,15 @@ export default function App() {
       }
       if (session.display_name) useConnection.getState().setDisplayName(session.display_name);
       if (session.user_id) useConnection.getState().setUserId(session.user_id);
+
+      await useAnnouncements.getState().load();
+      if (!cancelled && isBootFinished()) {
+        useAnnouncements.getState().maybeAutoPopup();
+      }
     })();
     return () => {
       cancelled = true;
+      window.removeEventListener(BOOT_FINISHED_EVENT, onBootFinished);
     };
   }, []);
 
@@ -89,6 +102,7 @@ export default function App() {
       <InputBar />
       <HistoryDrawer />
       <SettingsDrawer />
+      <AnnouncementModal />
       <PlaceFullscreen />
       <Toasts />
       <BootScreen />

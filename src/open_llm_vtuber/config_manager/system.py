@@ -11,6 +11,7 @@ from .cuc import CucAuthConfig
 DEFAULT_LLM_MODELS_FILE = "llm_models.yaml"
 DEFAULT_TTS_MODELS_FILE = "tts_models.yaml"
 DEFAULT_ASR_MODELS_FILE = "asr_models.yaml"
+DEFAULT_ANNOUNCEMENTS_FILE = "announcements.yaml"
 
 
 class SystemConfig(I18nMixin):
@@ -26,6 +27,9 @@ class SystemConfig(I18nMixin):
     llm_models_file: str = Field(DEFAULT_LLM_MODELS_FILE, alias="llm_models_file")
     tts_models_file: str = Field(DEFAULT_TTS_MODELS_FILE, alias="tts_models_file")
     asr_models_file: str = Field(DEFAULT_ASR_MODELS_FILE, alias="asr_models_file")
+    announcements_file: str = Field(
+        DEFAULT_ANNOUNCEMENTS_FILE, alias="announcements_file"
+    )
     storage: StorageConfig = Field(default_factory=StorageConfig, alias="storage")
     auth: AuthConfig = Field(default_factory=AuthConfig, alias="auth")
     connectors: ConnectorsConfig = Field(
@@ -60,6 +64,10 @@ class SystemConfig(I18nMixin):
         ),
         "asr_models_file": Description(
             en="YAML catalog of speech-to-text models", zh="语音识别模型目录文件"
+        ),
+        "announcements_file": Description(
+            en="Optional YAML file containing system announcements",
+            zh="可选的系统公告配置文件",
         ),
         "storage": Description(
             en="Chat history storage settings",

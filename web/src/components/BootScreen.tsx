@@ -11,6 +11,14 @@ declare global {
   }
 }
 
+export const BOOT_FINISHED_EVENT = 'ollmvt:boot-finished';
+
+let bootFinished = false;
+
+export function isBootFinished(): boolean {
+  return bootFinished;
+}
+
 // 秒开时也别让转圈一闪而过
 const MIN_VISIBLE_MS = 600;
 // 连接已在线但模型迟迟不就位时放行，不能把用户锁在幕布后面
@@ -50,6 +58,8 @@ export function BootScreen() {
       window.setTimeout(() => {
         window.bootScreen?.finish();
         document.getElementById('root')?.removeAttribute('inert');
+        bootFinished = true;
+        window.dispatchEvent(new Event(BOOT_FINISHED_EVENT));
       }, wait);
     };
     if (canReveal(status, modelSettled)) {

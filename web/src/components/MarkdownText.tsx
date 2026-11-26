@@ -5,8 +5,17 @@ import { useTranslation } from 'react-i18next';
 import { useCopied } from '../hooks/useCopied';
 
 // 模型输出的链接一律新标签页打开，避免整页被打断。
-const markdownComponents: Components = {
+const inlineMarkdownComponents: Components = {
   p: 'span',
+  a: ({ children, href, title }) => (
+    <a href={href} title={title} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+  pre: ({ children }) => <CodeBlock>{children}</CodeBlock>,
+};
+
+const blockMarkdownComponents: Components = {
   a: ({ children, href, title }) => (
     <a href={href} title={title} target="_blank" rel="noopener noreferrer">
       {children}
@@ -51,9 +60,18 @@ function CodeBlock({ children }: { children?: ReactNode }) {
 // markdown 解析链（react-markdown + remark-gfm + micromark，约 160KB）与首屏无关，
 // 由 MessageBubble 懒加载，等第一条回答出现时才拉取。
 // memo：流式增量只改最后一段，动作标签前已经说完的片段不再重新解析
-export default memo(function MarkdownText({ text }: { text: string }) {
+export default memo(function MarkdownText({
+  text,
+  block = false,
+}: {
+  text: string;
+  block?: boolean;
+}) {
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={block ? blockMarkdownComponents : inlineMarkdownComponents}
+    >
       {text}
     </ReactMarkdown>
   );

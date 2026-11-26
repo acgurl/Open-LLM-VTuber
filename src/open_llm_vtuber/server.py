@@ -23,6 +23,8 @@ from .config_manager.asset_access import (
     CharacterAssetAccess,
 )
 from .routes import init_proxy_route, init_session_routes
+from .announcement_routes import init_announcement_routes
+from .announcements import AnnouncementStore
 from .mcp_routes import init_user_mcp_routes
 from .connector_routes import init_connector_routes
 from .cuc_routes import init_cuc_auth_routes
@@ -30,6 +32,7 @@ from .connectors import ConnectorManager
 from .service_context import ServiceContext
 from .llm_catalog import LLMModelCatalog
 from .config_manager.system import (
+    DEFAULT_ANNOUNCEMENTS_FILE,
     DEFAULT_ASR_MODELS_FILE,
     DEFAULT_LLM_MODELS_FILE,
     DEFAULT_TTS_MODELS_FILE,
@@ -262,6 +265,13 @@ class WebSocketServer:
         self.asset_access = CharacterAssetAccess(
             getattr(config.system_config, "config_alts_dir", "characters")
         )
+        self.announcement_store = AnnouncementStore(
+            getattr(
+                config.system_config,
+                "announcements_file",
+                DEFAULT_ANNOUNCEMENTS_FILE,
+            )
+        )
 
         self._include_routes()
         self._mount_static_files()
@@ -295,6 +305,7 @@ class WebSocketServer:
                 auth=self.auth,
             ),
         )
+        self.app.include_router(init_announcement_routes(self.announcement_store))
 
         system_config = self.config.system_config
         if hasattr(system_config, "enable_proxy") and system_config.enable_proxy:

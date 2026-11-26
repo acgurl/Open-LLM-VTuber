@@ -359,5 +359,21 @@
     "history": "History",
     "settings": "Settings",
     "close": "Close"
+  },
+  "announcements": {
+    "title": "Announcements",
+    "open": "Announcements",
+    "openUnread": "Announcements ({{count}} unread)",
+    "empty": "No announcements",
+    "loading": "Loading announcements…",
+    "loadFailed": "Failed to load announcements",
+    "retry": "Retry",
+    "close": "Close announcements",
+    "acknowledge": "Got it",
+    "pinned": "Pinned",
+    "unread": "New",
+    "levelInfo": "Notice",
+    "levelWarning": "Alert",
+    "levelImportant": "Important"
   }
 }
