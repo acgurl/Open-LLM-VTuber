@@ -271,7 +271,7 @@ export function CucAccountPanel({ open }: { open: boolean }) {
 
   const handleSubmitNet = async (e: FormEvent) => {
     e.preventDefault();
-    if (!netTask?.taskId || !netPassword || !netVerifyCode.trim()) return;
+    if (!netTask?.taskId || !netUsername.trim() || !netPassword || !netVerifyCode.trim()) return;
     const passwordSnapshot = netPassword;
     const verifyCodeSnapshot = netVerifyCode.trim();
     const usernameSnapshot = netUsername.trim();
@@ -626,6 +626,7 @@ export function CucAccountPanel({ open }: { open: boolean }) {
                   className="cuc-input"
                   type="text"
                   autoComplete="username"
+                  required
                   placeholder={t('settings.cuc.netUsernamePlaceholder')}
                   value={netUsername}
                   onChange={(e) => setNetUsername(e.target.value)}
@@ -634,6 +635,7 @@ export function CucAccountPanel({ open }: { open: boolean }) {
                   className="cuc-input"
                   type="password"
                   autoComplete="current-password"
+                  required
                   placeholder={t('settings.cuc.netPasswordPlaceholder')}
                   value={netPassword}
                   onChange={(e) => setNetPassword(e.target.value)}
@@ -642,6 +644,7 @@ export function CucAccountPanel({ open }: { open: boolean }) {
                   className="cuc-input"
                   type="text"
                   autoComplete="off"
+                  required
                   placeholder={t('settings.cuc.captchaPlaceholder')}
                   value={netVerifyCode}
                   onChange={(e) => setNetVerifyCode(e.target.value)}
@@ -650,7 +653,12 @@ export function CucAccountPanel({ open }: { open: boolean }) {
                   <button
                     className="mini-btn"
                     type="submit"
-                    disabled={busyKey === 'net' || !netPassword || !netVerifyCode.trim()}
+                    disabled={
+                      busyKey === 'net' ||
+                      !netUsername.trim() ||
+                      !netPassword ||
+                      !netVerifyCode.trim()
+                    }
                   >
                     {t('settings.cuc.submit')}
                   </button>

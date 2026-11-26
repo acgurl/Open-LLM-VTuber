@@ -180,7 +180,7 @@
       "netConfirmed": "校园网登录成功",
       "captchaAlt": "图形验证码",
       "reloadCaptcha": "换一张",
-      "netUsernamePlaceholder": "校园网账号/学工号（可选，默认使用已保存账号）",
+      "netUsernamePlaceholder": "校园网账号/学工号",
       "netPasswordPlaceholder": "校园网密码",
       "captchaPlaceholder": "请输入图形验证码",
       "smsPlaceholder": "请输入短信验证码",

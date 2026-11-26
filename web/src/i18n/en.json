@@ -180,7 +180,7 @@
       "netConfirmed": "Campus net login succeeded",
       "captchaAlt": "Captcha image",
       "reloadCaptcha": "Reload",
-      "netUsernamePlaceholder": "Campus net ID (optional if previously saved)",
+      "netUsernamePlaceholder": "Campus net ID / Student ID",
       "netPasswordPlaceholder": "Password",
       "captchaPlaceholder": "Captcha code",
       "smsPlaceholder": "SMS verification code",
