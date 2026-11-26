@@ -25,6 +25,7 @@ from .config_manager.asset_access import (
 from .routes import init_proxy_route, init_session_routes
 from .mcp_routes import init_user_mcp_routes
 from .connector_routes import init_connector_routes
+from .cuc_routes import init_cuc_auth_routes
 from .connectors import ConnectorManager
 from .service_context import ServiceContext
 from .llm_catalog import LLMModelCatalog
@@ -35,6 +36,7 @@ from .config_manager.system import (
 )
 from .config_manager.auth import AuthConfig
 from .config_manager.connectors import ConnectorsConfig
+from .config_manager.cuc import CucAuthConfig
 from .config_manager.storage import StorageConfig
 from .config_manager.utils import Config
 from .storage import (
@@ -218,6 +220,7 @@ class WebSocketServer:
         self.connectors_config = (
             getattr(config.system_config, "connectors", None) or ConnectorsConfig()
         )
+        self.cuc_config = getattr(config.system_config, "cuc", None) or CucAuthConfig()
         # Created on the server's event loop at startup: initialize() runs in
         # a separate loop, so connector tasks started there would not survive.
         self.connector_manager: ConnectorManager | None = None
@@ -282,6 +285,13 @@ class WebSocketServer:
             init_connector_routes(
                 default_context_cache=self.default_context_cache,
                 get_manager=lambda: self.connector_manager,
+                auth=self.auth,
+            ),
+        )
+        self.app.include_router(
+            init_cuc_auth_routes(
+                default_context_cache=self.default_context_cache,
+                cuc_config=self.cuc_config,
                 auth=self.auth,
             ),
         )

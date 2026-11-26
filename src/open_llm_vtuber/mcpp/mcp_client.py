@@ -19,7 +19,7 @@ from mcp.client.streamable_http import (
 
 from .server_registry import ServerRegistry
 from .types import MCPServer
-from .user_servers import validate_public_https_url_async
+from .user_servers import format_user_header_value, validate_public_https_url_async
 
 DEFAULT_TIMEOUT = timedelta(seconds=30)
 
@@ -34,6 +34,7 @@ class MCPClient:
         server_registry: ServerRegistry,
         send_text: Callable | None = None,
         client_uid: str | None = None,
+        user_id: str | None = None,
     ) -> None:
         """Initialize the MCP Client."""
         self.exit_stack: AsyncExitStack = AsyncExitStack()
@@ -45,6 +46,7 @@ class MCPClient:
         self._server_instructions: dict[str, str] = {}
         self._send_text: Callable = send_text
         self._client_uid: str = client_uid
+        self._user_id: str | None = user_id
 
         if isinstance(server_registry, ServerRegistry):
             self.server_registry = server_registry
@@ -61,6 +63,15 @@ class MCPClient:
                 f"MCPC: Server '{server_name}' not found in available servers."
             )
         return server
+
+    def _effective_headers(self, server: MCPServer) -> dict[str, str] | None:
+        """Build per-connection headers, forwarding user_id for trusted servers."""
+        headers = dict(server.headers or {})
+        if not server.is_user and server.user_header and self._user_id:
+            headers[server.user_header] = format_user_header_value(
+                self._user_id, server.user_prefix
+            )
+        return headers or None
 
     @staticmethod
     def _get_timeout(server: MCPServer) -> timedelta:
@@ -150,7 +161,7 @@ class MCPClient:
             try:
                 http_client = await stack.enter_async_context(
                     create_mcp_http_client(
-                        headers=server.headers or None,
+                        headers=self._effective_headers(server),
                         timeout=httpx.Timeout(timeout.total_seconds()),
                     )
                 )
@@ -190,7 +201,7 @@ class MCPClient:
                 transport = await stack.enter_async_context(
                     sse_client(
                         server.url,
-                        headers=server.headers or None,
+                        headers=self._effective_headers(server),
                         timeout=timeout.total_seconds(),
                         sse_read_timeout=300,
                     )

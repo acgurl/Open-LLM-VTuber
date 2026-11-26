@@ -83,6 +83,40 @@ class ServerRegistryTests(unittest.TestCase):
 
         self.assertIsNone(registry.get_server("cuc-kb"))
 
+    def test_loads_user_header_and_prefix(self):
+        registry = self._load(
+            {
+                "cuc": {
+                    "url": "http://127.0.0.1:8788/mcp",
+                    "user_header": "X-CUC-Profile",
+                    "user_prefix": "u_",
+                }
+            }
+        )
+
+        server = registry.get_server("cuc")
+        self.assertIsNotNone(server)
+        self.assertEqual(server.user_header, "X-CUC-Profile")
+        self.assertEqual(server.user_prefix, "u_")
+
+    def test_ignores_invalid_user_header_or_prefix(self):
+        registry = self._load(
+            {
+                "bad-blocked": {
+                    "url": "http://127.0.0.1:8788/mcp",
+                    "user_header": "Host",
+                },
+                "bad-prefix": {
+                    "url": "http://127.0.0.1:8788/mcp",
+                    "user_header": "X-CUC-Profile",
+                    "user_prefix": "bad prefix!",
+                },
+            }
+        )
+
+        self.assertIsNone(registry.get_server("bad-blocked"))
+        self.assertIsNone(registry.get_server("bad-prefix"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -19,6 +19,7 @@ import { usePresence } from '../hooks/usePresence';
 import { useDialog } from '../hooks/useDialog';
 import { McpPanel } from './McpPanel';
 import { ConnectorPanel } from './ConnectorPanel';
+import { CucAccountPanel } from './CucAccountPanel';
 import { Segmented } from './Segmented';
 import { CopyButton } from './CopyButton';
 import { CloseIcon, MonitorIcon, MoonIcon, SunIcon } from './icons';
@@ -186,6 +187,8 @@ export function SettingsDrawer() {
           </section>
 
           <McpPanel />
+
+          <CucAccountPanel open={open} />
 
           <ConnectorPanel open={open} />
 

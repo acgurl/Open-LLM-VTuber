@@ -11,6 +11,8 @@ from mcp import types
 
 from open_llm_vtuber.mcpp.mcp_client import MCPClient
 from open_llm_vtuber.mcpp.server_registry import ServerRegistry
+from open_llm_vtuber.mcpp.types import MCPServer
+from open_llm_vtuber.mcpp.user_servers import format_user_header_value
 
 
 class FakeSession:
@@ -103,6 +105,40 @@ class TransportSelectionTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(started, ["local"])
         self.assertEqual(len(session.call_tool_calls), 3)
+
+    def test_effective_headers_forwards_user_id_for_trusted_servers_only(self):
+        client = MCPClient(ServerRegistry.from_servers({}), user_id="alice_1")
+        trusted = MCPServer(
+            name="cuc",
+            url="http://127.0.0.1:8788/mcp",
+            headers={"X-API-Key": "secret"},
+            user_header="X-CUC-Profile",
+            user_prefix="u_",
+        )
+        self.assertEqual(
+            client._effective_headers(trusted),
+            {"X-API-Key": "secret", "X-CUC-Profile": "u_alice_1"},
+        )
+
+        user_added = MCPServer(
+            name="user:custom",
+            url="https://example.com/mcp",
+            headers={"Authorization": "Bearer x"},
+            is_user=True,
+            user_header="X-CUC-Profile",
+            user_prefix="u_",
+        )
+        self.assertEqual(
+            client._effective_headers(user_added),
+            {"Authorization": "Bearer x"},
+        )
+
+        unsafe_client = MCPClient(
+            ServerRegistry.from_servers({}), user_id="user@example.com"
+        )
+        forwarded = unsafe_client._effective_headers(trusted)["X-CUC-Profile"]
+        self.assertRegex(forwarded, r"^u_[0-9a-f]{32}$")
+        self.assertEqual(forwarded, format_user_header_value("user@example.com", "u_"))
 
 
 class _ResultSession:

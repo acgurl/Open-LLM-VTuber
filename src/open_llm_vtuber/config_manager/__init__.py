@@ -10,6 +10,7 @@ from .main import Config
 from .auth import AuthConfig, OIDCConfig
 from .storage import StorageConfig
 from .connectors import BindingConfig, ConnectorsConfig, QQConnectorConfig
+from .cuc import CucAuthConfig
 from .system import SystemConfig
 from .character import CharacterConfig
 from .live import LiveConfig, BiliBiliLiveConfig
@@ -58,6 +59,7 @@ __all__ = [
     "BindingConfig",
     "ConnectorsConfig",
     "QQConnectorConfig",
+    "CucAuthConfig",
     "SystemConfig",
     "CharacterConfig",
     "LiveConfig",

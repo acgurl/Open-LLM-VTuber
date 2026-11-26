@@ -1,0 +1,285 @@
+/* ---------- CUC 校园账号绑定 ---------- */
+.cuc-services {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cuc-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+.cuc-live-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.cuc-live-pill {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--inset);
+  color: var(--muted);
+}
+
+.cuc-live-pill.ok {
+  color: var(--ok);
+  border-color: color-mix(in oklab, var(--ok) 45%, transparent);
+}
+
+.cuc-live-pill.warn {
+  color: var(--danger);
+  border-color: var(--danger-line);
+}
+
+.cuc-flow-box {
+  margin-top: 9px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--inset);
+}
+
+.cuc-flow-msg {
+  color: var(--ink);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.cuc-qr-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.cuc-qr-img {
+  width: 172px;
+  height: 172px;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 6px;
+  object-fit: contain;
+}
+
+.cuc-form {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.cuc-inline-form {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.cuc-captcha-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cuc-captcha-img {
+  height: 36px;
+  border-radius: 7px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  object-fit: contain;
+}
+
+.cuc-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--bg-lift);
+  color: var(--ink);
+  font-size: 0.82rem;
+  transition:
+    border-color 160ms,
+    box-shadow 160ms;
+}
+
+.cuc-input:focus {
+  outline: none;
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.cuc-input::placeholder {
+  color: var(--faint);
+}
+
+/* ---------- 对话内 CUC 登录卡片（沿用地点卡玻璃几何） ---------- */
+.cuc-auth-card {
+  display: flex;
+  flex-direction: column;
+  animation: bubble-in-ai 380ms var(--ease-spring) backwards;
+}
+
+.cuc-auth-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px var(--surface-pad-x) 10px;
+}
+
+.cuc-auth-glyph {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 12px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: var(--shadow-inset);
+}
+
+.cuc-auth-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.cuc-auth-name {
+  font-family: var(--font-round);
+  font-size: 0.96rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cuc-auth-sub {
+  font-size: 0.76rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cuc-auth-badge {
+  flex: none;
+  font-size: 0.72rem;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--inset);
+  color: var(--muted);
+}
+
+.cuc-auth-badge.pending {
+  color: var(--pending);
+  border-color: color-mix(in oklab, var(--pending) 45%, transparent);
+}
+
+.cuc-auth-badge.ok {
+  color: var(--ok);
+  border-color: color-mix(in oklab, var(--ok) 45%, transparent);
+}
+
+.cuc-auth-body {
+  padding: 0 var(--surface-pad-x);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cuc-auth-qr-box {
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--inset);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cuc-auth-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.cuc-auth-error {
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--danger);
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--danger-line);
+  background: color-mix(in oklab, var(--danger) 8%, transparent);
+}
+
+.cuc-auth-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.84rem;
+  color: var(--ok);
+  padding: 8px 11px;
+  border-radius: 11px;
+  border: 1px solid color-mix(in oklab, var(--ok) 40%, transparent);
+  background: color-mix(in oklab, var(--ok) 10%, transparent);
+}
+
+.cuc-auth-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px var(--surface-pad-x) 14px;
+}
+
+.cuc-auth-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 180ms var(--ease-snap),
+    box-shadow 200ms var(--ease-snap),
+    transform 220ms var(--ease-spring);
+}
+
+@media (hover: hover) {
+  .cuc-auth-primary:hover:not(:disabled) {
+    background: color-mix(in oklab, var(--accent) 22%, transparent);
+    box-shadow: 0 8px 20px -12px var(--accent-glow);
+  }
+}
+
+.cuc-auth-primary:active:not(:disabled) {
+  transform: scale(0.97);
+  transition-duration: 90ms;
+}
+
+.cuc-auth-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

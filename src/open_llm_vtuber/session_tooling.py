@@ -208,7 +208,8 @@ class SessionTooling:
             base_registry.merged_with(user_servers) if user_servers else base_registry
         )
         self.tool_adapter = self._factories.ToolAdapter(
-            server_registry=self.mcp_server_registry
+            server_registry=self.mcp_server_registry,
+            user_id=getattr(self._owner, "user_id", None),
         )
 
     def _ensure_server_registry(self) -> ServerRegistry:
@@ -219,7 +220,8 @@ class SessionTooling:
     def _ensure_tool_adapter(self) -> ToolAdapter:
         if self.tool_adapter is None:
             self.tool_adapter = self._factories.ToolAdapter(
-                server_registry=self._ensure_server_registry()
+                server_registry=self._ensure_server_registry(),
+                user_id=getattr(self._owner, "user_id", None),
             )
         return self.tool_adapter
 
@@ -229,6 +231,7 @@ class SessionTooling:
             self._ensure_server_registry(),
             channels.text if channels else None,
             self._owner.client_uid,
+            user_id=getattr(self._owner, "user_id", None),
         )
         logger.info("MCPClient initialized for this session.")
         return client

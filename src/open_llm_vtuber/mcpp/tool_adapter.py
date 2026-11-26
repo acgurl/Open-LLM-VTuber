@@ -28,9 +28,14 @@ MAX_USER_SERVER_INSTRUCTIONS_CHARS = 4096
 class ToolAdapter:
     """Dynamically fetches tool information from enabled MCP servers and formats it."""
 
-    def __init__(self, server_registry: ServerRegistry | None = None) -> None:
+    def __init__(
+        self,
+        server_registry: ServerRegistry | None = None,
+        user_id: str | None = None,
+    ) -> None:
         """Initialize with an ServerRegistry."""
         self.server_registry = server_registry or ServerRegistry()
+        self._user_id = user_id
 
     @staticmethod
     def _is_scoped_server(server_name: str) -> bool:
@@ -74,7 +79,8 @@ class ToolAdapter:
             name for name in enabled_servers if self._is_scoped_server(name)
         ]
         scoped_set = set(scoped_servers)
-        async with MCPClient(self.server_registry) as client:
+        client_kwargs = {"user_id": self._user_id} if self._user_id is not None else {}
+        async with MCPClient(self.server_registry, **client_kwargs) as client:
             for server_name in enabled_servers:
                 if server_name in scoped_set:
                     continue

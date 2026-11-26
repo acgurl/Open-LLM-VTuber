@@ -33,6 +33,8 @@ class MCPServer:
     display_name: str | None = None
     # "http" = Streamable HTTP, "sse" = legacy HTTP+SSE MCP transport.
     transport: str = "http"
+    user_header: str | None = None
+    user_prefix: str = ""
 
 
 @dataclass

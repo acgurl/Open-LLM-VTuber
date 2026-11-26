@@ -219,7 +219,10 @@
   .place-foot,
   .place-switch,
   .place-detail,
-  .place-note-block {
+  .place-note-block,
+  .cuc-auth-head,
+  .cuc-auth-body,
+  .cuc-auth-foot {
     padding-inline: 12px;
   }
 

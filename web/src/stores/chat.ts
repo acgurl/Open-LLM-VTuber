@@ -1,5 +1,10 @@
 import { create } from 'zustand';
 import type { HistoryToolCall } from '../protocol/types';
+import {
+  parseCucAuthPrompt,
+  type CucAuthReason,
+  type CucAuthService,
+} from '../utils/cucAuthPrompt';
 import { parsePlaces, placeKey, type Place } from '../utils/places';
 
 export interface ChatTextEntry {
@@ -34,7 +39,22 @@ export interface PlaceEntry {
   timestamp: string;
 }
 
-export type ChatEntry = ChatTextEntry | ToolEntry | PlaceEntry;
+// 校园账号登录引导卡：当 CUC 工具返回未登录/过期时派生，与工具卡同级，
+// 直接走网页端扫码接口，不经由 LLM 传递凭据。
+export interface CucAuthEntry {
+  kind: 'cuc_auth';
+  id: string;
+  tool_id: string;
+  tool_name: string;
+  service: CucAuthService;
+  reason: CucAuthReason;
+  retryPrompt?: string;
+  createdAt: number;
+  fromHistory?: boolean;
+  timestamp: string;
+}
+
+export type ChatEntry = ChatTextEntry | ToolEntry | PlaceEntry | CucAuthEntry;
 
 let seq = 0;
 const nextId = () => `e${Date.now().toString(36)}_${seq++}`;
@@ -62,6 +82,26 @@ const turnSeenKeys = (entries: ChatEntry[]): Set<string> => {
     if (e.kind === 'place') e.places.forEach((p) => seen.add(placeKey(p)));
   }
   return seen;
+};
+
+const turnHasCucAuth = (entries: ChatEntry[], service: CucAuthService): boolean => {
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const e = entries[i];
+    if (e.kind === 'text' && e.role === 'human') break;
+    if (e.kind === 'cuc_auth' && e.service === service) return true;
+  }
+  return false;
+};
+
+const lastTurnHumanText = (entries: ChatEntry[]): string | undefined => {
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const e = entries[i];
+    if (e.kind === 'text' && e.role === 'human') {
+      const text = e.text.trim();
+      return text || undefined;
+    }
+  }
+  return undefined;
 };
 
 // 工具卡会插在文本气泡之后，流式气泡不一定在队尾，收尾时必须全量清理
@@ -151,6 +191,26 @@ export const useChat = create<ChatState>((set) => ({
         const place = makePlaceEntry(t, turnSeenKeys(entries));
         if (place) entries.splice(toolIdx + 1, 0, place);
       }
+      if (
+        (t.status === 'completed' || t.status === 'error') &&
+        !entries.some((e) => e.kind === 'cuc_auth' && e.tool_id === t.tool_id)
+      ) {
+        const authPrompt = parseCucAuthPrompt(t);
+        if (authPrompt && !turnHasCucAuth(entries, authPrompt.service)) {
+          entries.splice(toolIdx + 1, 0, {
+            kind: 'cuc_auth',
+            id: nextId(),
+            tool_id: t.tool_id,
+            tool_name: t.tool_name,
+            service: authPrompt.service,
+            reason: authPrompt.reason,
+            retryPrompt: lastTurnHumanText(entries),
+            createdAt: Date.now(),
+            fromHistory: false,
+            timestamp: t.timestamp,
+          });
+        }
+      }
       return { entries };
     }),
 
@@ -165,9 +225,11 @@ export const useChat = create<ChatState>((set) => ({
         byTurn.set(call.turn_index, list);
       }
 
-      const toolEntries = (turn: number): ChatEntry[] => {
+      const toolEntries = (turn: number, humanText?: string): ChatEntry[] => {
         const seen = new Set<string>();
+        const seenAuth = new Set<CucAuthService>();
         const out: ChatEntry[] = [];
+        const retryPrompt = humanText?.trim() || undefined;
         for (const call of byTurn.get(turn) ?? []) {
           out.push({
             kind: 'tool',
@@ -182,6 +244,25 @@ export const useChat = create<ChatState>((set) => ({
           if (call.status === 'completed') {
             const place = makePlaceEntry(call, seen);
             if (place) out.push(place);
+          }
+          if (call.status === 'completed' || call.status === 'error') {
+            const authPrompt = parseCucAuthPrompt(call);
+            if (authPrompt && !seenAuth.has(authPrompt.service)) {
+              seenAuth.add(authPrompt.service);
+              const parsedTs = Date.parse(call.timestamp);
+              out.push({
+                kind: 'cuc_auth',
+                id: nextId(),
+                tool_id: call.tool_id,
+                tool_name: call.tool_name,
+                service: authPrompt.service,
+                reason: authPrompt.reason,
+                retryPrompt,
+                createdAt: Number.isFinite(parsedTs) ? parsedTs : 0,
+                fromHistory: true,
+                timestamp: call.timestamp,
+              });
+            }
           }
         }
         return out;
@@ -203,7 +284,7 @@ export const useChat = create<ChatState>((set) => ({
           streaming: false,
         });
         if (m.role === 'human') {
-          entries.push(...toolEntries(turn));
+          entries.push(...toolEntries(turn, m.content));
           byTurn.delete(turn);
           turn += 1;
         }

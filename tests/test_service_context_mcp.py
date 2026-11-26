@@ -27,7 +27,10 @@ class McpInitializationTests(unittest.IsolatedAsyncioTestCase):
             )
             await context._init_mcp_components(True, ["server"])
 
-        tool_adapter.assert_called_once_with(server_registry=registry.return_value)
+        tool_adapter.assert_called_once_with(
+            server_registry=registry.return_value,
+            user_id=context.user_id,
+        )
         tool_adapter.return_value.build_tools.assert_awaited_once_with(["server"])
         self.assertEqual(context.mcp_prompt, "prompt")
         tool_manager.assert_called_once_with(
@@ -35,7 +38,9 @@ class McpInitializationTests(unittest.IsolatedAsyncioTestCase):
             initial_tools_dict={"raw": {}},
             server_instructions="",
         )
-        mcp_client.assert_called_once_with(registry.return_value, None, "client")
+        mcp_client.assert_called_once_with(
+            registry.return_value, None, "client", user_id=context.user_id
+        )
         tool_executor.assert_called_once_with(
             mcp_client.return_value, tool_manager.return_value
         )
@@ -56,7 +61,10 @@ class McpInitializationTests(unittest.IsolatedAsyncioTestCase):
             )
             await context._init_mcp_components(True, ["server"])
 
-        tool_adapter.assert_called_once_with(server_registry=registry.return_value)
+        tool_adapter.assert_called_once_with(
+            server_registry=registry.return_value,
+            user_id=context.user_id,
+        )
         self.assertEqual(context.mcp_prompt, "prompt")
         mcp_client.assert_called_once()
 

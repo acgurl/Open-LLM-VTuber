@@ -12,6 +12,8 @@ from .user_servers import (
     headers_are_string_pairs,
     normalize_mcp_transport,
     parse_mcp_url,
+    validate_header_name,
+    validate_user_prefix,
 )
 from .utils.path import validate_file
 
@@ -132,6 +134,24 @@ class ServerRegistry:
             )
             return None
 
+        user_header = server_details.get("user_header")
+        if user_header is not None:
+            try:
+                user_header = validate_header_name(user_header)
+            except ValueError as exc:
+                logger.warning(
+                    f"MCPSR: Invalid user_header for '{server_name}': {exc}. Ignoring."
+                )
+                return None
+
+        try:
+            user_prefix = validate_user_prefix(server_details.get("user_prefix", ""))
+        except ValueError as exc:
+            logger.warning(
+                f"MCPSR: Invalid user_prefix for '{server_name}': {exc}. Ignoring."
+            )
+            return None
+
         logger.debug(
             f"MCPSR: Loaded HTTP server: '{server_name}' ({url}, {transport})."
         )
@@ -141,6 +161,8 @@ class ServerRegistry:
             headers=headers,
             timeout=server_details.get("timeout"),
             transport=transport,
+            user_header=user_header,
+            user_prefix=user_prefix,
         )
 
     def _parse_stdio_server(

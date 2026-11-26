@@ -5,6 +5,7 @@ from .i18n import I18nMixin, Description
 from .auth import AuthConfig
 from .storage import StorageConfig
 from .connectors import ConnectorsConfig
+from .cuc import CucAuthConfig
 
 
 DEFAULT_LLM_MODELS_FILE = "llm_models.yaml"
@@ -30,6 +31,7 @@ class SystemConfig(I18nMixin):
     connectors: ConnectorsConfig = Field(
         default_factory=ConnectorsConfig, alias="connectors"
     )
+    cuc: CucAuthConfig = Field(default_factory=CucAuthConfig, alias="cuc")
 
     DESCRIPTIONS: ClassVar[dict[str, Description]] = {
         "conf_version": Description(en="Configuration version", zh="配置文件版本"),
@@ -70,6 +72,10 @@ class SystemConfig(I18nMixin):
         "connectors": Description(
             en="Message platform connectors (QQ bot, ...)",
             zh="消息平台连接器（QQ 机器人等）",
+        ),
+        "cuc": Description(
+            en="CUC campus account binding proxy",
+            zh="中国传媒大学校园账号绑定代理设置",
         ),
     }
 

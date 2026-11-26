@@ -91,6 +91,15 @@ system_config:
           mcp_prompt: 'mcp_prompt'
           chat_platform_prompt: 'chat_platform_prompt'
 
+  # CUC campus account binding proxy (forwards authenticated user_id via X-CUC-Profile).
+  cuc:
+    enabled: false
+    server_url: 'http://127.0.0.1:8787'
+    api_key: '${CUC_SERVER_KEY}'
+    user_header: 'X-CUC-Profile'
+    user_prefix: 'u_'
+    timeout_seconds: 35
+
 # configuration for the default character
 character_config:
   conf_name: 'mao_pro' # The name of character configuration file.

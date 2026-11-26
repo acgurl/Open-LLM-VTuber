@@ -31,6 +31,8 @@ USER_MCP_DISCOVERY_TIMEOUT_SECONDS = 10
 LOCAL_MCP_TIMEOUT_SECONDS = 30
 
 _HEADER_KEY_PATTERN = re.compile(r"^[A-Za-z0-9-]{1,64}$")
+_USER_PREFIX_PATTERN = re.compile(r"^[A-Za-z0-9_-]{0,32}$")
+_SAFE_PROFILE_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 _SERVER_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 _TOOL_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_.-]{1,128}$")
 _BLOCKED_HEADERS = {
@@ -115,6 +117,32 @@ def headers_are_string_pairs(headers: Any) -> bool:
         isinstance(key, str) and isinstance(value, str)
         for key, value in headers.items()
     )
+
+
+def validate_header_name(name: Any) -> str:
+    if not isinstance(name, str) or not _HEADER_KEY_PATTERN.fullmatch(name):
+        raise ValueError(f"invalid header name: {name!r}")
+    if name.lower() in _BLOCKED_HEADERS:
+        raise ValueError(f"header '{name}' is not allowed")
+    return name
+
+
+def validate_user_prefix(prefix: Any) -> str:
+    if prefix is None:
+        return ""
+    if not isinstance(prefix, str) or not _USER_PREFIX_PATTERN.fullmatch(prefix):
+        raise ValueError(f"invalid user_prefix: {prefix!r}")
+    return prefix
+
+
+def format_user_header_value(user_id: str, prefix: str = "") -> str:
+    """Format an authenticated user_id into a safe, bounded header value."""
+    candidate = f"{prefix}{user_id}"
+    if _SAFE_PROFILE_PATTERN.fullmatch(candidate):
+        return candidate
+    safe_prefix = prefix if prefix and prefix[0].isalnum() else f"u_{prefix}"
+    digest = hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:32]
+    return f"{safe_prefix}{digest}"[:64]
 
 
 def validate_headers(headers: Any) -> dict[str, str]:

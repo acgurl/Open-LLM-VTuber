@@ -148,6 +148,50 @@
       "confirmUnbind": "确认解除？",
       "unbound": "已解除绑定",
       "commandsHint": "机器人指令：/new 开始新对话，/whoami 查看绑定，/unbind 解除绑定。"
+    },
+    "cuc": {
+      "title": "传媒校园账号",
+      "hint": "在此完成微信扫码、校园网与校内邮箱认证；凭据直连认证服务，不会进入 AI 对话上下文。",
+      "loading": "加载中…",
+      "retry": "重试",
+      "bound": "已绑定",
+      "unbound": "未绑定",
+      "verify": "检测有效性",
+      "verifying": "检测中…",
+      "verifyValid": "统一认证会话有效",
+      "verifyInvalid": "统一认证会话已失效，请重新扫码",
+      "logout": "退出",
+      "confirmLogout": "确认退出？",
+      "loggedOut": "已清除本地会话",
+      "source": "来源",
+      "ssoTitle": "统一认证（微信扫码）",
+      "loginWechat": "微信扫码登录",
+      "reloginWechat": "重新扫码",
+      "retryQr": "重新获取二维码",
+      "qrAlt": "微信登录二维码",
+      "ssoConfirmed": "统一认证登录成功",
+      "siteTimetable": "课表",
+      "siteCard": "校园卡",
+      "siteLms": "畅课",
+      "mailTitle": "校内邮箱",
+      "needSsoFirst": "请先完成统一认证登录",
+      "mailConfirmed": "校内邮箱认证成功",
+      "netTitle": "校园网自助平台",
+      "netConfirmed": "校园网登录成功",
+      "captchaAlt": "图形验证码",
+      "reloadCaptcha": "换一张",
+      "netUsernamePlaceholder": "校园网账号/学工号（可选，默认使用已保存账号）",
+      "netPasswordPlaceholder": "校园网密码",
+      "captchaPlaceholder": "请输入图形验证码",
+      "smsPlaceholder": "请输入短信验证码",
+      "opacTitle": "图书馆馆藏检索 (OPAC)",
+      "opacConfirmed": "馆藏检索会话已刷新",
+      "connect": "绑定",
+      "refresh": "刷新",
+      "relogin": "重新登录",
+      "starting": "处理中…",
+      "submit": "提交",
+      "cancel": "取消"
     }
   },
   "group": {
@@ -194,6 +238,43 @@
     "noteLess": "收起",
     "mapFailed": "地图加载失败",
     "mapFailedHint": "当前网络无法访问地图瓦片，可复制坐标或直接在地图 App 中打开。"
+  },
+  "cucAuth": {
+    "title": {
+      "sso": "传媒统一认证登录",
+      "mail": "校内邮箱认证",
+      "net": "校园网自助平台登录",
+      "opac": "图书馆馆藏检索认证"
+    },
+    "reason": {
+      "not_logged_in": "尚未绑定传媒大学校园账号，登录后可继续查询",
+      "expired": "登录会话已过期，请重新完成认证",
+      "auth_required": "该服务需要校园账号认证后才能访问"
+    },
+    "confirmedSub": "认证已完成，凭据仅保存在本地加密网关",
+    "badge": {
+      "unbound": "未登录",
+      "waiting": "待扫码",
+      "scanned": "已扫码",
+      "bound": "已登录"
+    },
+    "done": {
+      "sso": "统一认证登录成功",
+      "mail": "校内邮箱认证成功",
+      "net": "校园网登录成功",
+      "opac": "馆藏检索会话已刷新"
+    },
+    "loadingQr": "正在获取微信登录二维码…",
+    "scanWechat": "微信扫码登录",
+    "retryQr": "重新获取二维码",
+    "connectMail": "连接校内邮箱",
+    "needSsoForMail": "校内邮箱需先完成统一认证微信扫码，然后再连接邮箱。",
+    "openSettingsNet": "前往设置绑定校园网",
+    "refreshOpac": "刷新馆藏检索会话",
+    "continueQuery": "继续刚才的查询",
+    "continued": "已重新发送查询",
+    "openSettings": "在设置中管理",
+    "cancel": "取消"
   },
   "theme": {
     "toLight": "切换到白天模式",

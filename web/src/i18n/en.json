@@ -148,6 +148,50 @@
       "confirmUnbind": "Confirm?",
       "unbound": "Account unlinked",
       "commandsHint": "Bot commands: /new starts a new chat, /whoami shows the link, /unbind removes it."
+    },
+    "cuc": {
+      "title": "CUC campus account",
+      "hint": "Link your WeChat SSO, campus net, and campus mail here. Credentials go straight to the auth service and never pass through the AI chat.",
+      "loading": "Loading…",
+      "retry": "Retry",
+      "bound": "Linked",
+      "unbound": "Not linked",
+      "verify": "Verify",
+      "verifying": "Checking…",
+      "verifyValid": "SSO session is valid",
+      "verifyInvalid": "SSO session expired; please sign in again",
+      "logout": "Log out",
+      "confirmLogout": "Confirm?",
+      "loggedOut": "Session cleared",
+      "source": "Source",
+      "ssoTitle": "Unified SSO (WeChat QR)",
+      "loginWechat": "Sign in with WeChat QR",
+      "reloginWechat": "Re-scan QR",
+      "retryQr": "Refresh QR code",
+      "qrAlt": "WeChat login QR code",
+      "ssoConfirmed": "SSO login succeeded",
+      "siteTimetable": "Timetable",
+      "siteCard": "Card",
+      "siteLms": "LMS",
+      "mailTitle": "Campus Mail",
+      "needSsoFirst": "Sign in with SSO first",
+      "mailConfirmed": "Campus mail authenticated",
+      "netTitle": "Campus Net Portal",
+      "netConfirmed": "Campus net login succeeded",
+      "captchaAlt": "Captcha image",
+      "reloadCaptcha": "Reload",
+      "netUsernamePlaceholder": "Campus net ID (optional if previously saved)",
+      "netPasswordPlaceholder": "Password",
+      "captchaPlaceholder": "Captcha code",
+      "smsPlaceholder": "SMS verification code",
+      "opacTitle": "Library OPAC Search",
+      "opacConfirmed": "OPAC session refreshed",
+      "connect": "Connect",
+      "refresh": "Refresh",
+      "relogin": "Re-login",
+      "starting": "Working…",
+      "submit": "Submit",
+      "cancel": "Cancel"
     }
   },
   "group": {
@@ -194,6 +238,43 @@
     "noteLess": "Less",
     "mapFailed": "Map failed to load",
     "mapFailedHint": "Map tiles are unreachable on this network. Copy the coordinates or open them in a map app instead."
+  },
+  "cucAuth": {
+    "title": {
+      "sso": "CUC Unified SSO Sign-in",
+      "mail": "CUC Campus Mail Auth",
+      "net": "Campus Net Portal Sign-in",
+      "opac": "Library OPAC Auth"
+    },
+    "reason": {
+      "not_logged_in": "No CUC campus account is linked yet. Sign in to continue.",
+      "expired": "Your session has expired. Please re-authenticate.",
+      "auth_required": "This campus service requires authentication first."
+    },
+    "confirmedSub": "Authenticated directly via the local auth gateway",
+    "badge": {
+      "unbound": "Not signed in",
+      "waiting": "Scan QR",
+      "scanned": "Scanned",
+      "bound": "Signed in"
+    },
+    "done": {
+      "sso": "SSO login succeeded",
+      "mail": "Campus mail authenticated",
+      "net": "Campus net login succeeded",
+      "opac": "OPAC session refreshed"
+    },
+    "loadingQr": "Fetching WeChat QR code…",
+    "scanWechat": "Sign in with WeChat QR",
+    "retryQr": "Refresh QR code",
+    "connectMail": "Connect campus mail",
+    "needSsoForMail": "Sign in with WeChat SSO first, then connect your campus mail.",
+    "openSettingsNet": "Open Settings for Campus Net",
+    "refreshOpac": "Refresh OPAC session",
+    "continueQuery": "Retry previous request",
+    "continued": "Request sent",
+    "openSettings": "Manage in Settings",
+    "cancel": "Cancel"
   },
   "theme": {
     "toLight": "Switch to light mode",

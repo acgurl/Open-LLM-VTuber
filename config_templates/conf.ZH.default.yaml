@@ -88,6 +88,15 @@ system_config:
           mcp_prompt: 'mcp_prompt'
           chat_platform_prompt: 'chat_platform_prompt'
 
+  # 中国传媒大学校园账号绑定代理（通过 X-CUC-Profile 隔离并转发已登录用户身份）
+  cuc:
+    enabled: false
+    server_url: 'http://127.0.0.1:8787'
+    api_key: '${CUC_SERVER_KEY}'
+    user_header: 'X-CUC-Profile'
+    user_prefix: 'u_'
+    timeout_seconds: 35
+
 # 默认角色的配置
 character_config:
   conf_name: 'mao_pro' # 角色配置文件的名称

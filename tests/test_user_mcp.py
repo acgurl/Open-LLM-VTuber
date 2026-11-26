@@ -845,7 +845,10 @@ class UserServerSessionInitTests(unittest.IsolatedAsyncioTestCase):
 
             await context._init_mcp_components(False, [])
 
-        adapter_cls.assert_called_once_with(server_registry=registry_cls.return_value)
+        adapter_cls.assert_called_once_with(
+            server_registry=registry_cls.return_value,
+            user_id=context.user_id,
+        )
         adapter_cls.return_value.build_tools.assert_awaited_once_with(["user:abc"])
         self.assertTrue(context.mcp_active)
 
