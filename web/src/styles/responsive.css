@@ -220,10 +220,20 @@
   .place-switch,
   .place-detail,
   .place-note-block,
+  .kb-head,
+  .kb-body,
   .cuc-auth-head,
   .cuc-auth-body,
   .cuc-auth-foot {
     padding-inline: 12px;
+  }
+
+  .kb-file-row {
+    flex-wrap: wrap;
+  }
+
+  .kb-filename {
+    flex-basis: 100%;
   }
 
   .place-meta {
@@ -253,6 +263,11 @@
 @media (pointer: coarse) {
   .place-chip {
     padding: 7px 12px;
+  }
+
+  .kb-link,
+  .kb-more-btn {
+    padding: 5px 12px;
   }
 }
 

@@ -16,6 +16,7 @@ interface SettingsState {
   requestedFile: string | null;
   pointerInteractive: boolean;
   scrollToResize: boolean;
+  autoCollapseToolCards: boolean;
   setTtsOn: (v: boolean) => void;
   setBackground: (url: string | null) => void;
   setBackgroundFiles: (f: string[]) => void;
@@ -29,6 +30,7 @@ interface SettingsState {
   confirmConfig: () => void;
   setPointerInteractive: (v: boolean) => void;
   setScrollToResize: (v: boolean) => void;
+  setAutoCollapseToolCards: (v: boolean) => void;
 }
 
 export const useSettings = create<SettingsState>((set) => ({
@@ -44,6 +46,7 @@ export const useSettings = create<SettingsState>((set) => ({
   requestedFile: null,
   pointerInteractive: readSetting('l2d.pointer') !== '0',
   scrollToResize: readSetting('l2d.scroll') !== '0',
+  autoCollapseToolCards: readSetting('tool.autoCollapse') === '1',
   setTtsOn: (ttsOn) => {
     writeSetting('tts', ttsOn ? '1' : '0');
     set({ ttsOn });
@@ -69,5 +72,9 @@ export const useSettings = create<SettingsState>((set) => ({
   setScrollToResize: (scrollToResize) => {
     writeSetting('l2d.scroll', scrollToResize ? '1' : '0');
     set({ scrollToResize });
+  },
+  setAutoCollapseToolCards: (autoCollapseToolCards) => {
+    writeSetting('tool.autoCollapse', autoCollapseToolCards ? '1' : '0');
+    set({ autoCollapseToolCards });
   },
 }));

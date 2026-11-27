@@ -38,6 +38,8 @@ export function SettingsDrawer() {
   const setPointerInteractive = useSettings((s) => s.setPointerInteractive);
   const scrollToResize = useSettings((s) => s.scrollToResize);
   const setScrollToResize = useSettings((s) => s.setScrollToResize);
+  const autoCollapseToolCards = useSettings((s) => s.autoCollapseToolCards);
+  const setAutoCollapseToolCards = useSettings((s) => s.setAutoCollapseToolCards);
   const themeMode = useTheme((s) => s.mode);
   const setThemeMode = useTheme((s) => s.setMode);
   const hue = useTheme((s) => s.hue);
@@ -181,6 +183,14 @@ export function SettingsDrawer() {
                 ]}
               />
             </div>
+            <label className="setting-row">
+              <span>{t('settings.autoCollapseTools')}</span>
+              <input
+                type="checkbox"
+                checked={autoCollapseToolCards}
+                onChange={(e) => setAutoCollapseToolCards(e.target.checked)}
+              />
+            </label>
             <button className="drawer-action" onClick={proactiveSpeak}>
               {t('settings.proactiveSpeak')}
             </button>
